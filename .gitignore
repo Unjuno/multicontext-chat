@@ -4,3 +4,4 @@ data/*.tmp
 .DS_Store
 node_modules/
 coverage/
+.mcc-test-apikey

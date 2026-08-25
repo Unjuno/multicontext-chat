@@ -1,6 +1,7 @@
 let currentId = null;
 let timer = null;
 let agents = [];
+const openEditors = new Set();
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -51,6 +52,7 @@ async function refreshList() {
 
 async function select(id) {
   currentId = id;
+  openEditors.clear();
   await Promise.all([refreshList(), refreshAgents()]);
   await refresh();
   clearInterval(timer);
@@ -63,6 +65,7 @@ async function select(id) {
 function memberCard(workspace, member) {
   const status = member.status === 'error' ? 'blocked' : member.status;
   const current = member.current ? ' · in-flight' : '';
+  const editorOpen = openEditors.has(member.id) ? ' open' : '';
   return `
     <article class="member" data-mid="${member.id}">
       <header>
@@ -93,7 +96,7 @@ function memberCard(workspace, member) {
           <button ${member.active ? '' : 'disabled'}>Send</button>
         </form>
       </div>
-      <div class="member-editor">
+      <div class="member-editor${editorOpen}">
         <label>Name<input name="name" value="${esc(member.name)}"></label>
         <label>LibreChat Agent ID<input name="agentId" list="agentOptions" value="${esc(member.agentId)}"></label>
         <label>Agent / developer instructions<textarea name="developerPrompt">${esc(member.developerPrompt)}</textarea></label>
@@ -209,7 +212,10 @@ function wire(workspace) {
     const memberId = card.dataset.mid;
     const member = workspace.members[memberId];
     const editor = $('.member-editor', card);
-    $('[data-action=edit]', card).onclick = () => editor.classList.toggle('open');
+    $('[data-action=edit]', card).onclick = () => {
+      if (openEditors.has(memberId)) openEditors.delete(memberId); else openEditors.add(memberId);
+      editor.classList.toggle('open');
+    };
     $('[data-action=copytool]', card).onclick = async () => {
       await navigator.clipboard.writeText(member.actionSpecUrl);
       alert('Action URL copied');
@@ -247,6 +253,7 @@ function wire(workspace) {
     };
     $('[data-action=delete]', card).onclick = async () => {
       if (!confirm('Delete this independent chat?')) return;
+      openEditors.delete(memberId);
       await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'DELETE' });
       await refresh();
     };

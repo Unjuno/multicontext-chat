@@ -131,11 +131,53 @@ test('Action public URL uses configured externally reachable origin', async () =
     runAgent: async () => ({ id: 'r', text: 'ok' }),
   };
   await withServer(client, async ({ base }) => {
-    const created = await jsonRequest(base, '/api/workspaces', { method: 'POST', body: '{}' });
+    const created = await jsonRequest(base, '/api/workspaces', { method: 'POST', body: JSON.stringify({}) });
     const workspaceId = created.data.id;
     const added = await jsonRequest(base, `/api/workspaces/${workspaceId}/members`, { method: 'POST', body: JSON.stringify({ name: 'A', agentId: 'a' }) });
     const memberId = added.data.member.id;
     const view = await jsonRequest(base, `/api/workspaces/${workspaceId}`);
     assert.equal(view.data.members[memberId].actionSpecUrl, `https://multicontext.example/tools/${workspaceId}/${memberId}/openapi.json`);
   }, { publicUrl: 'https://multicontext.example' });
+});
+
+test('malformed percent-encoding in a static path returns 404 instead of crashing', async () => {
+  const client = {
+    health: async () => ({ ok: true, agents: 0, mode: 'compat' }),
+    listAgents: async () => [],
+    runAgent: async () => ({ id: 'r', text: 'ok' }),
+  };
+  await withServer(client, async ({ base }) => {
+    const response = await fetch(`${base}/%zz`);
+    assert.equal(response.status, 404);
+  });
+});
+
+test('concurrent compile requests are rejected while one compile is already running', async () => {
+  let releaseCompile;
+  let compileCalls = 0;
+  const client = {
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    listAgents: async () => [{ id: 'a', name: 'A' }],
+    runAgent: async ({ metadata }) => {
+      if (metadata?.purpose === 'compile') {
+        compileCalls += 1;
+        await new Promise((resolve) => { releaseCompile = resolve; });
+        return { id: 'compile', text: 'compiled' };
+      }
+      return { id: 'run', text: 'done' };
+    },
+  };
+  await withServer(client, async ({ base }) => {
+    const created = await jsonRequest(base, '/api/workspaces', { method: 'POST', body: '{}' });
+    const workspaceId = created.data.id;
+    await jsonRequest(base, `/api/workspaces/${workspaceId}/members`, { method: 'POST', body: JSON.stringify({ name: 'A', agentId: 'a' }) });
+    const first = jsonRequest(base, `/api/workspaces/${workspaceId}/compile`, { method: 'POST', body: '{}' });
+    for (let i = 0; i < 100 && !releaseCompile; i += 1) await sleep(5);
+    const second = await jsonRequest(base, `/api/workspaces/${workspaceId}/compile`, { method: 'POST', body: '{}' });
+    assert.equal(second.response.status, 409);
+    releaseCompile();
+    const done = await first;
+    assert.equal(done.response.status, 200);
+    assert.equal(compileCalls, 1);
+  });
 });

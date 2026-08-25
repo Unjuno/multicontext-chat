@@ -53,4 +53,7 @@ test('LibreChat patch is idempotent and preserves developer + conversation conti
   assert.match(controllerText, /ChatMessage/);
   assert.match(controllerText, /X-LibreChat-Conversation-Id/);
   assert.match(controllerText, /role: 'developer'/);
+  // Upstream bug fix: Remote Agents API-key auth sets only req.user while
+  // message persistence reads userId off the request object.
+  assert.match(controllerText, /req\.userId = req\.userId \?\? req\.user\?\.id/);
 });

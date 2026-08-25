@@ -25,6 +25,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
 
   const authorized = (req) => !config.appToken || req.headers.authorization === `Bearer ${config.appToken}`;
   const toolAuthorized = (req) => !config.toolSecret || req.headers['x-multicontext-key'] === config.toolSecret;
+  const compilingWorkspaces = new Set();
   const requestOrigin = (req) => `${String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim()}://${req.headers.host}`;
   const publicOrigin = (req) => config.publicUrl || requestOrigin(req);
 
@@ -65,11 +66,15 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (parts[3] === 'compile' && req.method === 'POST') {
       const workspace = store.requireWorkspace(workspaceId);
       if (!store.isSettled(workspaceId, scheduler.runningMemberIds(workspaceId))) return json(res, 409, { error: 'Workspace is not SETTLED' });
+      if (compilingWorkspaces.has(workspaceId)) return json(res, 409, { error: 'Compile already in progress' });
       const agentId = workspace.compileAgentId || Object.values(workspace.members).find((m) => m.active)?.agentId;
       if (!agentId) return json(res, 400, { error: 'No compile agent is configured' });
-      const snapshots = Object.values(workspace.members).filter((m) => m.active).map((m) => ({ member: { id: m.id, name: m.name }, messages: m.messages.filter((x) => !x.pending).slice(-12).map(({ role, content, at }) => ({ role, content, at })) }));
-      const result = await client.runAgent({ agentId, globalPrompt: workspace.compilePrompt, developerPrompt: '', history: [], prompt: `Compress these independent chat records into a response for the user.\n\n${JSON.stringify(snapshots, null, 2)}`, metadata: { workspace_id: workspaceId, purpose: 'compile' } });
-      store.setCompile(workspaceId, { text: result.text, responseId: result.id, usage: result.usage }); return json(res, 200, workspaceView(workspaceId, req));
+      compilingWorkspaces.add(workspaceId);
+      try {
+        const snapshots = Object.values(workspace.members).filter((m) => m.active).map((m) => ({ member: { id: m.id, name: m.name }, messages: m.messages.filter((x) => !x.pending).slice(-12).map(({ role, content, at }) => ({ role, content, at })) }));
+        const result = await client.runAgent({ agentId, globalPrompt: workspace.compilePrompt, developerPrompt: '', history: [], prompt: `Compress these independent chat records into a response for the user.\n\n${JSON.stringify(snapshots, null, 2)}`, metadata: { workspace_id: workspaceId, purpose: 'compile' } });
+        store.setCompile(workspaceId, { text: result.text, responseId: result.id, usage: result.usage }); return json(res, 200, workspaceView(workspaceId, req));
+      } finally { compilingWorkspaces.delete(workspaceId); }
     }
     return false;
   }
@@ -102,7 +107,10 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   }
 
   function staticFile(req, res, url) {
-    if (req.method !== 'GET') return false; const relative = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+    if (req.method !== 'GET') return false;
+    let relative;
+    try { relative = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1)); }
+    catch { return false; }
     const filePath = path.resolve(publicDir, relative); const rel = path.relative(publicDir, filePath);
     if (rel.startsWith('..') || path.isAbsolute(rel) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) return false;
     const ext = path.extname(filePath); const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
