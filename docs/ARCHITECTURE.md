@@ -1,27 +1,35 @@
 # Architecture
 
-MultiContext Chat is a thin orchestration layer over LibreChat Agents API.
+MultiContext Chat is a thin orchestration layer over LibreChat Agents.
 
-- One workspace contains N logical members.
-- Every member owns its own message history and FIFO prompt queue.
-- One member has at most one active generation; different members run concurrently.
-- A user broadcast is copied into every active member queue.
-- Cross-context communication is explicit through `inspect_chat` and `send_to_chat`; no foreign history is auto-injected.
-- Tool results remain inside the LibreChat Agent run unless an agent explicitly sends a derived prompt to another member.
-- `SETTLED` means no active generation and no queued prompts; it does not mean consensus.
-- Compile is manual and never writes its synthesis back into member histories.
+- One workspace contains N independent members.
+- Each member has one FIFO input queue and at most one active run.
+- Different members can run concurrently.
+- A human broadcast copies the same prompt into every active member queue.
+- A queued prompt is executed as a normal `user` input in the target member.
+- Cross-chat access exists only through explicit `list_chats`, `inspect_chat`, and `send_to_chat` tools.
+- The application does not assign meaning, persona, debate rules, or reaction policy to messages. Those belong to the editable prompts and model.
+- `SETTLED` means no active or blocked work remains. It does not assert semantic agreement.
+- Compile is manual and never writes its output into member histories.
 
-## Why a companion layer instead of vendoring LibreChat
+## Runtime states
 
-LibreChat is kept as the model/tool/agent runtime. This repository owns only the new semantics. That keeps upstream upgrades tractable and avoids copying a large MIT project into a second repository.
+`RUNNING` means at least one active generation. `PENDING` means queued work is ready to run. `BLOCKED` means a member failed and has a queued turn waiting for explicit Retry. `SETTLED` means active members have no current work, queue, or error.
 
-## Instruction hierarchy
+Queue reservation is persisted before a model call. On process restart, an interrupted item is returned to the front of its member FIFO. On model failure it is also requeued and the member becomes `BLOCKED`; retry is explicit to avoid a runaway error loop.
 
-Requests use Open Responses input items in this order:
+## LibreChat modes
 
-1. workspace global prompt as `system`
+`compat` uses stock LibreChat and keeps the canonical conversational history in MultiContext. It sends `store:false` and replays only that member's bounded history.
+
+`native` requires the small patch documented in `GPT_OSS.md`. It uses LibreChat persistence as the canonical model context: the first turn creates a LibreChat conversation, its id is stored on the member, and later turns send `previous_response_id`. MultiContext still mirrors visible user/assistant messages for UI and cross-chat inspection, but does not replay them to the model.
+
+## Prompt hierarchy
+
+At the MultiContext → LibreChat API boundary the request order is:
+
+1. workspace prompt as `system`
 2. member prompt as `developer`
-3. independent user/assistant history
-4. current queue prompt as `user`
+3. current queued prompt as `user`
 
-Current LibreChat main accepts `developer` in its Open Responses schema but its converter normalizes developer input to an internal system message. Therefore the application preserves the intended distinction on its side, but native `system > developer > user` behavior ultimately depends on the LibreChat/provider path. Backend tool permissions must never rely on prompt hierarchy.
+In `compat`, stock LibreChat may normalize roles internally. In `native`, the supplied LibreChat patch preserves the distinction for gpt-oss/OpenAI-compatible model paths.
