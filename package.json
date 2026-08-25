@@ -1,0 +1,15 @@
+{
+  "name": "multicontext-chat",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Independent multi-context deliberation workspace backed by LibreChat Agents API",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --env-file-if-exists=.env --watch src/server.js",
+    "test": "node --test",
+    "check": "node --check src/server.js && node --check src/scheduler.js && node --check src/store.js && node --check src/librechat.js && node --test"
+  }
+}

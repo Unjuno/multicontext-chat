@@ -1,0 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import { StateStore } from '../src/store.js';import { Scheduler } from '../src/scheduler.js';
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+test('same member executes FIFO while different members can overlap',async()=>{const s=new StateStore(path.join(fs.mkdtempSync(path.join(os.tmpdir(),'mcc-')),'state.json'));const w=s.createWorkspace();const a=s.addMember(w.id,{name:'A',agentId:'a'});const b=s.addMember(w.id,{name:'B',agentId:'b'});const events=[];const client={runAgent:async({agentId,prompt,history})=>{assert.equal(history.at(-1)?.content===prompt,false);events.push(`start:${agentId}:${prompt}`);await sleep(20);events.push(`end:${agentId}:${prompt}`);return{id:`r-${prompt}`,text:`ok ${prompt}`}}};const q=new Scheduler({store:s,client,maxHistoryMessages:20});s.enqueue(w.id,a.id,'1');s.enqueue(w.id,a.id,'2');s.enqueue(w.id,b.id,'x');q.kickWorkspace(w.id);while(q.running.size||!s.isSettled(w.id,q.runningMemberIds(w.id)))await sleep(10);assert.ok(events.indexOf('start:b:x')<events.indexOf('end:a:1'));assert.ok(events.indexOf('end:a:1')<events.indexOf('start:a:2'));assert.deepEqual(s.requireMember(w.id,a.id).member.messages.filter(m=>m.role==='assistant').map(m=>m.content),['ok 1','ok 2'])});
