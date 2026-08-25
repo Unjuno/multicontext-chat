@@ -1,36 +1,49 @@
 # MultiContext Chat
 
-A local-first, OSS multi-context deliberation workspace backed by **LibreChat Agents**.
+Parallel isolated LLM chats with per-chat prompts/tools, queued cross-chat messaging, and optional response compression. LibreChat supplies the Agent runtime, model/provider integrations, Web Search, MCP, code execution, knowledge, and other existing tools.
 
-One user prompt fans out to N independent chats. Each chat keeps its own history and Agent/tool configuration. Agents do **not** automatically receive one another's outputs; they can explicitly inspect another history or enqueue a prompt into another chat through opt-in tools. Deliberation can recursively continue until queues drain, a budget is reached outside this app, or the user hits Stop. `SETTLED` means exploration is idle, not that agents agree.
+## Core behavior
 
-## What is implemented
+- One human prompt is broadcast to every active chat.
+- Each chat keeps an independent context and an independent FIFO input queue.
+- Different chats run in parallel; one chat processes only one queued prompt at a time.
+- Workspace `system` prompt is shared and editable.
+- Each chat has an editable `developer` prompt.
+- Human broadcasts and cross-chat queued prompts are sent as normal `user` input.
+- Chats do not automatically receive another chat's history or tool results.
+- Optional tools let a chat list peers, inspect selected peer messages, or queue a prompt to one or two peers.
+- The application does not decide what an input means or when a model should use those tools. Prompt/model behavior owns that decision.
+- `SETTLED` is a runtime state: no active generation, queued work, or blocked failed turn remains.
+- Compile is manual. Its result is user-facing only and is not injected back into member contexts.
 
-- N independent member histories
-- one shared broadcast composer
-- per-member FIFO queue; one active run per member
-- parallel execution across members
-- user intervention after any settled cycle without resetting member history
-- explicit `inspect_chat` and `send_to_chat` Action endpoints
-- cross-chat permission toggles
-- always-visible Stop endpoint/button that aborts active calls and clears queues
-- `SETTLED` detection
-- manual Result Synthesizer / Compile
-- usage/run metadata persistence
-- local JSON persistence with atomic writes
-- optional API bearer auth and tool key
-- zero runtime npm dependencies (Node 22+)
-- Dockerfile and Compose
-- tests for isolation/FIFO/parallelism
+## LibreChat modes
 
-LibreChat remains responsible for model providers, Agent configuration, Web Search, MCP, Code Interpreter, RAG/knowledge, tool execution, credentials and provider-specific behavior.
+### `native` (default)
+
+Designed for gpt-oss when exact role separation and LibreChat-owned conversation context are required. Apply the small, idempotent host patch:
+
+```bash
+node scripts/patch-librechat.mjs /path/to/LibreChat
+```
+
+Rebuild LibreChat, then set:
+
+```env
+MULTICONTEXT_LIBRECHAT_MODE=native
+```
+
+Native mode stores one stable LibreChat conversation id per MultiContext member and continues it with `previous_response_id`. It fails fast if the patched conversation-id header is absent. See `docs/GPT_OSS.md`.
+
+### `compat`
+
+Works with stock LibreChat. MultiContext owns each member's bounded history, sends `store:false`, and replays that member history on every turn. The request boundary still contains separate `system` and `developer` items, but stock LibreChat may normalize them internally.
 
 ## Quick start
 
 ```bash
 cp .env.example .env
-# set LIBRECHAT_BASE_URL and LIBRECHAT_API_KEY
-npm test
+# configure LIBRECHAT_BASE_URL and LIBRECHAT_API_KEY
+npm run check
 npm start
 ```
 
@@ -39,58 +52,40 @@ Open `http://127.0.0.1:4317`.
 Docker:
 
 ```bash
-cp .env.example .env
 docker compose up --build
 ```
 
-See `docs/LIBRECHAT_SETUP.md` for LibreChat Agent/API configuration.
+If LibreChat must call the generated cross-chat Actions, configure `MULTICONTEXT_PUBLIC_URL` to a URL reachable **from the LibreChat process/container**.
 
-## Core model
+## Runtime states
 
-```text
-User prompt
-   │
-   ├────> Chat A FIFO ──> LibreChat Agent A ──> independent history A
-   ├────> Chat B FIFO ──> LibreChat Agent B ──> independent history B
-   └────> Chat N FIFO ──> LibreChat Agent N ──> independent history N
+- `RUNNING` — at least one member is generating.
+- `PENDING` — queued work is waiting and can run.
+- `BLOCKED` — a model/tool request failed; the prompt was returned to the front of that member FIFO and requires explicit Retry.
+- `SETTLED` — all active member queues are empty and no member is running or blocked.
 
-Agent A --inspect_chat--> selected snippets from B
-Agent A --send_to_chat--> B FIFO (as a new user-role task)
-```
-
-A queued prompt is never inserted into every model's context as foreign assistant text. It becomes a normal new task in the target's own context.
-
-## Compile semantics
-
-Compile is disabled until the workspace is `SETTLED`. It uses `compileAgentId` or the first active Agent, receives bounded recent records from every active member, and produces a synthesis that preserves dissent. The synthesis is stored at workspace level and is not injected back into member histories.
-
-## Instruction hierarchy caveat
-
-MultiContext sends the workspace prompt as an Open Responses `system` item and the member prompt as a `developer` item. This is the correct abstraction for models such as gpt-oss. However, current LibreChat main accepts `developer` in the public Responses type and then normalizes it to an internal `system` message before `formatAgentMessages`. Therefore **native** gpt-oss hierarchy is not guaranteed end-to-end unless the serving path preserves/reconstructs it. This repository deliberately does not treat prompt hierarchy as a security boundary; tool access remains enforced by LibreChat Agent configuration and MultiContext backend checks.
-
-For generic models, the same configuration works as an emulated instruction hierarchy.
+Stop aborts active requests and clears pending work. An interrupted process does not silently lose an in-flight prompt: startup recovery requeues it.
 
 ## Cross-chat tools
 
-For a member `M`, open/copy:
+Each member exposes an OpenAPI Action URL. The Action contains:
 
-```text
-http://HOST:4317/tools/WORKSPACE_ID/MEMBER_ID/openapi.json
-```
+- `list_chats()`
+- `inspect_chat(target, query, limit)`
+- `send_to_chat(targets, prompt)` where `targets` contains one or two chat ids/exact names
 
-Add it as a LibreChat Action to that member's LibreChat Agent. Two operations appear:
+Tool availability is controlled in MultiContext and in LibreChat Agent configuration. Message interpretation and tool-use policy remain prompt/model responsibilities.
 
-- `inspect_chat(target_member_id, query, limit)`
-- `send_to_chat(target_member_id, prompt)`
+## Compile
 
-Other-agent statements remain hypotheses/arguments, not evidence merely because another agent produced them.
+Compile is available only when the workspace is `SETTLED` and only runs when the user presses Compile. `compilePrompt` is editable. The compiler receives bounded recent visible records from active chats and returns one compressed response. No compile output is written into member histories.
 
-## Persistence and limits
+## Validation
 
-State defaults to `./data/state.json` and is written atomically. Histories are bounded by `MULTICONTEXT_MAX_HISTORY_MESSAGES`. LibreChat itself may additionally summarize/prune context according to its Agent settings.
+`npm run check` runs syntax checks and Node tests covering context/queue isolation, FIFO + cross-member concurrency, failure requeue and explicit Retry, persisted in-flight recovery, Stop stale-result suppression, native/compat request shaping, LibreChat health/agent discovery, cross-chat Action delivery, HTTP runtime state/Compile gating, and patch idempotency.
 
-Recursive deliberation can create substantial inference load. Local models are recommended for Deep/Exhaustive usage. External paid APIs should be configured with provider-side budgets and rate limits.
+Run `npm run smoke` against a real LibreChat deployment. Set `MULTICONTEXT_SMOKE_AGENT_ID` to include real generation and native thread-continuation checks.
 
 ## License
 
-MIT. LibreChat is a separate upstream dependency and retains its own MIT license.
+MIT. LibreChat remains a separate MIT-licensed upstream dependency.
