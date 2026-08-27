@@ -32,9 +32,9 @@ async function request(url, options = {}) {
 async function refreshHealth() {
   try {
     const health = await request('/api/health');
-    $('#health').textContent = `LibreChat ${health.librechat.mode} · ${health.librechat.agents} agents · ${health.librechat.latencyMs}ms`;
+    $('#health').textContent = `LibreChat ${health.librechat.mode} · ${health.librechat.agents} エージェント · ${health.librechat.latencyMs}ms`;
   } catch (error) {
-    $('#health').textContent = `LibreChat unavailable · ${error.message}`;
+    $('#health').textContent = `LibreChat 接続不可 · ${error.message}`;
   }
 }
 
@@ -70,7 +70,8 @@ async function select(id) {
 }
 
 function statusLabel(state) {
-  const label = state === 'error' ? 'BLOCKED' : state.toUpperCase();
+  const labels = { error: 'ブロック中', running: '実行中', settled: '完了', pending: '保留中', idle: '待機中' };
+  const label = labels[state] || state.toUpperCase();
   return `<span class="status ${esc(state === 'error' ? 'blocked' : state)}">${esc(label)}</span>`;
 }
 
@@ -79,9 +80,9 @@ function queueInfo(member) {
   const inFlight = member.inFlight ? 1 : 0;
   const cls = count > 0 || inFlight ? 'queue-badge has-items' : 'queue-badge';
   const parts = [];
-  if (inFlight) parts.push('processing');
-  if (count > 0) parts.push(`${count} queued`);
-  if (!parts.length) parts.push('idle');
+  if (inFlight) parts.push('処理中');
+  if (count > 0) parts.push(`${count}件キュー`);
+  if (!parts.length) parts.push('待機中');
   return `<span class="${cls}">${parts.join(' · ')}</span>`;
 }
 
@@ -169,7 +170,7 @@ function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, 1200); }
 
 function memberCard(workspace, member) {
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
-  const agentLabel = member.agentId || 'unset';
+  const agentLabel = member.agentId || '未設定';
   return `
     <article class="member" data-mid="${member.id}">
       <div class="member-header">
@@ -178,56 +179,56 @@ function memberCard(workspace, member) {
           ${statusLabel(member.status)}
         </div>
         <div class="member-actions">
-          ${member.status === 'error' ? '<button class="sm" data-action="retry">Retry</button>' : ''}
-          ${member.inFlight ? '<button class="sm danger" data-action="stop">Stop</button>' : ''}
-          <button class="sm" data-action="edit" title="Configure">Settings</button>
-          <button class="sm" data-action="copytool" title="Copy Action URL">URL</button>
+          ${member.status === 'error' ? '<button class="sm" data-action="retry">リトライ</button>' : ''}
+          ${member.inFlight ? '<button class="sm danger" data-action="stop">停止</button>' : ''}
+          <button class="sm" data-action="edit" title="設定">設定</button>
+          <button class="sm" data-action="copytool" title="Action URLをコピー">URL</button>
         </div>
       </div>
       <div class="member-meta">
-        <span>Agent: <strong>${esc(agentLabel)}</strong></span>
+        <span>エージェント: <strong>${esc(agentLabel)}</strong></span>
         <span class="sep">·</span>
         ${queueInfo(member)}
-        ${member.active === false ? '<span class="sep">·</span><span style="color:var(--text-muted)">inactive</span>' : ''}
+        ${member.active === false ? '<span class="sep">·</span><span style="color:var(--text-muted)">無効</span>' : ''}
       </div>
       ${member.lastError ? `<div class="member-error">${esc(member.lastError)}</div>` : ''}
       <div class="member-body">
         <div class="dev-prompt">
-          <div class="dev-prompt-label">Developer prompt</div>
+          <div class="dev-prompt-label">開発者プロンプト</div>
           <div class="dev-prompt-text">${esc(member.developerPrompt) || ''}</div>
         </div>
         <div class="member-editor${editorOpen}">
           <div class="editor-row">
-            <label>Name <input name="name" value="${esc(member.name)}"></label>
-            <label>Agent ID <input name="agentId" list="agentOptions" value="${esc(member.agentId)}"></label>
+            <label>名前 <input name="name" value="${esc(member.name)}"></label>
+            <label>エージェントID <input name="agentId" list="agentOptions" value="${esc(member.agentId)}"></label>
           </div>
-          <label>Developer instructions<textarea name="developerPrompt">${esc(member.developerPrompt)}</textarea></label>
+          <label>開発者指示<textarea name="developerPrompt">${esc(member.developerPrompt)}</textarea></label>
           <div class="editor-row">
             <div class="check-row">
-              <label><input type="checkbox" name="active" ${member.active ? 'checked' : ''}> Active</label>
-              <label><input type="checkbox" name="canInspectOthers" ${member.canInspectOthers ? 'checked' : ''}> Inspect peers</label>
-              <label><input type="checkbox" name="canSendOthers" ${member.canSendOthers ? 'checked' : ''}> Send to peers</label>
+              <label><input type="checkbox" name="active" ${member.active ? 'checked' : ''}> 有効</label>
+              <label><input type="checkbox" name="canInspectOthers" ${member.canInspectOthers ? 'checked' : ''}> ピアを参照</label>
+              <label><input type="checkbox" name="canSendOthers" ${member.canSendOthers ? 'checked' : ''}> ピアに送信</label>
             </div>
           </div>
           <div class="editor-actions">
-            <button class="sm primary" data-action="save">Save</button>
-            <button class="sm danger" data-action="delete">Delete</button>
+            <button class="sm primary" data-action="save">保存</button>
+            <button class="sm danger" data-action="delete">削除</button>
           </div>
           <div class="action-url">${esc(member.actionSpecUrl || '')}</div>
         </div>
         <div class="messages">
-          ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">No messages yet</div>' : ''}
+          ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">まだメッセージがありません</div>' : ''}
           ${member.messages.map((message) => `
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
-              <div class="msg-head">${esc(message.role)}${message.at ? ` · ${esc(message.at)}` : ''}${message.pending ? ' · pending' : ''}</div>
+              <div class="msg-head">${esc(message.role)}${message.at ? ` · ${esc(message.at)}` : ''}${message.pending ? ' · 処理中' : ''}</div>
               ${esc(message.content)}
             </div>
           `).join('')}
         </div>
         <div class="member-footer">
           <form data-action="direct">
-            <input placeholder="Prompt this chat" ${member.active ? '' : 'disabled'}>
-            <button class="sm primary" ${member.active ? '' : 'disabled'}>Send</button>
+            <input placeholder="このチャットにプロンプト" ${member.active ? '' : 'disabled'}>
+            <button class="sm primary" ${member.active ? '' : 'disabled'}>送信</button>
           </form>
         </div>
       </div>
@@ -255,41 +256,41 @@ async function refresh(expectedId = currentId) {
             ${statusLabel(workspace.runtimeState)}
           </div>
           <div class="workspace-toolbar">
-            <button id="saveWorkspace" class="sm primary">Save</button>
-            <button id="addMember" class="sm">+ Chat</button>
-            <button id="stop" class="sm danger">Stop all</button>
+            <button id="saveWorkspace" class="sm primary">保存</button>
+            <button id="addMember" class="sm">+ チャット</button>
+            <button id="stop" class="sm danger">全て停止</button>
           </div>
         </div>
         <div class="workspace-fields">
-          <textarea id="globalPrompt" placeholder="Shared system prompt — applied to all chats as the system message">${esc(workspace.globalPrompt)}</textarea>
-          <div class="hint">Instruction hierarchy: system → developer → user. Native mode requires the documented LibreChat patch; compat mode replays isolated local history.</div>
+          <textarea id="globalPrompt" placeholder="共有システムプロンプト — 全チャットにシステムメッセージとして適用">${esc(workspace.globalPrompt)}</textarea>
+          <div class="hint">指示階層: system → developer → user。nativeモードはLibreChatパッチが必要です。compatモードはローカル履歴を個別に再生します。</div>
         </div>
       </div>
 
-      <div class="section-label">Broadcast</div>
+      <div class="section-label">ブロードキャスト</div>
       <div class="composer">
-        <textarea id="broadcastPrompt" placeholder="One prompt → every active independent chat"></textarea>
-        <button class="primary" id="broadcast">Broadcast</button>
+        <textarea id="broadcastPrompt" placeholder="1つのプロンプト → 全アクティブチャットに配信"></textarea>
+        <button class="primary" id="broadcast">送信</button>
       </div>
 
-      <div class="section-label">Independent chats</div>
+      <div class="section-label">独立チャット</div>
       ${members.length
         ? `<div class="members">${members.map((member) => memberCard(workspace, member)).join('')}</div>`
-        : '<div class="empty-inline">No chats yet. Click <strong>+ Chat</strong> to add an independent chat.</div>'}
+        : '<div class="empty-inline">まだチャットがありません。<strong>+ チャット</strong>をクリックして追加してください。</div>'}
 
-      <div class="section-label">Compile</div>
+      <div class="section-label">コンパイル</div>
       <div class="compile">
         <div class="compile-head">
-          <strong>Response compression</strong>
+          <strong>レスポンス圧縮</strong>
           <div class="toolbar">
-            <input id="compileAgentId" list="agentOptions" placeholder="Compiler agent (blank = first active)" value="${esc(workspace.compileAgentId || '')}">
-            <button id="compile" class="sm" ${workspace.runtimeState === 'SETTLED' ? '' : 'disabled'}>Compile</button>
+            <input id="compileAgentId" list="agentOptions" placeholder="コンパイルエージェント（空=最初のアクティブ）" value="${esc(workspace.compileAgentId || '')}">
+            <button id="compile" class="sm" ${workspace.runtimeState === 'SETTLED' ? '' : 'disabled'}>コンパイル</button>
           </div>
         </div>
-        <textarea id="compilePrompt" placeholder="Compile instructions">${esc(workspace.compilePrompt || '')}</textarea>
+        <textarea id="compilePrompt" placeholder="コンパイル指示">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
           ? `<hr><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-output">${esc(workspace.lastCompile.text)}</div>`
-          : '<div class="small">Manual only. Compile never feeds its result back into member histories.</div>'}
+          : '<div class="small">手動のみ。コンパイル結果はチャット履歴に反映されません。</div>'}
       </div>
     `;
     wire(workspace);
@@ -299,12 +300,12 @@ async function refresh(expectedId = currentId) {
     console.error(error);
     if (error.status === 404) {
       currentId = null;
-      $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">Workspace not found.</div>';
+      $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースが見つかりません。</div>';
       refreshList();
     } else {
       const banner = document.createElement('div');
       banner.className = 'error-banner';
-      banner.textContent = `Refresh failed: ${error.message}`;
+      banner.textContent = `更新失敗: ${error.message}`;
       const app = $('#app');
       if (app && !app.querySelector('.error-banner')) app.prepend(banner);
     }
@@ -331,7 +332,7 @@ function wire(workspace) {
   $('#addMember').onclick = async () => {
     await request(`/api/workspaces/${workspace.id}/members`, {
       method: 'POST',
-      body: JSON.stringify({ name: `Agent ${Object.keys(workspace.members).length + 1}` }),
+      body: JSON.stringify({ name: `チャット ${Object.keys(workspace.members).length + 1}` }),
     });
     await refresh();
   };
@@ -380,7 +381,7 @@ function wire(workspace) {
     };
     $('[data-action=copytool]', card).onclick = async () => {
       await navigator.clipboard.writeText(member.actionSpecUrl);
-      alert('Action URL copied');
+      alert('Action URLをコピーしました');
     };
     $('[data-action=stop]', card).onclick = async () => {
       await request(`/api/workspaces/${workspace.id}/members/${memberId}/stop`, { method: 'POST', body: '{}' });
@@ -424,7 +425,7 @@ function wire(workspace) {
       await refresh();
     };
     $('[data-action=delete]', card).onclick = async () => {
-      if (!confirm('Delete this independent chat?')) return;
+      if (!confirm('このチャットを削除しますか？')) return;
       openEditors.delete(memberId);
       await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'DELETE' });
       await refresh();
@@ -433,7 +434,7 @@ function wire(workspace) {
 }
 
 $('#newWorkspace').onclick = async () => {
-  const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: 'MultiContext Workspace' }) });
+  const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: '新しいワークスペース' }) });
   await select(workspace.id);
 };
 $('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInput').value); setTimeout(() => { refreshHealth(); refreshList(); }, 0); };

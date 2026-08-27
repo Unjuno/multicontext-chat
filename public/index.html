@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,28 +12,28 @@
       <strong>MultiContext</strong>
       <span id="health"></span>
     </div>
-    <button id="newWorkspace" class="sm">+ New workspace</button>
+    <button id="newWorkspace" class="sm">+ 新規ワークスペース</button>
   </header>
 
   <main>
     <aside>
-      <h3>Workspaces</h3>
+      <h3>ワークスペース</h3>
       <div id="workspaces"></div>
     </aside>
 
     <section id="app">
-      <div class="empty">Create or select a workspace.</div>
+      <div class="empty">ワークスペースを作成または選択してください。</div>
     </section>
   </main>
 
   <dialog id="tokenDialog">
     <form method="dialog">
-      <h3>Authentication required</h3>
-      <p>This server requires a MULTICONTEXT_APP_TOKEN.</p>
-      <input id="tokenInput" type="password" placeholder="Bearer token" autocomplete="current-password">
+      <h3>認証が必要です</h3>
+      <p>MULTICONTEXT_APP_TOKEN の設定が必要です。</p>
+      <input id="tokenInput" type="password" placeholder="Bearer トークン" autocomplete="current-password">
       <menu>
-        <button value="cancel">Cancel</button>
-        <button id="saveToken" value="default" class="primary">Save</button>
+        <button value="cancel">キャンセル</button>
+        <button id="saveToken" value="default" class="primary">保存</button>
       </menu>
     </form>
   </dialog>
