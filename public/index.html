@@ -8,36 +8,36 @@
 </head>
 <body>
   <header>
-    <div>
-      <strong>MultiContext Chat</strong>
+    <div class="brand">
+      <strong>MultiContext</strong>
       <span id="health"></span>
     </div>
-    <button id="newWorkspace">New workspace</button>
+    <button id="newWorkspace" class="sm">+ New workspace</button>
   </header>
-  
+
   <main>
     <aside>
       <h3>Workspaces</h3>
       <div id="workspaces"></div>
     </aside>
-    
+
     <section id="app">
       <div class="empty">Create or select a workspace.</div>
     </section>
   </main>
-  
+
   <dialog id="tokenDialog">
     <form method="dialog">
-      <h3>API token</h3>
-      <p>This server requires MULTICONTEXT_APP_TOKEN.</p>
-      <input id="tokenInput" type="password" placeholder="Bearer token">
+      <h3>Authentication required</h3>
+      <p>This server requires a MULTICONTEXT_APP_TOKEN.</p>
+      <input id="tokenInput" type="password" placeholder="Bearer token" autocomplete="current-password">
       <menu>
         <button value="cancel">Cancel</button>
-        <button id="saveToken" value="default">Save</button>
+        <button id="saveToken" value="default" class="primary">Save</button>
       </menu>
     </form>
   </dialog>
-  
+
   <script type="module" src="/app.js"></script>
 </body>
 </html>

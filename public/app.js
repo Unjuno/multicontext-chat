@@ -62,54 +62,80 @@ async function select(id) {
   }, 1200);
 }
 
+function statusLabel(state) {
+  const label = state === 'error' ? 'BLOCKED' : state.toUpperCase();
+  return `<span class="status ${esc(state === 'error' ? 'blocked' : state)}">${esc(label)}</span>`;
+}
+
+function queueInfo(member) {
+  const count = member.queue.length;
+  const inFlight = member.current ? 1 : 0;
+  const cls = count > 0 || inFlight ? 'queue-badge has-items' : 'queue-badge';
+  const parts = [];
+  if (inFlight) parts.push('processing');
+  if (count > 0) parts.push(`${count} queued`);
+  if (!parts.length) parts.push('idle');
+  return `<span class="${cls}">${parts.join(' · ')}</span>`;
+}
+
 function memberCard(workspace, member) {
-  const status = member.status === 'error' ? 'blocked' : member.status;
-  const current = member.current ? ' · in-flight' : '';
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
+  const agentLabel = member.agentId || 'unset';
   return `
     <article class="member" data-mid="${member.id}">
-      <header>
-        <div>
-          <strong>${esc(member.name)}</strong>
-          <span class="status ${esc(status)}">${esc(member.status === 'error' ? 'BLOCKED' : member.status.toUpperCase())}</span>
-          <div class="meta">queue ${member.queue.length}${current} · agent ${esc(member.agentId || 'unset')}</div>
+      <div class="member-header">
+        <div class="member-title">
+          <span class="member-name">${esc(member.name)}</span>
+          ${statusLabel(member.status)}
         </div>
-        <div class="actions">
-          ${member.status === 'error' ? '<button data-action="retry">Retry</button>' : ''}
-          <button data-action="stop">Stop</button>
-          <button data-action="edit">Edit</button>
-          <button data-action="copytool">Action URL</button>
+        <div class="member-actions">
+          ${member.status === 'error' ? '<button class="sm" data-action="retry">Retry</button>' : ''}
+          ${member.current ? '<button class="sm danger" data-action="stop">Stop</button>' : ''}
+          <button class="sm icon-btn" data-action="edit" title="Settings">Edit</button>
+          <button class="sm icon-btn" data-action="copytool" title="Copy Action URL">Action URL</button>
         </div>
-      </header>
-      ${member.lastError ? `<div class="error-text">${esc(member.lastError)}</div>` : ''}
-      <div class="messages">
-        ${member.messages.map((message) => `
-          <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
-            <div class="small">${esc(message.role)} · ${esc(message.at || '')}${message.pending ? ' · pending' : ''}</div>
-            ${esc(message.content)}
+      </div>
+      <div class="member-meta">
+        <span>Agent: ${esc(agentLabel)}</span>
+        <span class="sep">·</span>
+        ${queueInfo(member)}
+        ${member.active === false ? '<span class="sep">·</span><span style="color:var(--text-muted)">inactive</span>' : ''}
+      </div>
+      ${member.lastError ? `<div class="member-error">${esc(member.lastError)}</div>` : ''}
+      <div class="member-body">
+        <div class="member-editor${editorOpen}">
+          <div class="editor-row">
+            <label>Name <input name="name" value="${esc(member.name)}"></label>
+            <label>Agent ID <input name="agentId" list="agentOptions" value="${esc(member.agentId)}"></label>
           </div>
-        `).join('')}
-      </div>
-      <div class="footer">
-        <form data-action="direct">
-          <input placeholder="Prompt only this chat" ${member.active ? '' : 'disabled'}>
-          <button ${member.active ? '' : 'disabled'}>Send</button>
-        </form>
-      </div>
-      <div class="member-editor${editorOpen}">
-        <label>Name<input name="name" value="${esc(member.name)}"></label>
-        <label>LibreChat Agent ID<input name="agentId" list="agentOptions" value="${esc(member.agentId)}"></label>
-        <label>Agent / developer instructions<textarea name="developerPrompt">${esc(member.developerPrompt)}</textarea></label>
-        <div class="check-row">
-          <label><input type="checkbox" name="active" ${member.active ? 'checked' : ''}> active</label>
-          <label><input type="checkbox" name="canInspectOthers" ${member.canInspectOthers ? 'checked' : ''}> inspect peers</label>
-          <label><input type="checkbox" name="canSendOthers" ${member.canSendOthers ? 'checked' : ''}> queue to peers</label>
+          <label>Developer instructions<textarea name="developerPrompt">${esc(member.developerPrompt)}</textarea></label>
+          <div class="editor-row">
+            <div class="check-row">
+              <label><input type="checkbox" name="active" ${member.active ? 'checked' : ''}> Active</label>
+              <label><input type="checkbox" name="canInspectOthers" ${member.canInspectOthers ? 'checked' : ''}> Inspect peers</label>
+              <label><input type="checkbox" name="canSendOthers" ${member.canSendOthers ? 'checked' : ''}> Send to peers</label>
+            </div>
+          </div>
+          <div class="editor-actions">
+            <button class="sm primary" data-action="save">Save</button>
+            <button class="sm danger" data-action="delete">Delete</button>
+          </div>
+          <div class="action-url">${esc(member.actionSpecUrl || '')}</div>
         </div>
-        <div class="actions">
-          <button data-action="save">Save</button>
-          <button class="danger" data-action="delete">Delete</button>
+        <div class="messages">
+          ${member.messages.map((message) => `
+            <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
+              <div class="msg-head">${esc(message.role)}${message.at ? ` · ${esc(message.at)}` : ''}${message.pending ? ' · pending' : ''}</div>
+              ${esc(message.content)}
+            </div>
+          `).join('')}
         </div>
-        <div class="small">LibreChat Action spec: ${esc(member.actionSpecUrl || '')}</div>
+        <div class="member-footer">
+          <form data-action="direct">
+            <input placeholder="Prompt this chat" ${member.active ? '' : 'disabled'}>
+            <button class="sm primary" ${member.active ? '' : 'disabled'}>Send</button>
+          </form>
+        </div>
       </div>
     </article>
   `;
@@ -123,34 +149,46 @@ async function refresh() {
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
     $('#app').innerHTML = `
       <datalist id="agentOptions">${agentOptions}</datalist>
+
       <div class="workspace-head">
-        <div class="workspace-fields">
-          <input id="wname" value="${esc(workspace.name)}">
-          <label>Workspace system instructions<textarea id="globalPrompt" placeholder="Shared system prompt">${esc(workspace.globalPrompt)}</textarea></label>
-          <div class="small">Instruction hierarchy: system → developer → user. Native mode requires the documented LibreChat patch; compat mode replays isolated local history.</div>
+        <div class="workspace-top">
+          <div class="workspace-identity">
+            <input id="wname" value="${esc(workspace.name)}">
+            ${statusLabel(workspace.runtimeState)}
+          </div>
+          <div class="workspace-toolbar">
+            <button id="saveWorkspace" class="sm primary">Save</button>
+            <button id="addMember" class="sm">+ Chat</button>
+            <button id="stop" class="sm danger">Stop all</button>
+          </div>
         </div>
-        <div class="toolbar">
-          <span class="status ${workspace.runtimeState.toLowerCase()}">${esc(workspace.runtimeState)}</span>
-          <button id="saveWorkspace">Save</button>
-          <button id="addMember">Add chat</button>
-          <button id="stop" class="danger">Stop all</button>
+        <div class="workspace-fields">
+          <textarea id="globalPrompt" placeholder="Shared system prompt">${esc(workspace.globalPrompt)}</textarea>
+          <div class="hint">Instruction hierarchy: system → developer → user. Native mode requires the documented LibreChat patch; compat mode replays isolated local history.</div>
         </div>
       </div>
+
       <div class="composer">
         <textarea id="broadcastPrompt" placeholder="One prompt → every active independent chat"></textarea>
         <button class="primary" id="broadcast">Broadcast</button>
       </div>
-      ${members.length ? `<div class="members">${members.map((member) => memberCard(workspace, member)).join('')}</div>` : '<div class="empty-inline">Add at least one independent chat.</div>'}
+
+      ${members.length
+        ? `<div class="members">${members.map((member) => memberCard(workspace, member)).join('')}</div>`
+        : '<div class="empty-inline">Add at least one independent chat.</div>'}
+
       <div class="compile">
         <div class="compile-head">
-          <strong>Optional response compression</strong>
+          <strong>Response compression</strong>
           <div class="toolbar">
-            <input id="compileAgentId" list="agentOptions" placeholder="Compiler Agent ID (blank = first active)" value="${esc(workspace.compileAgentId || '')}">
-            <button id="compile" ${workspace.runtimeState === 'SETTLED' ? '' : 'disabled'}>Compile</button>
+            <input id="compileAgentId" list="agentOptions" placeholder="Compiler agent (blank = first active)" value="${esc(workspace.compileAgentId || '')}">
+            <button id="compile" class="sm" ${workspace.runtimeState === 'SETTLED' ? '' : 'disabled'}>Compile</button>
           </div>
         </div>
-        <label>Compile instructions<textarea id="compilePrompt">${esc(workspace.compilePrompt || '')}</textarea></label>
-        ${workspace.lastCompile ? `<hr><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-output">${esc(workspace.lastCompile.text)}</div>` : '<div class="small">Manual only. Compile never feeds its result back into member histories.</div>'}
+        <textarea id="compilePrompt" placeholder="Compile instructions">${esc(workspace.compilePrompt || '')}</textarea>
+        ${workspace.lastCompile
+          ? `<hr><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-output">${esc(workspace.lastCompile.text)}</div>`
+          : '<div class="small">Manual only. Compile never feeds its result back into member histories.</div>'}
       </div>
     `;
     wire(workspace);
