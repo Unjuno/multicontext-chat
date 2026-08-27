@@ -91,18 +91,22 @@ function memberCard(workspace, member) {
         <div class="member-actions">
           ${member.status === 'error' ? '<button class="sm" data-action="retry">Retry</button>' : ''}
           ${member.current ? '<button class="sm danger" data-action="stop">Stop</button>' : ''}
-          <button class="sm icon-btn" data-action="edit" title="Settings">Edit</button>
-          <button class="sm icon-btn" data-action="copytool" title="Copy Action URL">Action URL</button>
+          <button class="sm" data-action="edit" title="Configure">Settings</button>
+          <button class="sm" data-action="copytool" title="Copy Action URL">URL</button>
         </div>
       </div>
       <div class="member-meta">
-        <span>Agent: ${esc(agentLabel)}</span>
+        <span>Agent: <strong>${esc(agentLabel)}</strong></span>
         <span class="sep">·</span>
         ${queueInfo(member)}
         ${member.active === false ? '<span class="sep">·</span><span style="color:var(--text-muted)">inactive</span>' : ''}
       </div>
       ${member.lastError ? `<div class="member-error">${esc(member.lastError)}</div>` : ''}
       <div class="member-body">
+        <div class="dev-prompt">
+          <div class="dev-prompt-label">Developer prompt</div>
+          <div class="dev-prompt-text">${esc(member.developerPrompt) || ''}</div>
+        </div>
         <div class="member-editor${editorOpen}">
           <div class="editor-row">
             <label>Name <input name="name" value="${esc(member.name)}"></label>
@@ -123,6 +127,7 @@ function memberCard(workspace, member) {
           <div class="action-url">${esc(member.actionSpecUrl || '')}</div>
         </div>
         <div class="messages">
+          ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">No messages yet</div>' : ''}
           ${member.messages.map((message) => `
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
               <div class="msg-head">${esc(message.role)}${message.at ? ` · ${esc(message.at)}` : ''}${message.pending ? ' · pending' : ''}</div>
@@ -163,20 +168,23 @@ async function refresh() {
           </div>
         </div>
         <div class="workspace-fields">
-          <textarea id="globalPrompt" placeholder="Shared system prompt">${esc(workspace.globalPrompt)}</textarea>
+          <textarea id="globalPrompt" placeholder="Shared system prompt — applied to all chats as the system message">${esc(workspace.globalPrompt)}</textarea>
           <div class="hint">Instruction hierarchy: system → developer → user. Native mode requires the documented LibreChat patch; compat mode replays isolated local history.</div>
         </div>
       </div>
 
+      <div class="section-label">Broadcast</div>
       <div class="composer">
         <textarea id="broadcastPrompt" placeholder="One prompt → every active independent chat"></textarea>
         <button class="primary" id="broadcast">Broadcast</button>
       </div>
 
+      <div class="section-label">Independent chats</div>
       ${members.length
         ? `<div class="members">${members.map((member) => memberCard(workspace, member)).join('')}</div>`
-        : '<div class="empty-inline">Add at least one independent chat.</div>'}
+        : '<div class="empty-inline">No chats yet. Click <strong>+ Chat</strong> to add an independent chat.</div>'}
 
+      <div class="section-label">Compile</div>
       <div class="compile">
         <div class="compile-head">
           <strong>Response compression</strong>
@@ -230,6 +238,14 @@ function wire(workspace) {
     } catch (error) { alert(error.message); }
   };
 
+  // Cmd/Ctrl+Enter to broadcast
+  $('#broadcastPrompt').addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      $('#broadcast').click();
+    }
+  });
+
   $('#stop').onclick = async () => {
     await request(`/api/workspaces/${workspace.id}/stop`, { method: 'POST', body: '{}' });
     await refresh();
@@ -277,6 +293,16 @@ function wire(workspace) {
         await refresh();
       } catch (error) { alert(error.message); }
     };
+    // Cmd/Ctrl+Enter to send direct prompt
+    const directInput = $('[data-action=direct] input', card);
+    if (directInput) {
+      directInput.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          $('[data-action=direct]', card).requestSubmit();
+        }
+      });
+    }
     $('[data-action=save]', card).onclick = async () => {
       const body = {
         name: $('[name=name]', editor).value,
