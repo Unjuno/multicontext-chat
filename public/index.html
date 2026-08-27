@@ -1,10 +1,43 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MultiContext Chat</title><link rel="stylesheet" href="/styles.css"></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MultiContext Chat</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
 <body>
-<header><div><strong>MultiContext Chat</strong><span id="health"></span></div><button id="newWorkspace">New workspace</button></header>
-<main>
-<aside><h3>Workspaces</h3><div id="workspaces"></div></aside>
-<section id="app"><div class="empty">Create or select a workspace.</div></section>
-</main>
-<dialog id="tokenDialog"><form method="dialog"><h3>API token</h3><p>This server requires MULTICONTEXT_APP_TOKEN.</p><input id="tokenInput" type="password" placeholder="Bearer token"><menu><button value="cancel">Cancel</button><button id="saveToken" value="default">Save</button></menu></form></dialog>
-<script type="module" src="/app.js"></script></body></html>
+  <header>
+    <div>
+      <strong>MultiContext Chat</strong>
+      <span id="health"></span>
+    </div>
+    <button id="newWorkspace">New workspace</button>
+  </header>
+  
+  <main>
+    <aside>
+      <h3>Workspaces</h3>
+      <div id="workspaces"></div>
+    </aside>
+    
+    <section id="app">
+      <div class="empty">Create or select a workspace.</div>
+    </section>
+  </main>
+  
+  <dialog id="tokenDialog">
+    <form method="dialog">
+      <h3>API token</h3>
+      <p>This server requires MULTICONTEXT_APP_TOKEN.</p>
+      <input id="tokenInput" type="password" placeholder="Bearer token">
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button id="saveToken" value="default">Save</button>
+      </menu>
+    </form>
+  </dialog>
+  
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
