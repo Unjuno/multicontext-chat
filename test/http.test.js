@@ -152,6 +152,41 @@ test('malformed percent-encoding in a static path returns 404 instead of crashin
   });
 });
 
+test('public workspace view strips internal fields and exposes inFlight boolean', async () => {
+  let release;
+  const client = {
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    listAgents: async () => [{ id: 'a', name: 'A' }],
+    runAgent: async ({ prompt }) => {
+      if (prompt === 'slow') await new Promise((resolve) => { release = resolve; });
+      return { id: 'run', text: 'done' };
+    },
+  };
+  await withServer(client, async ({ base }) => {
+    const created = await jsonRequest(base, '/api/workspaces', { method: 'POST', body: JSON.stringify({}) });
+    const workspaceId = created.data.id;
+    const added = await jsonRequest(base, `/api/workspaces/${workspaceId}/members`, { method: 'POST', body: JSON.stringify({ name: 'A', agentId: 'a' }) });
+    const memberId = added.data.member.id;
+    // Enqueue a slow prompt so the member is in-flight
+    await jsonRequest(base, `/api/workspaces/${workspaceId}/members/${memberId}/enqueue`, { method: 'POST', body: JSON.stringify({ prompt: 'slow' }) });
+    for (let i = 0; i < 100 && !release; i += 1) await sleep(5);
+    assert.ok(release, 'run should have started');
+    // Check the public view while in-flight
+    const view = await jsonRequest(base, `/api/workspaces/${workspaceId}`);
+    const member = view.data.members[memberId];
+    assert.equal(member.inFlight, true, 'inFlight should be true while running');
+    assert.equal(member.current, undefined, 'current should not be exposed');
+    assert.equal(member.conversationId, undefined, 'conversationId should not be exposed');
+    assert.equal(member.lastRun, undefined, 'lastRun should not be exposed');
+    release();
+    await waitForSettled(base, workspaceId);
+    // Check the public view after settling
+    const settled = await jsonRequest(base, `/api/workspaces/${workspaceId}`);
+    const settledMember = settled.data.members[memberId];
+    assert.equal(settledMember.inFlight, false, 'inFlight should be false when settled');
+  });
+});
+
 test('concurrent compile requests are rejected while one compile is already running', async () => {
   let releaseCompile;
   let compileCalls = 0;

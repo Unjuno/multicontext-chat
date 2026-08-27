@@ -56,10 +56,7 @@ async function select(id) {
   await Promise.all([refreshList(), refreshAgents()]);
   await refresh();
   clearInterval(timer);
-  timer = setInterval(() => {
-    const tag = document.activeElement?.tagName;
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') refresh();
-  }, 1200);
+  timer = setInterval(tick, 1200);
 }
 
 function statusLabel(state) {
@@ -69,13 +66,84 @@ function statusLabel(state) {
 
 function queueInfo(member) {
   const count = member.queue.length;
-  const inFlight = member.current ? 1 : 0;
+  const inFlight = member.inFlight ? 1 : 0;
   const cls = count > 0 || inFlight ? 'queue-badge has-items' : 'queue-badge';
   const parts = [];
   if (inFlight) parts.push('processing');
   if (count > 0) parts.push(`${count} queued`);
   if (!parts.length) parts.push('idle');
   return `<span class="${cls}">${parts.join(' · ')}</span>`;
+}
+
+// ── Snapshot / restore form state across refresh ────────────────
+function snapshotFormState() {
+  const snap = {};
+  for (const id of ['wname', 'globalPrompt', 'broadcastPrompt', 'compileAgentId', 'compilePrompt']) {
+    const el = document.getElementById(id);
+    if (el) snap[id] = el.value;
+  }
+  // Per-member editor fields
+  $$('.member').forEach((card) => {
+    const mid = card.dataset.mid;
+    for (const name of ['name', 'agentId', 'developerPrompt']) {
+      const el = $(`[name="${name}"]`, card);
+      if (el) snap[`member:${mid}:${name}`] = el.value;
+    }
+    for (const name of ['active', 'canInspectOthers', 'canSendOthers']) {
+      const el = $(`[name="${name}"]`, card);
+      if (el) snap[`member:${mid}:${name}`] = el.checked;
+    }
+  });
+  return snap;
+}
+
+function restoreFormState(snap) {
+  if (!snap) return;
+  for (const id of ['wname', 'globalPrompt', 'broadcastPrompt', 'compileAgentId', 'compilePrompt']) {
+    const el = document.getElementById(id);
+    if (el && snap[id] !== undefined) el.value = snap[id];
+  }
+  $$('.member').forEach((card) => {
+    const mid = card.dataset.mid;
+    for (const name of ['name', 'agentId', 'developerPrompt']) {
+      const el = $(`[name="${name}"]`, card);
+      if (el && snap[`member:${mid}:${name}`] !== undefined) el.value = snap[`member:${mid}:${name}`];
+    }
+    for (const name of ['active', 'canInspectOthers', 'canSendOthers']) {
+      const el = $(`[name="${name}"]`, card);
+      if (el && snap[`member:${mid}:${name}`] !== undefined) el.checked = snap[`member:${mid}:${name}`];
+    }
+  });
+}
+
+// ── Snapshot / restore scroll positions across refresh ───────────
+function snapshotScrollPositions() {
+  const snaps = [];
+  const appEl = document.getElementById('app');
+  if (appEl) snaps.push({ el: appEl, top: appEl.scrollTop });
+  $$('.messages').forEach((el) => snaps.push({ el, top: el.scrollTop }));
+  return snaps;
+}
+
+function restoreScrollPositions(snaps) {
+  for (const { el, top } of snaps) {
+    if (el.isConnected) el.scrollTop = top;
+  }
+}
+
+// ── Periodic tick ────────────────────────────────────────────────
+function tick() {
+  // Never refresh while any form element inside #app is focused —
+  // this preserves cursor position and avoids overwriting active edits.
+  const active = document.activeElement;
+  if (active && active.closest && active.closest('#app')) return;
+
+  const snap = snapshotFormState();
+  const scrolls = snapshotScrollPositions();
+  refresh().then(() => {
+    restoreFormState(snap);
+    restoreScrollPositions(scrolls);
+  });
 }
 
 function memberCard(workspace, member) {
@@ -90,7 +158,7 @@ function memberCard(workspace, member) {
         </div>
         <div class="member-actions">
           ${member.status === 'error' ? '<button class="sm" data-action="retry">Retry</button>' : ''}
-          ${member.current ? '<button class="sm danger" data-action="stop">Stop</button>' : ''}
+          ${member.inFlight ? '<button class="sm danger" data-action="stop">Stop</button>' : ''}
           <button class="sm" data-action="edit" title="Configure">Settings</button>
           <button class="sm" data-action="copytool" title="Copy Action URL">URL</button>
         </div>

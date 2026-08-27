@@ -32,7 +32,10 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   const workspaceView = (id, req) => {
     const workspace = store.requireWorkspace(id); const runtimeState = store.runtimeState(id, scheduler.runningMemberIds(id));
     return { ...store.publicWorkspace(workspace, true), runtimeState, settled: runtimeState === 'SETTLED', runningMemberIds: [...scheduler.runningMemberIds(id)],
-      members: Object.fromEntries(Object.entries(workspace.members).map(([mid, m]) => [mid, { ...m, messages: m.messages, actionSpecUrl: `${publicOrigin(req)}/tools/${id}/${mid}/openapi.json` }])) };
+      members: Object.fromEntries(Object.entries(workspace.members).map(([mid, m]) => {
+        const { conversationId: _cid, current: _cur, lastRun: _lr, ...rest } = m;
+        return [mid, { ...rest, inFlight: Boolean(m.current), messages: m.messages, actionSpecUrl: `${publicOrigin(req)}/tools/${id}/${mid}/openapi.json` }];
+      })) };
   };
 
   async function api(req, res, url) {

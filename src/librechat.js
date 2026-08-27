@@ -7,10 +7,17 @@ export class LibreChatClient {
 
   async listAgents({ signal } = {}) {
     this.assertConfigured();
-    const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses/models`, { headers: this.headers(), signal });
-    const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-    if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
-    return Array.isArray(data.data) ? data.data : [];
+    // Bound the probe so a wedged LibreChat cannot hang /api/health (and the
+    // UI health line) forever; generation requests keep the full timeout.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('LibreChat agents probe timed out')), Math.min(this.timeoutMs, 10_000));
+    const relayAbort = () => controller.abort(signal?.reason ?? new Error('Aborted')); signal?.addEventListener('abort', relayAbort, { once: true });
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses/models`, { headers: this.headers(), signal: controller.signal });
+      const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
+      return Array.isArray(data.data) ? data.data : [];
+    } finally { clearTimeout(timer); signal?.removeEventListener('abort', relayAbort); }
   }
   async health() {
     const startedAt = Date.now();
