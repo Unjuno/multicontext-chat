@@ -38,17 +38,20 @@ async function refreshHealth() {
   }
 }
 
-async function refreshAgents() {
+async function refreshAgents(expectedId = currentId) {
   try {
     const data = await request('/api/agents');
+    if (expectedId !== currentId) return;
     agents = data.agents || [];
   } catch {
+    if (expectedId !== currentId) return;
     agents = [];
   }
 }
 
-async function refreshList() {
+async function refreshList(expectedId = currentId) {
   const data = await request('/api/workspaces');
+  if (expectedId !== currentId) return;
   $('#workspaces').innerHTML = data.workspaces.map((workspace) => `
     <button class="workspace-link ${workspace.id === currentId ? 'active' : ''}" data-id="${workspace.id}">${esc(workspace.name)}</button>
   `).join('');
@@ -59,8 +62,10 @@ async function select(id) {
   if (refreshController) refreshController.abort();
   currentId = id;
   openEditors.clear();
-  await Promise.all([refreshList(), refreshAgents()]);
-  await refresh();
+  await Promise.all([refreshList(id), refreshAgents(id)]);
+  if (currentId !== id) return;
+  await refresh(id);
+  if (currentId !== id) return;
   scheduleNext();
 }
 
@@ -230,14 +235,14 @@ function memberCard(workspace, member) {
   `;
 }
 
-async function refresh() {
-  const id = currentId;
-  if (!id) return;
-  if (refreshController) refreshController.abort();
-  refreshController = new AbortController();
+async function refresh(expectedId = currentId) {
+  if (!expectedId) return;
+  refreshController?.abort();
+  const controller = new AbortController();
+  refreshController = controller;
   try {
-    const workspace = await request(`/api/workspaces/${id}`, { signal: refreshController.signal });
-    if (id !== currentId) return;
+    const workspace = await request(`/api/workspaces/${expectedId}`, { signal: controller.signal });
+    if (controller.signal.aborted || expectedId !== currentId) return;
     const members = Object.values(workspace.members);
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
     $('#app').innerHTML = `
@@ -290,7 +295,7 @@ async function refresh() {
     wire(workspace);
   } catch (error) {
     if (error.name === 'AbortError') return;
-    if (id !== currentId) return;
+    if (expectedId !== currentId) return;
     console.error(error);
     if (error.status === 404) {
       currentId = null;
@@ -303,6 +308,8 @@ async function refresh() {
       const app = $('#app');
       if (app && !app.querySelector('.error-banner')) app.prepend(banner);
     }
+  } finally {
+    if (refreshController === controller) refreshController = null;
   }
 }
 
