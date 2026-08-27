@@ -187,6 +187,31 @@ test('public workspace view strips internal fields and exposes inFlight boolean'
   });
 });
 
+test('list workspaces and addMember responses also strip internal fields', async () => {
+  const client = {
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    listAgents: async () => [{ id: 'a', name: 'A' }],
+    runAgent: async () => ({ id: 'r', text: 'hi' }),
+  };
+  await withServer(client, async ({ base }) => {
+    const created = await jsonRequest(base, '/api/workspaces', { method: 'POST', body: '{}' });
+    const workspaceId = created.data.id;
+    const addRes = await jsonRequest(base, `/api/workspaces/${workspaceId}/members`, { method: 'POST', body: JSON.stringify({ name: 'X', agentId: 'a' }) });
+    const added = addRes.data.member;
+    assert.equal(added.conversationId, undefined, 'addMember response: no conversationId');
+    assert.equal(added.current, undefined, 'addMember response: no current');
+    assert.equal(added.lastRun, undefined, 'addMember response: no lastRun');
+    assert.equal(typeof added.inFlight, 'boolean', 'addMember response: inFlight is boolean');
+    const list = await jsonRequest(base, '/api/workspaces');
+    const listed = list.data.workspaces.find((w) => w.id === workspaceId);
+    const lm = Object.values(listed.members)[0];
+    assert.equal(lm.conversationId, undefined, 'list workspaces: no conversationId');
+    assert.equal(lm.current, undefined, 'list workspaces: no current');
+    assert.equal(lm.lastRun, undefined, 'list workspaces: no lastRun');
+    assert.equal(typeof lm.inFlight, 'boolean', 'list workspaces: inFlight is boolean');
+  });
+});
+
 test('concurrent compile requests are rejected while one compile is already running', async () => {
   let releaseCompile;
   let compileCalls = 0;

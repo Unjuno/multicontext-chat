@@ -55,8 +55,7 @@ async function select(id) {
   openEditors.clear();
   await Promise.all([refreshList(), refreshAgents()]);
   await refresh();
-  clearInterval(timer);
-  timer = setInterval(tick, 1200);
+  clearInterval(timer); scheduleNext();
 }
 
 function statusLabel(state) {
@@ -118,33 +117,44 @@ function restoreFormState(snap) {
 
 // ── Snapshot / restore scroll positions across refresh ───────────
 function snapshotScrollPositions() {
-  const snaps = [];
+  const snaps = { _app: null };
   const appEl = document.getElementById('app');
-  if (appEl) snaps.push({ el: appEl, top: appEl.scrollTop });
-  $$('.messages').forEach((el) => snaps.push({ el, top: el.scrollTop }));
+  if (appEl) snaps._app = appEl.scrollTop;
+  document.querySelectorAll('[data-mid]').forEach((article) => {
+    const msg = article.querySelector('.messages');
+    if (msg) snaps[article.dataset.mid] = msg.scrollTop;
+  });
   return snaps;
 }
 
 function restoreScrollPositions(snaps) {
-  for (const { el, top } of snaps) {
-    if (el.isConnected) el.scrollTop = top;
+  if (snaps._app != null) {
+    const appEl = document.getElementById('app');
+    if (appEl) appEl.scrollTop = snaps._app;
+  }
+  for (const [mid, top] of Object.entries(snaps)) {
+    if (mid === '_app' || top == null) continue;
+    const msg = document.querySelector(`[data-mid="${mid}"] .messages`);
+    if (msg) msg.scrollTop = top;
   }
 }
 
 // ── Periodic tick ────────────────────────────────────────────────
+let ticking = false;
 function tick() {
-  // Never refresh while any form element inside #app is focused —
-  // this preserves cursor position and avoids overwriting active edits.
+  if (ticking) return;
   const active = document.activeElement;
-  if (active && active.closest && active.closest('#app')) return;
-
+  if (active && active.closest && active.closest('#app')) { scheduleNext(); return; }
+  ticking = true;
   const snap = snapshotFormState();
   const scrolls = snapshotScrollPositions();
   refresh().then(() => {
     restoreFormState(snap);
     restoreScrollPositions(scrolls);
-  });
+  }).finally(() => { ticking = false; scheduleNext(); });
 }
+
+function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, 1200); }
 
 function memberCard(workspace, member) {
   const editorOpen = openEditors.has(member.id) ? ' open' : '';

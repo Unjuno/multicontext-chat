@@ -219,7 +219,12 @@ export class StateStore {
     return 'SETTLED';
   }
   isSettled(workspaceId, runningMemberIds = new Set()) { return this.runtimeState(workspaceId, runningMemberIds) === 'SETTLED'; }
-  publicWorkspace(workspace, includeMessages = true) { return { ...workspace, members: Object.fromEntries(Object.entries(workspace.members).map(([id, m]) => [id, { ...m, messages: includeMessages ? m.messages : [] }])) }; }
+  publicWorkspace(workspace, includeMessages = true) { return { ...workspace, members: Object.fromEntries(Object.entries(workspace.members).map(([id, m]) => [id, publicMember(m, includeMessages)])) }; }
+}
+
+export function publicMember(member, includeMessages = true) {
+  const { conversationId: _cid, current: _cur, lastRun: _lr, ...rest } = member;
+  return { ...rest, inFlight: Boolean(member.current), messages: includeMessages ? member.messages : [] };
 }
 
 const stripPrivateMessageFields = (m) => ({ role: m.role, content: String(m.content || '') });

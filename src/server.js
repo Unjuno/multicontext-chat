@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as defaultConfig } from './config.js';
-import { StateStore, searchMemberMessages } from './store.js';
+import { StateStore, searchMemberMessages, publicMember } from './store.js';
 import { LibreChatClient } from './librechat.js';
 import { Scheduler } from './scheduler.js';
 import { buildActionSpec } from './openapi.js';
@@ -32,10 +32,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   const workspaceView = (id, req) => {
     const workspace = store.requireWorkspace(id); const runtimeState = store.runtimeState(id, scheduler.runningMemberIds(id));
     return { ...store.publicWorkspace(workspace, true), runtimeState, settled: runtimeState === 'SETTLED', runningMemberIds: [...scheduler.runningMemberIds(id)],
-      members: Object.fromEntries(Object.entries(workspace.members).map(([mid, m]) => {
-        const { conversationId: _cid, current: _cur, lastRun: _lr, ...rest } = m;
-        return [mid, { ...rest, inFlight: Boolean(m.current), messages: m.messages, actionSpecUrl: `${publicOrigin(req)}/tools/${id}/${mid}/openapi.json` }];
-      })) };
+      members: Object.fromEntries(Object.entries(workspace.members).map(([mid, m]) => [mid, { ...publicMember(m), actionSpecUrl: `${publicOrigin(req)}/tools/${id}/${mid}/openapi.json` }])) };
   };
 
   async function api(req, res, url) {
@@ -51,7 +48,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (parts.length === 3 && req.method === 'PATCH') { store.updateWorkspace(workspaceId, await readBody(req)); return json(res, 200, workspaceView(workspaceId, req)); }
     if (parts.length === 3 && req.method === 'DELETE') { scheduler.stopWorkspace(workspaceId); store.deleteWorkspace(workspaceId); return json(res, 204, null); }
 
-    if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') { const member = store.addMember(workspaceId, await readBody(req)); return json(res, 201, { member, workspace: workspaceView(workspaceId, req) }); }
+    if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') { const member = store.addMember(workspaceId, await readBody(req)); return json(res, 201, { member: publicMember(member), workspace: workspaceView(workspaceId, req) }); }
     if (parts[3] === 'members' && parts[4]) {
       const memberId = parts[4];
       if (parts.length === 5 && req.method === 'PATCH') {
