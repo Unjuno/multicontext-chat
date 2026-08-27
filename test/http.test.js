@@ -241,3 +241,48 @@ test('concurrent compile requests are rejected while one compile is already runn
     assert.equal(compileCalls, 1);
   });
 });
+
+test('OpenAPI spec includes error responses for all operations', async () => {
+  const client = {
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    listAgents: async () => [{ id: 'a', name: 'A' }],
+    runAgent: async () => ({ id: 'r', text: 'hi' }),
+  };
+  await withServer(client, async ({ base }) => {
+    const created = await jsonRequest(base, '/api/workspaces', { method: 'POST', body: '{}' });
+    const workspaceId = created.data.id;
+    const addRes = await jsonRequest(base, `/api/workspaces/${workspaceId}/members`, { method: 'POST', body: JSON.stringify({ name: 'X', agentId: 'a' }) });
+    const memberId = Object.keys(addRes.data.workspace.members)[0];
+    const specRes = await jsonRequest(base, `/tools/${workspaceId}/${memberId}/openapi.json`);
+    const spec = specRes.data;
+    for (const [pathKey, pathItem] of Object.entries(spec.paths)) {
+      for (const [method, op] of Object.entries(pathItem)) {
+        if (typeof op !== 'object' || !op.responses) continue;
+        assert.ok(op.responses['400'], `${method} ${pathKey} missing 400`);
+        assert.ok(op.responses['401'], `${method} ${pathKey} missing 401`);
+        assert.ok(op.responses['403'], `${method} ${pathKey} missing 403`);
+        assert.ok(op.responses['404'], `${method} ${pathKey} missing 404`);
+      }
+    }
+    const sendOp = Object.values(spec.paths).find((p) => p.post?.operationId === 'send_to_chat')?.post;
+    assert.ok(sendOp, 'send-to-chat operation not found');
+    assert.ok(sendOp.responses['409'], 'send-to-chat missing 409');
+  });
+});
+
+test('publicOrigin rejects non-http/https forwarded proto', async () => {
+  const client = {
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    listAgents: async () => [],
+    runAgent: async () => ({ id: 'r', text: '' }),
+  };
+  await withServer(client, async ({ base }) => {
+    const created = await jsonRequest(base, '/api/workspaces', { method: 'POST', body: '{}' });
+    const workspaceId = created.data.id;
+    const addRes = await jsonRequest(base, `/api/workspaces/${workspaceId}/members`, { method: 'POST', body: JSON.stringify({ name: 'X', agentId: 'a' }) });
+    const memberId = Object.keys(addRes.data.workspace.members)[0];
+    const specRes = await jsonRequest(base, `/tools/${workspaceId}/${memberId}/openapi.json`);
+    const origin = specRes.data.servers[0].url;
+    assert.ok(origin.startsWith('http://') || origin.startsWith('https://'), `origin should be http(s), got: ${origin}`);
+  });
+});

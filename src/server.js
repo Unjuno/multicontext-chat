@@ -26,8 +26,14 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   const authorized = (req) => !config.appToken || req.headers.authorization === `Bearer ${config.appToken}`;
   const toolAuthorized = (req) => !config.toolSecret || req.headers['x-multicontext-key'] === config.toolSecret;
   const compilingWorkspaces = new Set();
-  const requestOrigin = (req) => `${String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim()}://${req.headers.host}`;
-  const publicOrigin = (req) => config.publicUrl || requestOrigin(req);
+  const requestOrigin = (req) => {
+    const proto = String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+    if (proto !== 'http' && proto !== 'https') return null;
+    const host = req.headers.host;
+    if (!host) return null;
+    return `${proto}://${host}`;
+  };
+  const publicOrigin = (req) => config.publicUrl || requestOrigin(req) || `http://${config.host}:${config.port}`;
 
   const workspaceView = (id, req) => {
     const workspace = store.requireWorkspace(id); const runtimeState = store.runtimeState(id, scheduler.runningMemberIds(id));

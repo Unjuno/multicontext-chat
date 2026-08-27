@@ -22,3 +22,7 @@ export const config = {
   maxInspectResults: int(process.env.MULTICONTEXT_MAX_INSPECT_RESULTS, 8),
   agentTimeoutMs: int(process.env.MULTICONTEXT_AGENT_TIMEOUT_MS, 900000),
 };
+
+if (!config.publicUrl) {
+  console.warn('[multicontext] MULTICONTEXT_PUBLIC_URL not set — Action/OpenAPI origins will be derived from request headers (safe for local dev, not for public deployment)');
+}

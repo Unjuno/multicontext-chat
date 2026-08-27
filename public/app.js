@@ -1,6 +1,7 @@
 let currentId = null;
 let timer = null;
 let agents = [];
+let refreshController = null;
 const openEditors = new Set();
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -20,7 +21,11 @@ async function request(url, options = {}) {
   }
   if (response.status === 204) return null;
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || data?.error?.message || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const err = new Error(data.error || data?.error?.message || `HTTP ${response.status}`);
+    err.status = response.status;
+    throw err;
+  }
   return data;
 }
 
@@ -51,11 +56,12 @@ async function refreshList() {
 }
 
 async function select(id) {
+  if (refreshController) refreshController.abort();
   currentId = id;
   openEditors.clear();
   await Promise.all([refreshList(), refreshAgents()]);
   await refresh();
-  clearInterval(timer); scheduleNext();
+  scheduleNext();
 }
 
 function statusLabel(state) {
@@ -225,9 +231,13 @@ function memberCard(workspace, member) {
 }
 
 async function refresh() {
-  if (!currentId) return;
+  const id = currentId;
+  if (!id) return;
+  if (refreshController) refreshController.abort();
+  refreshController = new AbortController();
   try {
-    const workspace = await request(`/api/workspaces/${currentId}`);
+    const workspace = await request(`/api/workspaces/${id}`, { signal: refreshController.signal });
+    if (id !== currentId) return;
     const members = Object.values(workspace.members);
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
     $('#app').innerHTML = `
@@ -279,7 +289,20 @@ async function refresh() {
     `;
     wire(workspace);
   } catch (error) {
+    if (error.name === 'AbortError') return;
+    if (id !== currentId) return;
     console.error(error);
+    if (error.status === 404) {
+      currentId = null;
+      $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">Workspace not found.</div>';
+      refreshList();
+    } else {
+      const banner = document.createElement('div');
+      banner.className = 'error-banner';
+      banner.textContent = `Refresh failed: ${error.message}`;
+      const app = $('#app');
+      if (app && !app.querySelector('.error-banner')) app.prepend(banner);
+    }
   }
 }
 
