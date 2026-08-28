@@ -15,6 +15,12 @@
     "check": "node --check src/server.js && node --check src/scheduler.js && node --check src/store.js && node --check src/librechat.js && node --check src/openapi.js && node --check public/app.js && node --check public/runtimeLabels.js && node --check scripts/patch-librechat.mjs && node --check scripts/smoke.mjs && node --test",
     "patch:librechat": "node scripts/patch-librechat.mjs",
     "smoke": "node --env-file-if-exists=.env scripts/smoke.mjs",
-    "e2e:real": "node --env-file-if-exists=.env scripts/e2e-real.mjs"
+    "e2e:real": "node --env-file-if-exists=.env scripts/e2e-real.mjs",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
   }
 }

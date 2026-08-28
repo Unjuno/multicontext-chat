@@ -57,6 +57,18 @@ docker compose up --build
 
 If LibreChat must call the generated cross-chat Actions, configure `MULTICONTEXT_PUBLIC_URL` to a URL reachable **from the LibreChat process/container**.
 
+## Desktop (macOS)
+
+Native launcher that double-clicks from Finder/Dock:
+
+```bash
+npm run desktop:dev   # Tauri dev
+npm run desktop:build # production MultiContext.app
+open src-tauri/target/release/bundle/macos/MultiContext.app
+```
+
+See `docs/DESKTOP.md` for first-run setup, external vs managed services, logs at `~/Library/Logs/MultiContext/`, and Gatekeeper notes for unsigned builds.
+
 ## Runtime states
 
 - `RUNNING` — at least one member is generating.

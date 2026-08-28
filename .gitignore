@@ -5,3 +5,8 @@ data/*.tmp
 node_modules/
 coverage/
 .mcc-test-apikey
+src-tauri/target/
+src-tauri/Cargo.lock
+*.log
+src-tauri/gen/
+src-tauri/icons/icon.iconset/
