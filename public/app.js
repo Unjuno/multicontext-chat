@@ -11,6 +11,41 @@ const esc = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({
 }[char]));
 const token = () => localStorage.getItem('mcc_token') || '';
 
+// ── Toast ──────────────────────────────────────────────────────────
+function toast(message, kind = '') {
+  const stack = $('#toastStack');
+  if (!stack) return;
+  const el = document.createElement('div');
+  el.className = `toast ${kind}`.trim();
+  el.innerHTML = `<span>${esc(message)}</span><button class="sm">閉じる</button>`;
+  const btn = $('button', el);
+  btn.onclick = () => dismiss();
+  stack.appendChild(el);
+  let t = setTimeout(dismiss, 3200);
+  el.addEventListener('mouseenter', () => clearTimeout(t));
+  el.addEventListener('mouseleave', () => { t = setTimeout(dismiss, 1800); });
+  function dismiss() {
+    el.style.animation = 'toastOut 0.18s ease forwards';
+    setTimeout(() => el.remove(), 180);
+    clearTimeout(t);
+  }
+}
+
+function withBusy(btn, fn) {
+  if (!btn) return fn();
+  const prev = btn.textContent;
+  btn.classList.add('is-busy');
+  btn.disabled = true;
+  const done = () => { btn.classList.remove('is-busy'); btn.disabled = false; btn.textContent = prev; };
+  return Promise.resolve(fn()).then((v) => { done(); return v; }, (e) => { done(); throw e; });
+}
+
+function autoResize(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+
 async function request(url, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token()) headers.Authorization = `Bearer ${token()}`;
@@ -33,9 +68,21 @@ async function refreshHealth() {
   try {
     const health = await request('/api/health');
     $('#health').textContent = `LibreChat ${health.librechat.mode} · ${health.librechat.agents} エージェント · ${health.librechat.latencyMs}ms`;
+    $('#health').title = `mode=${health.librechat.mode} agents=${health.librechat.agents} latency=${health.librechat.latencyMs}ms`;
   } catch (error) {
     $('#health').textContent = `LibreChat 接続不可 · ${error.message}`;
+    $('#health').title = error.message;
   }
+}
+
+function workspaceDot(members) {
+  const arr = Object.values(members);
+  if (!arr.length) return 'idle';
+  if (arr.some((m) => m.status === 'error')) return 'blocked';
+  if (arr.some((m) => m.status === 'running' || m.inFlight)) return 'running';
+  if (arr.some((m) => m.queue && m.queue.length)) return 'pending';
+  // check if all idle but has messages -> settled
+  return arr.some((m) => m.messages && m.messages.length) ? 'settled' : 'idle';
 }
 
 async function refreshAgents(expectedId = currentId) {
@@ -52,10 +99,23 @@ async function refreshAgents(expectedId = currentId) {
 async function refreshList(expectedId = currentId) {
   const data = await request('/api/workspaces');
   if (expectedId !== currentId) return;
-  $('#workspaces').innerHTML = data.workspaces.map((workspace) => `
-    <button class="workspace-link ${workspace.id === currentId ? 'active' : ''}" data-id="${workspace.id}">${esc(workspace.name)}</button>
-  `).join('');
-  $$('.workspace-link').forEach((button) => { button.onclick = () => select(button.dataset.id); });
+  const workspaces = data.workspaces || [];
+  if (!workspaces.length) {
+    $('#workspaces').innerHTML = '<div class="small" style="padding:8px 10px">まだワークスペースがありません</div>';
+    return;
+  }
+  $('#workspaces').innerHTML = workspaces.map((workspace) => {
+    const members = workspace.members || {};
+    const count = Object.keys(members).length;
+    const active = Object.values(members).filter((m) => m.active !== false).length;
+    const dot = workspaceDot(members);
+    return `<button class="workspace-link ${workspace.id === currentId ? 'active' : ''}" data-id="${workspace.id}" role="listitem" title="${esc(workspace.name)}">
+      <span class="ws-dot ${dot}" aria-hidden="true"></span>
+      <span class="ws-name">${esc(workspace.name)}</span>
+      <span class="ws-count">${active}/${count}</span>
+    </button>`;
+  }).join('');
+  $$('.workspace-link').forEach((button) => { button.onclick = () => { closeSidebar(); select(button.dataset.id); }; });
 }
 
 async function select(id) {
@@ -69,11 +129,29 @@ async function select(id) {
   scheduleNext();
 }
 
-function statusLabel(state) {
-  const labels = { error: 'ブロック中', running: '実行中', settled: '完了', pending: '保留中', idle: '待機中' };
-  const label = labels[state] || state.toUpperCase();
-  return `<span class="status ${esc(state === 'error' ? 'blocked' : state)}">${esc(label)}</span>`;
+function workspaceStatusLabel(state) {
+  const map = {
+    running: 'RUNNING · 実行中',
+    pending: 'PENDING · キューあり',
+    blocked: 'BLOCKED · 要対応',
+    error: 'BLOCKED · 要対応',
+    settled: 'SETTLED · 処理待ちなし',
+    idle: 'SETTLED · 処理待ちなし',
+  };
+  const label = map[state] || String(state).toUpperCase();
+  const cls = state === 'error' ? 'blocked' : state;
+  return `<span class="status ${esc(cls)}" title="ランタイム状態: ${esc(label)} — 生成中/キュー/ブロックの有無のみを示し、合意や完了を意味しません">${esc(label)}</span>`;
 }
+
+function memberStatusLabel(state) {
+  const labels = { error: 'ブロック中', running: '実行中', idle: '待機' };
+  const label = labels[state] || state.toUpperCase();
+  const cls = state === 'error' ? 'blocked' : state;
+  return `<span class="status ${esc(cls)}">${esc(label)}</span>`;
+}
+
+// keep legacy name for compat but delegate correctly
+function statusLabel(state) { return memberStatusLabel(state); }
 
 function queueInfo(member) {
   const count = member.queue.length;
@@ -176,12 +254,12 @@ function memberCard(workspace, member) {
       <div class="member-header">
         <div class="member-title">
           <span class="member-name">${esc(member.name)}</span>
-          ${statusLabel(member.status)}
+          ${memberStatusLabel(member.status)}
         </div>
         <div class="member-actions">
-          ${member.status === 'error' ? '<button class="sm" data-action="retry">リトライ</button>' : ''}
-          ${member.inFlight ? '<button class="sm danger" data-action="stop">停止</button>' : ''}
-          <button class="sm" data-action="edit" title="設定">設定</button>
+          ${member.status === 'error' ? '<button class="sm" data-action="retry" title="ブロックを解除して再試行">リトライ</button>' : ''}
+          ${member.inFlight ? '<button class="sm danger" data-action="stop" title="実行中の生成を停止">停止</button>' : ''}
+          <button class="sm" data-action="edit" aria-expanded="${openEditors.has(member.id) ? 'true' : 'false'}" title="設定">設定</button>
           <button class="sm" data-action="copytool" title="Action URLをコピー">URL</button>
         </div>
       </div>
@@ -191,18 +269,18 @@ function memberCard(workspace, member) {
         ${queueInfo(member)}
         ${member.active === false ? '<span class="sep">·</span><span style="color:var(--text-muted)">無効</span>' : ''}
       </div>
-      ${member.lastError ? `<div class="member-error">${esc(member.lastError)}</div>` : ''}
+      ${member.lastError ? `<div class="member-error" role="alert">${esc(member.lastError)}</div>` : ''}
       <div class="member-body">
         <div class="dev-prompt">
-          <div class="dev-prompt-label">開発者プロンプト</div>
+          <div class="dev-prompt-label">Developer Prompt <span class="scope-note">— このチャットのみ</span></div>
           <div class="dev-prompt-text">${esc(member.developerPrompt) || ''}</div>
         </div>
         <div class="member-editor${editorOpen}">
           <div class="editor-row">
-            <label>名前 <input name="name" value="${esc(member.name)}"></label>
-            <label>エージェントID <input name="agentId" list="agentOptions" value="${esc(member.agentId)}"></label>
+            <label>名前 <input name="name" value="${esc(member.name)}" autocomplete="off"></label>
+            <label>エージェントID <input name="agentId" list="agentOptions" value="${esc(member.agentId)}" placeholder="agent_..."></label>
           </div>
-          <label>開発者指示<textarea name="developerPrompt">${esc(member.developerPrompt)}</textarea></label>
+          <label>Developer Prompt<textarea name="developerPrompt" placeholder="このチャットのみに適用される developer role の指示">${esc(member.developerPrompt)}</textarea></label>
           <div class="editor-row">
             <div class="check-row">
               <label><input type="checkbox" name="active" ${member.active ? 'checked' : ''}> 有効</label>
@@ -214,10 +292,10 @@ function memberCard(workspace, member) {
             <button class="sm primary" data-action="save">保存</button>
             <button class="sm danger" data-action="delete">削除</button>
           </div>
-          <div class="action-url">${esc(member.actionSpecUrl || '')}</div>
+          <div class="action-url" title="${esc(member.actionSpecUrl || '')}">${esc(member.actionSpecUrl || '')}</div>
         </div>
-        <div class="messages">
-          ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">まだメッセージがありません</div>' : ''}
+        <div class="messages" role="log" aria-live="polite">
+          ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">まだメッセージがありません — ブロードキャストか直接送信で会話を始めましょう</div>' : ''}
           ${member.messages.map((message) => `
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
               <div class="msg-head">${esc(message.role)}${message.at ? ` · ${esc(message.at)}` : ''}${message.pending ? ' · 処理中' : ''}</div>
@@ -226,9 +304,10 @@ function memberCard(workspace, member) {
           `).join('')}
         </div>
         <div class="member-footer">
+          <div class="small" style="font-size:10px; color:var(--text-muted); margin-bottom:4px; letter-spacing:0.02em">このチャットだけに送信 — 他のチャットには届きません</div>
           <form data-action="direct">
-            <input placeholder="このチャットにプロンプト" ${member.active ? '' : 'disabled'}>
-            <button class="sm primary" ${member.active ? '' : 'disabled'}>送信</button>
+            <input placeholder="このチャットだけに送信 — ⌘+↵でも送信" aria-label="このチャットだけに送信するプロンプト" ${member.active ? '' : 'disabled'}>
+            <button class="sm primary" ${member.active ? '' : 'disabled'} title="このチャットだけに送信" aria-label="このチャットだけに送信">このチャットだけに送信</button>
           </form>
         </div>
       </div>
@@ -245,69 +324,84 @@ async function refresh(expectedId = currentId) {
     const workspace = await request(`/api/workspaces/${expectedId}`, { signal: controller.signal });
     if (controller.signal.aborted || expectedId !== currentId) return;
     const members = Object.values(workspace.members);
+    const activeMembers = members.filter((m) => m.active !== false);
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
+    const canBroadcast = activeMembers.length > 0;
+    const compileDisabled = workspace.runtimeState !== 'SETTLED';
+    const compileHint = compileDisabled ? `コンパイルは ${workspace.runtimeState} の間は利用できません — SETTLED になるまで待ってください` : '全チャットの直近メッセージを要約';
     $('#app').innerHTML = `
       <datalist id="agentOptions">${agentOptions}</datalist>
 
       <div class="workspace-head">
         <div class="workspace-top">
           <div class="workspace-identity">
-            <input id="wname" value="${esc(workspace.name)}">
-            ${statusLabel(workspace.runtimeState)}
+            <input id="wname" value="${esc(workspace.name)}" aria-label="ワークスペース名">
+            ${workspaceStatusLabel(workspace.runtimeState)}
           </div>
           <div class="workspace-toolbar">
-            <button id="saveWorkspace" class="sm primary">保存</button>
-            <button id="addMember" class="sm">+ チャット</button>
-            <button id="stop" class="sm danger">全て停止</button>
+            <button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
+            <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
+            <button id="stop" class="sm danger" title="全チャットの生成とキューを停止">全て停止</button>
           </div>
         </div>
         <div class="workspace-fields">
-          <textarea id="globalPrompt" placeholder="共有システムプロンプト — 全チャットにシステムメッセージとして適用">${esc(workspace.globalPrompt)}</textarea>
-          <div class="hint">指示階層: system → developer → user。nativeモードはLibreChatパッチが必要です。compatモードはローカル履歴を個別に再生します。</div>
+          <label for="globalPrompt" class="field-label">共有 System Prompt <span class="scope-note">— 全チャットに system role として適用</span></label>
+          <textarea id="globalPrompt" placeholder="全チャット共通の system 指示を入力（例: あなたは簡潔に答えるアシスタントです）" aria-label="共有 System Prompt">${esc(workspace.globalPrompt)}</textarea>
+          <div class="hint">指示階層: System Prompt（共有） → Developer Prompt（チャット固有） → user（Broadcast / Direct）。nativeはLibreChat会話を継続、compatはローカル履歴を再生。 · <span class="small">${activeMembers.length}件アクティブ / 全${members.length}件</span></div>
         </div>
       </div>
 
-      <div class="section-label">ブロードキャスト</div>
-      <div class="composer">
-        <textarea id="broadcastPrompt" placeholder="1つのプロンプト → 全アクティブチャットに配信"></textarea>
-        <button class="primary" id="broadcast">送信</button>
+      <div class="section-label">Broadcast — 全体送信 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件のアクティブチャットに配信` : 'アクティブなチャットがありません'}</span></div>
+      <div class="composer ${canBroadcast ? '' : 'disabled'}">
+        <div style="flex:1; display:flex; flex-direction:column">
+          <label for="broadcastPrompt" class="composer-label">Broadcast — 全アクティブチャットに送信 <span class="scope-note">— 1つのプロンプトを全チャットへ複製</span> — <kbd>⌘</kbd>+<kbd>↵</kbd>でも送信</label>
+          <textarea id="broadcastPrompt" placeholder="${canBroadcast ? '全アクティブチャットに同じプロンプトを送信（例: このテーマについて多角的に考察してください）' : 'チャットを追加してからブロードキャストできます'}" aria-label="Broadcast プロンプト — 全アクティブチャットに送信" ${canBroadcast ? '' : 'disabled'}></textarea>
+        </div>
+        <button class="primary" id="broadcast" ${canBroadcast ? '' : 'disabled'} title="${canBroadcast ? '全アクティブチャットに送信' : 'アクティブなチャットがありません'}" aria-label="全アクティブチャットに送信">${canBroadcast ? '全アクティブチャットに送信' : '送信'}</button>
       </div>
+      ${canBroadcast ? '' : '<div class="composer-hint">ヒント: 「+ チャット」でチャットを追加し、エージェントIDを設定してください</div>'}
 
-      <div class="section-label">独立チャット</div>
+      <div class="section-label">独立チャット <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${members.length}件</span></div>
       ${members.length
         ? `<div class="members">${members.map((member) => memberCard(workspace, member)).join('')}</div>`
-        : '<div class="empty-inline">まだチャットがありません。<strong>+ チャット</strong>をクリックして追加してください。</div>'}
+        : '<div class="empty-inline"><p><strong>まだチャットがありません</strong></p><p class="small" style="margin:6px 0 12px">各チャットは独立したコンテキストとキューを持ち、並列に実行されます</p><button id="emptyAddChat" class="primary sm">+ 最初のチャットを追加</button></div>'}
 
-      <div class="section-label">コンパイル</div>
+      <div class="section-label">Compile — 手動要約 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">SETTLED時のみ実行 · 履歴には書き込まれません</span></div>
       <div class="compile">
         <div class="compile-head">
-          <strong>レスポンス圧縮</strong>
+          <strong>Compile（手動）</strong>
           <div class="toolbar">
-            <input id="compileAgentId" list="agentOptions" placeholder="コンパイルエージェント（空=最初のアクティブ）" value="${esc(workspace.compileAgentId || '')}">
-            <button id="compile" class="sm" ${workspace.runtimeState === 'SETTLED' ? '' : 'disabled'}>コンパイル</button>
+            <label for="compileAgentId" class="small" style="display:flex; align-items:center; gap:4px">コンパイルエージェント<input id="compileAgentId" list="agentOptions" placeholder="空=最初のアクティブ" value="${esc(workspace.compileAgentId || '')}" aria-label="コンパイルエージェント"></label>
+            <button id="compile" class="sm" ${compileDisabled ? 'disabled' : ''} title="${esc(compileHint)}">コンパイルを実行</button>
           </div>
         </div>
-        <textarea id="compilePrompt" placeholder="コンパイル指示">${esc(workspace.compilePrompt || '')}</textarea>
+        <label for="compilePrompt" class="field-label small">Compile Prompt <span class="scope-note">— 要約の指示（保存してから実行）</span></label>
+        <textarea id="compilePrompt" placeholder="コンパイル指示 — 例: 差分を要約し、未解決点を列挙" aria-label="Compile Prompt">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
           ? `<hr><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-output">${esc(workspace.lastCompile.text)}</div>`
-          : '<div class="small">手動のみ。コンパイル結果はチャット履歴に反映されません。</div>'}
+          : `<div class="small">手動のみ。${compileDisabled ? `現在は${workspace.runtimeState}のため待機中です。` : 'コンパイル結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">コンパイル</span>を押して要約を生成します。'}</div>`}
       </div>
     `;
     wire(workspace);
+    // auto-resize textareas after render
+    const gp = $('#globalPrompt'); if (gp) autoResize(gp);
+    const cp = $('#compilePrompt'); if (cp) autoResize(cp);
   } catch (error) {
     if (error.name === 'AbortError') return;
     if (expectedId !== currentId) return;
     console.error(error);
     if (error.status === 404) {
       currentId = null;
-      $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースが見つかりません。</div>';
+      $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースが見つかりません。左の一覧から選び直してください。</div>';
       refreshList();
     } else {
       const banner = document.createElement('div');
       banner.className = 'error-banner';
+      banner.setAttribute('role', 'alert');
       banner.textContent = `更新失敗: ${error.message}`;
       const app = $('#app');
       if (app && !app.querySelector('.error-banner')) app.prepend(banner);
+      toast(`更新失敗: ${error.message}`, 'error');
     }
   } finally {
     if (refreshController === controller) refreshController = null;
@@ -315,60 +409,119 @@ async function refresh(expectedId = currentId) {
 }
 
 function wire(workspace) {
-  $('#saveWorkspace').onclick = async () => {
-    await request(`/api/workspaces/${workspace.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        name: $('#wname').value,
-        globalPrompt: $('#globalPrompt').value,
-        compileAgentId: $('#compileAgentId').value,
-        compilePrompt: $('#compilePrompt').value,
-      }),
-    });
-    await refreshList();
-    await refresh();
+  // ── dirty indicator for workspace settings ────────────────────
+  const saveBtn = $('#saveWorkspace');
+  const initVals = {
+    wname: $('#wname')?.value ?? '',
+    globalPrompt: $('#globalPrompt')?.value ?? '',
+    compileAgentId: $('#compileAgentId')?.value ?? '',
+    compilePrompt: $('#compilePrompt')?.value ?? '',
+  };
+  function updateDirty() {
+    const cur = {
+      wname: $('#wname')?.value ?? '',
+      globalPrompt: $('#globalPrompt')?.value ?? '',
+      compileAgentId: $('#compileAgentId')?.value ?? '',
+      compilePrompt: $('#compilePrompt')?.value ?? '',
+    };
+    const dirty = cur.wname !== initVals.wname || cur.globalPrompt !== initVals.globalPrompt || cur.compileAgentId !== initVals.compileAgentId || cur.compilePrompt !== initVals.compilePrompt;
+    if (saveBtn) {
+      saveBtn.textContent = dirty ? 'ワークスペース設定を保存 · 未保存' : 'ワークスペース設定を保存';
+      saveBtn.classList.toggle('needs-save', dirty);
+      saveBtn.title = dirty ? '未保存の変更があります — クリックで保存' : 'ワークスペース・System Prompt・Compile設定を保存';
+    }
+  }
+  ['wname','globalPrompt','compileAgentId','compilePrompt'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateDirty);
+  });
+  updateDirty();
+
+  $('#saveWorkspace').onclick = async (e) => {
+    await withBusy(e.currentTarget, async () => {
+      await request(`/api/workspaces/${workspace.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: $('#wname').value,
+          globalPrompt: $('#globalPrompt').value,
+          compileAgentId: $('#compileAgentId').value,
+          compilePrompt: $('#compilePrompt').value,
+        }),
+      });
+      await refreshList();
+      await refresh();
+      toast('ワークスペースを保存しました', 'success');
+    }).catch((err) => toast(err.message, 'error'));
   };
 
-  $('#addMember').onclick = async () => {
-    await request(`/api/workspaces/${workspace.id}/members`, {
-      method: 'POST',
-      body: JSON.stringify({ name: `チャット ${Object.keys(workspace.members).length + 1}` }),
-    });
-    await refresh();
+  $('#addMember').onclick = async (e) => {
+    await withBusy(e.currentTarget, async () => {
+      await request(`/api/workspaces/${workspace.id}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ name: `チャット ${Object.keys(workspace.members).length + 1}` }),
+      });
+      await refresh();
+      toast('チャットを追加しました', 'success');
+    }).catch((err) => toast(err.message, 'error'));
   };
 
-  $('#broadcast').onclick = async () => {
+  const emptyAdd = $('#emptyAddChat');
+  if (emptyAdd) emptyAdd.onclick = () => $('#addMember').click();
+
+  const wname = $('#wname');
+  if (wname) wname.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#saveWorkspace').click(); } });
+
+  const gp = $('#globalPrompt');
+  if (gp) { gp.addEventListener('input', () => autoResize(gp)); }
+
+  const cp = $('#compilePrompt');
+  if (cp) { cp.addEventListener('input', () => autoResize(cp)); }
+
+  const bp = $('#broadcastPrompt');
+  if (bp) {
+    bp.addEventListener('input', () => autoResize(bp));
+    autoResize(bp);
+  }
+
+  $('#broadcast').onclick = async (e) => {
     const prompt = $('#broadcastPrompt').value.trim();
-    if (!prompt) return;
-    try {
+    if (!prompt) { toast('プロンプトを入力してください', 'error'); return; }
+    await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}/broadcast`, { method: 'POST', body: JSON.stringify({ prompt }) });
       $('#broadcastPrompt').value = '';
+      const ta = $('#broadcastPrompt'); if (ta) autoResize(ta);
       await refresh();
-    } catch (error) { alert(error.message); }
+      toast('ブロードキャストを送信しました', 'success');
+    }).catch((err) => toast(err.message, 'error'));
   };
 
   // Cmd/Ctrl+Enter to broadcast
-  $('#broadcastPrompt').addEventListener('keydown', (e) => {
+  const bcEl = $('#broadcastPrompt');
+  if (bcEl) bcEl.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       $('#broadcast').click();
     }
   });
 
-  $('#stop').onclick = async () => {
-    await request(`/api/workspaces/${workspace.id}/stop`, { method: 'POST', body: '{}' });
-    await refresh();
+  $('#stop').onclick = async (e) => {
+    await withBusy(e.currentTarget, async () => {
+      await request(`/api/workspaces/${workspace.id}/stop`, { method: 'POST', body: '{}' });
+      await refresh();
+      toast('全て停止しました', 'success');
+    }).catch((err) => toast(err.message, 'error'));
   };
 
-  $('#compile').onclick = async () => {
-    try {
+  $('#compile').onclick = async (e) => {
+    await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ compileAgentId: $('#compileAgentId').value, compilePrompt: $('#compilePrompt').value }),
       });
       await request(`/api/workspaces/${workspace.id}/compile`, { method: 'POST', body: '{}' });
       await refresh();
-    } catch (error) { alert(error.message); }
+      toast('コンパイルが完了しました', 'success');
+    }).catch((err) => toast(err.message, 'error'));
   };
 
   $$('.member').forEach((card) => {
@@ -376,31 +529,44 @@ function wire(workspace) {
     const member = workspace.members[memberId];
     const editor = $('.member-editor', card);
     $('[data-action=edit]', card).onclick = () => {
-      if (openEditors.has(memberId)) openEditors.delete(memberId); else openEditors.add(memberId);
-      editor.classList.toggle('open');
+      const willOpen = !openEditors.has(memberId);
+      if (willOpen) openEditors.add(memberId); else openEditors.delete(memberId);
+      editor.classList.toggle('open', willOpen);
+      card.querySelector('[data-action=edit]').setAttribute('aria-expanded', String(willOpen));
     };
-    $('[data-action=copytool]', card).onclick = async () => {
-      await navigator.clipboard.writeText(member.actionSpecUrl);
-      alert('Action URLをコピーしました');
+    $('[data-action=copytool]', card).onclick = async (e) => {
+      try {
+        await navigator.clipboard.writeText(member.actionSpecUrl);
+        toast('Action URLをコピーしました', 'success');
+        const b = e.currentTarget; const prev = b.textContent; b.textContent = 'コピー済み'; setTimeout(() => b.textContent = prev, 1200);
+      } catch { toast('コピーに失敗しました', 'error'); }
     };
-    $('[data-action=stop]', card).onclick = async () => {
-      await request(`/api/workspaces/${workspace.id}/members/${memberId}/stop`, { method: 'POST', body: '{}' });
-      await refresh();
+    $('[data-action=stop]', card).onclick = async (e) => {
+      await withBusy(e.currentTarget, async () => {
+        await request(`/api/workspaces/${workspace.id}/members/${memberId}/stop`, { method: 'POST', body: '{}' });
+        await refresh();
+        toast('停止しました', 'success');
+      }).catch((err) => toast(err.message, 'error'));
     };
     const retry = $('[data-action=retry]', card);
-    if (retry) retry.onclick = async () => {
-      await request(`/api/workspaces/${workspace.id}/members/${memberId}/retry`, { method: 'POST', body: '{}' });
-      await refresh();
+    if (retry) retry.onclick = async (e) => {
+      await withBusy(e.currentTarget, async () => {
+        await request(`/api/workspaces/${workspace.id}/members/${memberId}/retry`, { method: 'POST', body: '{}' });
+        await refresh();
+        toast('リトライを開始しました', 'success');
+      }).catch((err) => toast(err.message, 'error'));
     };
     $('[data-action=direct]', card).onsubmit = async (event) => {
       event.preventDefault();
       const input = $('input', event.currentTarget);
-      if (!input.value.trim()) return;
-      try {
+      const btn = $('button', event.currentTarget);
+      if (!input.value.trim()) { toast('プロンプトを入力してください', 'error'); return; }
+      await withBusy(btn, async () => {
         await request(`/api/workspaces/${workspace.id}/members/${memberId}/enqueue`, { method: 'POST', body: JSON.stringify({ prompt: input.value }) });
         input.value = '';
         await refresh();
-      } catch (error) { alert(error.message); }
+        toast('送信しました', 'success');
+      }).catch((err) => toast(err.message, 'error'));
     };
     // Cmd/Ctrl+Enter to send direct prompt
     const directInput = $('[data-action=direct] input', card);
@@ -412,31 +578,64 @@ function wire(workspace) {
         }
       });
     }
-    $('[data-action=save]', card).onclick = async () => {
-      const body = {
-        name: $('[name=name]', editor).value,
-        agentId: $('[name=agentId]', editor).value,
-        developerPrompt: $('[name=developerPrompt]', editor).value,
-        active: $('[name=active]', editor).checked,
-        canInspectOthers: $('[name=canInspectOthers]', editor).checked,
-        canSendOthers: $('[name=canSendOthers]', editor).checked,
-      };
-      await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'PATCH', body: JSON.stringify(body) });
-      await refresh();
+    $('[data-action=save]', card).onclick = async (e) => {
+      await withBusy(e.currentTarget, async () => {
+        const body = {
+          name: $('[name=name]', editor).value,
+          agentId: $('[name=agentId]', editor).value,
+          developerPrompt: $('[name=developerPrompt]', editor).value,
+          active: $('[name=active]', editor).checked,
+          canInspectOthers: $('[name=canInspectOthers]', editor).checked,
+          canSendOthers: $('[name=canSendOthers]', editor).checked,
+        };
+        if (!body.name.trim()) { toast('チャット名を入力してください', 'error'); return; }
+        await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'PATCH', body: JSON.stringify(body) });
+        await refresh();
+        toast('チャット設定を保存しました', 'success');
+      }).catch((err) => toast(err.message, 'error'));
     };
-    $('[data-action=delete]', card).onclick = async () => {
-      if (!confirm('このチャットを削除しますか？')) return;
-      openEditors.delete(memberId);
-      await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'DELETE' });
-      await refresh();
+    $('[data-action=delete]', card).onclick = async (e) => {
+      if (!confirm(`「${member.name}」を削除しますか？ この操作は取り消せません。`)) return;
+      await withBusy(e.currentTarget, async () => {
+        openEditors.delete(memberId);
+        await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'DELETE' });
+        await refresh();
+        toast('チャットを削除しました', 'success');
+      }).catch((err) => toast(err.message, 'error'));
     };
   });
 }
 
-$('#newWorkspace').onclick = async () => {
-  const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: '新しいワークスペース' }) });
-  await select(workspace.id);
+// ── Sidebar drawer (mobile) ──────────────────────────────────────
+const sidebar = $('#sidebar');
+const overlay = $('#sidebarOverlay');
+const menuBtn = $('#menuToggle');
+function openSidebar() {
+  sidebar?.classList.add('open');
+  if (overlay) overlay.hidden = false;
+  menuBtn?.setAttribute('aria-expanded', 'true');
+}
+function closeSidebar() {
+  sidebar?.classList.remove('open');
+  if (overlay) overlay.hidden = true;
+  menuBtn?.setAttribute('aria-expanded', 'false');
+}
+menuBtn?.addEventListener('click', () => {
+  if (sidebar?.classList.contains('open')) closeSidebar(); else openSidebar();
+});
+overlay?.addEventListener('click', closeSidebar);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
+
+$('#newWorkspace').onclick = async (e) => {
+  await withBusy(e.currentTarget, async () => {
+    const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: '新しいワークスペース' }) });
+    await select(workspace.id);
+    toast('ワークスペースを作成しました', 'success');
+    closeSidebar();
+  }).catch((err) => toast(err.message, 'error'));
 };
-$('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInput').value); setTimeout(() => { refreshHealth(); refreshList(); }, 0); };
+const emptyNew = $('#emptyNewWorkspace');
+if (emptyNew) emptyNew.onclick = () => $('#newWorkspace').click();
+$('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInput').value); toast('トークンを保存しました', 'success'); setTimeout(() => { refreshHealth(); refreshList(); }, 0); };
 
 await Promise.all([refreshHealth(), refreshAgents(), refreshList().catch(() => {})]);

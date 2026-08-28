@@ -9,28 +9,43 @@
 <body>
   <header>
     <div class="brand">
+      <button id="menuToggle" class="icon-btn" aria-label="メニューを開く" aria-expanded="false" aria-controls="sidebar">☰</button>
       <strong>MultiContext</strong>
-      <span id="health"></span>
+      <span id="health" role="status" aria-live="polite"></span>
     </div>
-    <button id="newWorkspace" class="sm">+ 新規ワークスペース</button>
+    <div class="header-actions">
+      <span class="kbd-hint" aria-hidden="true"><kbd>⌘</kbd>+<kbd>↵</kbd>で送信</span>
+      <button id="newWorkspace" class="sm">+ 新規ワークスペース</button>
+    </div>
   </header>
 
+  <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+  <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
+
   <main>
-    <aside>
+    <aside id="sidebar" aria-label="ワークスペース一覧">
       <h3>ワークスペース</h3>
-      <div id="workspaces"></div>
+      <div id="workspaces" role="list"></div>
+      <div class="sidebar-foot">
+        <span class="small">ヒント: ブロードキャストは全アクティブチャットに同時配信されます</span>
+      </div>
     </aside>
 
-    <section id="app">
-      <div class="empty">ワークスペースを作成または選択してください。</div>
+    <section id="app" aria-live="polite">
+      <div class="empty">
+        <div class="empty-icon" aria-hidden="true">◇</div>
+        <p><strong>ワークスペースが選択されていません</strong></p>
+        <p class="small">左から選択するか、新規ワークスペースを作成して始めましょう</p>
+        <button id="emptyNewWorkspace" class="primary">+ 新規ワークスペースを作成</button>
+      </div>
     </section>
   </main>
 
-  <dialog id="tokenDialog">
+  <dialog id="tokenDialog" aria-labelledby="tokenDialogTitle">
     <form method="dialog">
-      <h3>認証が必要です</h3>
+      <h3 id="tokenDialogTitle">認証が必要です</h3>
       <p>MULTICONTEXT_APP_TOKEN の設定が必要です。</p>
-      <input id="tokenInput" type="password" placeholder="Bearer トークン" autocomplete="current-password">
+      <input id="tokenInput" type="password" placeholder="Bearer トークン" autocomplete="current-password" aria-label="Bearer トークン">
       <menu>
         <button value="cancel">キャンセル</button>
         <button id="saveToken" value="default" class="primary">保存</button>
