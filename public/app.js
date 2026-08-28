@@ -1,8 +1,11 @@
+import { workspaceStatusLabel as sharedWorkspaceLabel, memberStatusLabel as sharedMemberLabel } from './runtimeLabels.js';
+
 let currentId = null;
 let timer = null;
 let agents = [];
 let refreshController = null;
 const openEditors = new Set();
+let lastWorkspace = null; // server snapshot for dirty checks
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -33,6 +36,7 @@ function toast(message, kind = '') {
 
 function withBusy(btn, fn) {
   if (!btn) return fn();
+  if (btn.disabled || btn.classList.contains('is-busy')) return Promise.resolve();
   const prev = btn.textContent;
   btn.classList.add('is-busy');
   btn.disabled = true;
@@ -81,7 +85,6 @@ function workspaceDot(members) {
   if (arr.some((m) => m.status === 'error')) return 'blocked';
   if (arr.some((m) => m.status === 'running' || m.inFlight)) return 'running';
   if (arr.some((m) => m.queue && m.queue.length)) return 'pending';
-  // check if all idle but has messages -> settled
   return arr.some((m) => m.messages && m.messages.length) ? 'settled' : 'idle';
 }
 
@@ -108,17 +111,26 @@ async function refreshList(expectedId = currentId) {
     const members = workspace.members || {};
     const count = Object.keys(members).length;
     const active = Object.values(members).filter((m) => m.active !== false).length;
-    // prefer server-computed runtimeState when available; fallback to local inference
     const rawState = workspace.runtimeState || null;
     const dot = rawState ? String(rawState).toLowerCase() : workspaceDot(members);
     const dotClass = dot === 'error' ? 'blocked' : dot;
-    return `<button class="workspace-link ${workspace.id === currentId ? 'active' : ''}" data-id="${workspace.id}" role="listitem" title="${esc(workspace.name)} — ${esc(rawState || dot.toUpperCase())}">
+    const isActive = workspace.id === currentId;
+    return `<div role="listitem"><button class="workspace-link ${isActive ? 'active' : ''}" data-id="${workspace.id}" title="${esc(workspace.name)} — ${esc(rawState || dot.toUpperCase())}" aria-current="${isActive ? 'page' : 'false'}" aria-label="${esc(workspace.name)}">
       <span class="ws-dot ${esc(dotClass)}" aria-hidden="true"></span>
       <span class="ws-name">${esc(workspace.name)}</span>
       <span class="ws-count">${active}/${count}</span>
-    </button>`;
+    </button></div>`;
   }).join('');
-  $$('.workspace-link').forEach((button) => { button.onclick = () => { closeSidebar(); select(button.dataset.id); }; });
+  $$('.workspace-link').forEach((button) => { button.onclick = () => { closeSidebar(); handleWorkspaceSelect(button.dataset.id); }; });
+}
+
+function handleWorkspaceSelect(id) {
+  if (id === currentId) return select(id);
+  if (isWorkspaceDirty() && currentId) {
+    const ok = confirm('未保存の変更があります。破棄して別のワークスペースに移動しますか？');
+    if (!ok) return;
+  }
+  return select(id);
 }
 
 async function select(id) {
@@ -132,31 +144,18 @@ async function select(id) {
   scheduleNext();
 }
 
-function workspaceStatusLabel(state) {
-  const map = {
-    running: 'RUNNING · 実行中',
-    pending: 'PENDING · キューあり',
-    blocked: 'BLOCKED · 要対応',
-    error: 'BLOCKED · 要対応',
-    settled: 'SETTLED · 処理待ちなし',
-    idle: 'SETTLED · 処理待ちなし',
-  };
-  const normalized = String(state || '').toLowerCase();
-  const label = map[normalized] || String(state || '').toUpperCase() || 'UNKNOWN';
-  const cls = normalized === 'error' ? 'blocked' : normalized || 'unknown';
+function workspaceStatusHtml(state) {
+  const { label, cls } = sharedWorkspaceLabel(state);
   return `<span class="status ${esc(cls)}" title="ランタイム状態: ${esc(label)} — 生成中/キュー/ブロックの有無のみを示し、合意や完了を意味しません">${esc(label)}</span>`;
 }
-
-function memberStatusLabel(state) {
-  const labels = { error: 'ブロック中', running: '実行中', idle: '待機' };
-  const normalized = String(state || '').toLowerCase();
-  const label = labels[normalized] || String(state || '').toUpperCase() || 'UNKNOWN';
-  const cls = normalized === 'error' ? 'blocked' : normalized || 'unknown';
+function memberStatusHtml(state) {
+  const { label, cls } = sharedMemberLabel(state);
   return `<span class="status ${esc(cls)}">${esc(label)}</span>`;
 }
-
-// keep legacy name for compat but delegate correctly
-function statusLabel(state) { return memberStatusLabel(state); }
+// legacy alias
+function workspaceStatusLabel(state) { return workspaceStatusHtml(state); }
+function memberStatusLabel(state) { return memberStatusHtml(state); }
+function statusLabel(state) { return memberStatusHtml(state); }
 
 function queueInfo(member) {
   const count = member.queue.length;
@@ -176,7 +175,6 @@ function snapshotFormState() {
     const el = document.getElementById(id);
     if (el) snap[id] = el.value;
   }
-  // Per-member editor fields
   $$('.member').forEach((card) => {
     const mid = card.dataset.mid;
     for (const name of ['name', 'agentId', 'developerPrompt']) {
@@ -187,6 +185,9 @@ function snapshotFormState() {
       const el = $(`[name="${name}"]`, card);
       if (el) snap[`member:${mid}:${name}`] = el.checked;
     }
+    // direct send drafts
+    const direct = card.querySelector('[data-action=direct] input');
+    if (direct) snap[`direct:${mid}`] = direct.value;
   });
   return snap;
 }
@@ -207,6 +208,8 @@ function restoreFormState(snap) {
       const el = $(`[name="${name}"]`, card);
       if (el && snap[`member:${mid}:${name}`] !== undefined) el.checked = snap[`member:${mid}:${name}`];
     }
+    const direct = card.querySelector('[data-action=direct] input');
+    if (direct && snap[`direct:${mid}`] !== undefined) direct.value = snap[`direct:${mid}`];
   });
 }
 
@@ -234,6 +237,55 @@ function restoreScrollPositions(snaps) {
   }
 }
 
+function isWorkspaceDirty() {
+  if (!lastWorkspace || !currentId || lastWorkspace.id !== currentId) return false;
+  const cur = {
+    wname: $('#wname')?.value ?? '',
+    globalPrompt: $('#globalPrompt')?.value ?? '',
+    compileAgentId: $('#compileAgentId')?.value ?? '',
+    compilePrompt: $('#compilePrompt')?.value ?? '',
+  };
+  const srv = {
+    wname: String(lastWorkspace.name || ''),
+    globalPrompt: String(lastWorkspace.globalPrompt || ''),
+    compileAgentId: String(lastWorkspace.compileAgentId || ''),
+    compilePrompt: String(lastWorkspace.compilePrompt || ''),
+  };
+  if (cur.wname !== srv.wname || cur.globalPrompt !== srv.globalPrompt || cur.compileAgentId !== srv.compileAgentId || cur.compilePrompt !== srv.compilePrompt) return true;
+  // check member drafts
+  for (const [mid, member] of Object.entries(lastWorkspace.members || {})) {
+    const card = document.querySelector(`[data-mid="${mid}"]`);
+    if (!card) continue;
+    for (const name of ['name', 'agentId', 'developerPrompt']) {
+      const el = card.querySelector(`[name="${name}"]`);
+      if (el && el.value !== String(member[name] ?? '')) return true;
+    }
+    for (const name of ['active', 'canInspectOthers', 'canSendOthers']) {
+      const el = card.querySelector(`[name="${name}"]`);
+      if (el && el.checked !== Boolean(member[name])) return true;
+    }
+  }
+  return false;
+}
+
+async function refreshPreservingDrafts(expectedId = currentId) {
+  const snap = snapshotFormState();
+  const scrolls = snapshotScrollPositions();
+  // snapshot openEditors handled via Set persistence
+  const sameWorkspace = expectedId === currentId && lastWorkspace && expectedId === lastWorkspace.id;
+  await refresh(expectedId);
+  if (!sameWorkspace && expectedId !== currentId) return;
+  // only restore if still on same workspace and member still exists
+  if (expectedId === currentId) {
+    restoreFormState(snap);
+    restoreScrollPositions(scrolls);
+    for (const id of ['wname','globalPrompt','compileAgentId','compilePrompt']) {
+      const el = document.getElementById(id);
+      if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+}
+
 // ── Periodic tick ────────────────────────────────────────────────
 let ticking = false;
 function tick() {
@@ -246,7 +298,6 @@ function tick() {
   refresh().then(() => {
     restoreFormState(snap);
     restoreScrollPositions(scrolls);
-    // re-evaluate dirty indicator after restore (wire re-creates inputs after refresh)
     for (const id of ['wname','globalPrompt','compileAgentId','compilePrompt']) {
       const el = document.getElementById(id);
       if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -264,7 +315,7 @@ function memberCard(workspace, member) {
       <div class="member-header">
         <div class="member-title">
           <span class="member-name">${esc(member.name)}</span>
-          ${memberStatusLabel(member.status)}
+          ${memberStatusHtml(member.status)}
         </div>
         <div class="member-actions">
           ${member.status === 'error' ? '<button class="sm" data-action="retry" title="ブロックを解除して再試行">リトライ</button>' : ''}
@@ -314,10 +365,10 @@ function memberCard(workspace, member) {
           `).join('')}
         </div>
         <div class="member-footer">
-          <div class="small" style="font-size:10px; color:var(--text-muted); margin-bottom:4px; letter-spacing:0.02em">このチャットだけに送信 — 他のチャットには届きません</div>
+          <div class="small" style="font-size:10px; color:var(--text-muted); margin-bottom:4px; letter-spacing:0.02em">このチャットだけに送信</div>
           <form data-action="direct">
-            <input placeholder="このチャットだけに送信 — ⌘+↵でも送信" aria-label="このチャットだけに送信するプロンプト" ${member.active ? '' : 'disabled'}>
-            <button class="sm primary" ${member.active ? '' : 'disabled'} title="このチャットだけに送信" aria-label="このチャットだけに送信">このチャットだけに送信</button>
+            <input placeholder="プロンプトを入力 — ⌘+↵" aria-label="このチャットだけに送信するプロンプト" ${member.active ? '' : 'disabled'}>
+            <button class="sm primary" ${member.active ? '' : 'disabled'} title="このチャットだけに送信" aria-label="このチャットだけに送信">送信</button>
           </form>
         </div>
       </div>
@@ -333,6 +384,7 @@ async function refresh(expectedId = currentId) {
   try {
     const workspace = await request(`/api/workspaces/${expectedId}`, { signal: controller.signal });
     if (controller.signal.aborted || expectedId !== currentId) return;
+    lastWorkspace = workspace;
     const members = Object.values(workspace.members);
     const activeMembers = members.filter((m) => m.active !== false);
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
@@ -346,7 +398,7 @@ async function refresh(expectedId = currentId) {
         <div class="workspace-top">
           <div class="workspace-identity">
             <input id="wname" value="${esc(workspace.name)}" aria-label="ワークスペース名">
-            ${workspaceStatusLabel(workspace.runtimeState)}
+            ${workspaceStatusHtml(workspace.runtimeState)}
           </div>
           <div class="workspace-toolbar">
             <button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
@@ -361,11 +413,11 @@ async function refresh(expectedId = currentId) {
         </div>
       </div>
 
-      <div class="section-label">Broadcast — 全体送信 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件のアクティブチャットに配信` : 'アクティブなチャットがありません'}</span></div>
+      <div class="section-label">Broadcast <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件へ` : 'アクティブなチャットがありません'}</span></div>
       <div class="composer ${canBroadcast ? '' : 'disabled'}">
         <div style="flex:1; display:flex; flex-direction:column">
-          <label for="broadcastPrompt" class="composer-label">Broadcast — 全アクティブチャットに送信 <span class="scope-note">— 1つのプロンプトを全チャットへ複製</span> — <kbd>⌘</kbd>+<kbd>↵</kbd>でも送信</label>
-          <textarea id="broadcastPrompt" placeholder="${canBroadcast ? '全アクティブチャットに同じプロンプトを送信（例: このテーマについて多角的に考察してください）' : 'チャットを追加してからブロードキャストできます'}" aria-label="Broadcast プロンプト — 全アクティブチャットに送信" ${canBroadcast ? '' : 'disabled'}></textarea>
+          <label for="broadcastPrompt" class="composer-label">全アクティブチャットへ <span class="scope-note">— 1つのプロンプトを全チャットへ複製</span></label>
+          <textarea id="broadcastPrompt" placeholder="${canBroadcast ? '全アクティブチャットに同じプロンプトを送信' : 'チャットを追加してからブロードキャストできます'}" aria-label="Broadcast プロンプト — 全アクティブチャットへ" ${canBroadcast ? '' : 'disabled'}></textarea>
         </div>
         <button class="primary" id="broadcast" ${canBroadcast ? '' : 'disabled'} title="${canBroadcast ? '全アクティブチャットに送信' : 'アクティブなチャットがありません'}" aria-label="全アクティブチャットに送信">${canBroadcast ? '全アクティブチャットに送信' : '送信'}</button>
       </div>
@@ -393,7 +445,6 @@ async function refresh(expectedId = currentId) {
       </div>
     `;
     wire(workspace);
-    // auto-resize textareas after render
     const gp = $('#globalPrompt'); if (gp) autoResize(gp);
     const cp = $('#compilePrompt'); if (cp) autoResize(cp);
   } catch (error) {
@@ -402,6 +453,7 @@ async function refresh(expectedId = currentId) {
     console.error(error);
     if (error.status === 404) {
       currentId = null;
+      lastWorkspace = null;
       $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースが見つかりません。左の一覧から選び直してください。</div>';
       refreshList();
     } else {
@@ -419,9 +471,7 @@ async function refresh(expectedId = currentId) {
 }
 
 function wire(workspace) {
-  // ── dirty indicator for workspace settings ────────────────────
   const saveBtn = $('#saveWorkspace');
-  // compare against server values, not DOM snapshot, so dirty survives auto-refresh ticks
   const serverVals = {
     wname: String(workspace.name || ''),
     globalPrompt: String(workspace.globalPrompt || ''),
@@ -448,7 +498,6 @@ function wire(workspace) {
     if (el) el.addEventListener('input', updateDirty);
   });
   updateDirty();
-  // re-evaluate after tick's restoreFormState (which happens after this wire)
   setTimeout(updateDirty, 60);
   setTimeout(updateDirty, 250);
 
@@ -464,7 +513,7 @@ function wire(workspace) {
         }),
       });
       await refreshList();
-      await refresh();
+      await refreshPreservingDrafts(workspace.id);
       toast('ワークスペースを保存しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
   };
@@ -475,7 +524,7 @@ function wire(workspace) {
         method: 'POST',
         body: JSON.stringify({ name: `チャット ${Object.keys(workspace.members).length + 1}` }),
       });
-      await refresh();
+      await refreshPreservingDrafts(workspace.id);
       toast('チャットを追加しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
   };
@@ -501,16 +550,17 @@ function wire(workspace) {
   $('#broadcast').onclick = async (e) => {
     const prompt = $('#broadcastPrompt').value.trim();
     if (!prompt) { toast('プロンプトを入力してください', 'error'); return; }
-    await withBusy(e.currentTarget, async () => {
+    const btn = e.currentTarget;
+    if (btn.disabled || btn.classList.contains('is-busy')) return;
+    await withBusy(btn, async () => {
       await request(`/api/workspaces/${workspace.id}/broadcast`, { method: 'POST', body: JSON.stringify({ prompt }) });
       $('#broadcastPrompt').value = '';
       const ta = $('#broadcastPrompt'); if (ta) autoResize(ta);
-      await refresh();
+      await refreshPreservingDrafts(workspace.id);
       toast('ブロードキャストを送信しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
   };
 
-  // Cmd/Ctrl+Enter to broadcast
   const bcEl = $('#broadcastPrompt');
   if (bcEl) bcEl.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -522,7 +572,7 @@ function wire(workspace) {
   $('#stop').onclick = async (e) => {
     await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}/stop`, { method: 'POST', body: '{}' });
-      await refresh();
+      await refreshPreservingDrafts(workspace.id);
       toast('全て停止しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
   };
@@ -534,7 +584,7 @@ function wire(workspace) {
         body: JSON.stringify({ compileAgentId: $('#compileAgentId').value, compilePrompt: $('#compilePrompt').value }),
       });
       await request(`/api/workspaces/${workspace.id}/compile`, { method: 'POST', body: '{}' });
-      await refresh();
+      await refreshPreservingDrafts(workspace.id);
       toast('コンパイルが完了しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
   };
@@ -559,7 +609,7 @@ function wire(workspace) {
     $('[data-action=stop]', card).onclick = async (e) => {
       await withBusy(e.currentTarget, async () => {
         await request(`/api/workspaces/${workspace.id}/members/${memberId}/stop`, { method: 'POST', body: '{}' });
-        await refresh();
+        await refreshPreservingDrafts(workspace.id);
         toast('停止しました', 'success');
       }).catch((err) => toast(err.message, 'error'));
     };
@@ -567,7 +617,7 @@ function wire(workspace) {
     if (retry) retry.onclick = async (e) => {
       await withBusy(e.currentTarget, async () => {
         await request(`/api/workspaces/${workspace.id}/members/${memberId}/retry`, { method: 'POST', body: '{}' });
-        await refresh();
+        await refreshPreservingDrafts(workspace.id);
         toast('リトライを開始しました', 'success');
       }).catch((err) => toast(err.message, 'error'));
     };
@@ -575,15 +625,15 @@ function wire(workspace) {
       event.preventDefault();
       const input = $('input', event.currentTarget);
       const btn = $('button', event.currentTarget);
+      if (btn.disabled || btn.classList.contains('is-busy')) return;
       if (!input.value.trim()) { toast('プロンプトを入力してください', 'error'); return; }
       await withBusy(btn, async () => {
         await request(`/api/workspaces/${workspace.id}/members/${memberId}/enqueue`, { method: 'POST', body: JSON.stringify({ prompt: input.value }) });
         input.value = '';
-        await refresh();
+        await refreshPreservingDrafts(workspace.id);
         toast('送信しました', 'success');
       }).catch((err) => toast(err.message, 'error'));
     };
-    // Cmd/Ctrl+Enter to send direct prompt
     const directInput = $('[data-action=direct] input', card);
     if (directInput) {
       directInput.addEventListener('keydown', (e) => {
@@ -605,7 +655,7 @@ function wire(workspace) {
         };
         if (!body.name.trim()) { toast('チャット名を入力してください', 'error'); return; }
         await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'PATCH', body: JSON.stringify(body) });
-        await refresh();
+        await refreshPreservingDrafts(workspace.id);
         toast('チャット設定を保存しました', 'success');
       }).catch((err) => toast(err.message, 'error'));
     };
@@ -614,7 +664,7 @@ function wire(workspace) {
       await withBusy(e.currentTarget, async () => {
         openEditors.delete(memberId);
         await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'DELETE' });
-        await refresh();
+        await refreshPreservingDrafts(workspace.id);
         toast('チャットを削除しました', 'success');
       }).catch((err) => toast(err.message, 'error'));
     };
@@ -642,6 +692,10 @@ overlay?.addEventListener('click', closeSidebar);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
 
 $('#newWorkspace').onclick = async (e) => {
+  if (isWorkspaceDirty() && currentId) {
+    const ok = confirm('未保存の変更があります。破棄して新しいワークスペースを作成しますか？');
+    if (!ok) return;
+  }
   await withBusy(e.currentTarget, async () => {
     const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: '新しいワークスペース' }) });
     await select(workspace.id);

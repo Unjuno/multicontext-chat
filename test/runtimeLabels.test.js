@@ -33,10 +33,14 @@ describe('workspace runtime label contract', () => {
       assert.notEqual(cls, state, 'class must not be uppercase');
     }
   });
-  it('app.js workspaceStatusLabel normalizes via toLowerCase', () => {
+  it('app.js uses shared runtime label module with normalization', () => {
     const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-    assert.match(src, /String\(state[\s\S]*?toLowerCase\(\)/, 'app.js must normalize state with toLowerCase');
-    assert.match(src, /const normalized = String\(state/, 'app.js must use normalized variable');
+    // app.js should import shared module (single source of truth) or directly normalize
+    const usesShared = src.includes("from './runtimeLabels.js'") && src.includes('sharedWorkspaceLabel');
+    const directNorm = /String\(state[\s\S]*?toLowerCase\(\)/.test(src);
+    assert.ok(usesShared || directNorm, 'app.js must use shared runtimeLabels or normalize with toLowerCase');
+    const sharedSrc = fs.readFileSync(new URL('../public/runtimeLabels.js', import.meta.url), 'utf8');
+    assert.match(sharedSrc, /toLowerCase\(\)/, 'shared runtimeLabels must normalize with toLowerCase');
   });
 });
 
@@ -48,6 +52,40 @@ describe('member status label contract', () => {
     const r = memberStatusLabel('error');
     assert.equal(r.label, 'ブロック中');
     assert.equal(r.cls, 'blocked');
+  });
+});
+
+describe('draft preservation and guards', () => {
+  it('app.js has draft-preserving refresh helper', () => {
+    const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+    assert.match(src, /refreshPreservingDrafts/, 'must have refreshPreservingDrafts helper');
+    assert.match(src, /snapshotFormState/, 'must snapshot form');
+    assert.match(src, /snapshotScrollPositions/, 'must snapshot scroll');
+  });
+  it('app.js guards workspace switch with dirty check', () => {
+    const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+    assert.match(src, /isWorkspaceDirty/, 'must have isWorkspaceDirty');
+    assert.match(src, /未保存の変更があります。破棄して別のワークスペースに移動しますか？/, 'must prompt on dirty switch');
+  });
+  it('app.js has duplicate-submit guard via withBusy', () => {
+    const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+    assert.match(src, /withBusy/, 'must have withBusy');
+    assert.match(src, /btn\.disabled \|\| btn\.classList\.contains\('is-busy'\)/, 'withBusy must guard duplicate');
+  });
+  it('app.js no longer has overly broad aria-live on #app', () => {
+    const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+    assert.doesNotMatch(html, /<section id="app"[^>]*aria-live/, '#app must not have aria-live');
+    assert.match(html, /aria-live="polite"/, 'targeted live regions must remain');
+  });
+  it('workspace list uses correct semantics (div listitem > button)', () => {
+    const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+    assert.match(src, /<div role="listitem"><button class="workspace-link/, 'list must be div listitem > button');
+    assert.doesNotMatch(src, /role="listitem"[^>]*class="workspace-link"/, 'button must not have role listitem');
+    assert.match(src, /aria-current/, 'active workspace should have aria-current');
+  });
+  it('help cursor misuse removed', () => {
+    const css = fs.readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+    assert.doesNotMatch(css, /\*\[title\]:hover\s*\{\s*cursor:\s*help/, 'must not have global help cursor');
   });
 });
 
