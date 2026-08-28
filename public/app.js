@@ -108,9 +108,12 @@ async function refreshList(expectedId = currentId) {
     const members = workspace.members || {};
     const count = Object.keys(members).length;
     const active = Object.values(members).filter((m) => m.active !== false).length;
-    const dot = workspaceDot(members);
-    return `<button class="workspace-link ${workspace.id === currentId ? 'active' : ''}" data-id="${workspace.id}" role="listitem" title="${esc(workspace.name)}">
-      <span class="ws-dot ${dot}" aria-hidden="true"></span>
+    // prefer server-computed runtimeState when available; fallback to local inference
+    const rawState = workspace.runtimeState || null;
+    const dot = rawState ? String(rawState).toLowerCase() : workspaceDot(members);
+    const dotClass = dot === 'error' ? 'blocked' : dot;
+    return `<button class="workspace-link ${workspace.id === currentId ? 'active' : ''}" data-id="${workspace.id}" role="listitem" title="${esc(workspace.name)} — ${esc(rawState || dot.toUpperCase())}">
+      <span class="ws-dot ${esc(dotClass)}" aria-hidden="true"></span>
       <span class="ws-name">${esc(workspace.name)}</span>
       <span class="ws-count">${active}/${count}</span>
     </button>`;
@@ -138,15 +141,17 @@ function workspaceStatusLabel(state) {
     settled: 'SETTLED · 処理待ちなし',
     idle: 'SETTLED · 処理待ちなし',
   };
-  const label = map[state] || String(state).toUpperCase();
-  const cls = state === 'error' ? 'blocked' : state;
+  const normalized = String(state || '').toLowerCase();
+  const label = map[normalized] || String(state || '').toUpperCase() || 'UNKNOWN';
+  const cls = normalized === 'error' ? 'blocked' : normalized || 'unknown';
   return `<span class="status ${esc(cls)}" title="ランタイム状態: ${esc(label)} — 生成中/キュー/ブロックの有無のみを示し、合意や完了を意味しません">${esc(label)}</span>`;
 }
 
 function memberStatusLabel(state) {
   const labels = { error: 'ブロック中', running: '実行中', idle: '待機' };
-  const label = labels[state] || state.toUpperCase();
-  const cls = state === 'error' ? 'blocked' : state;
+  const normalized = String(state || '').toLowerCase();
+  const label = labels[normalized] || String(state || '').toUpperCase() || 'UNKNOWN';
+  const cls = normalized === 'error' ? 'blocked' : normalized || 'unknown';
   return `<span class="status ${esc(cls)}">${esc(label)}</span>`;
 }
 
@@ -241,6 +246,11 @@ function tick() {
   refresh().then(() => {
     restoreFormState(snap);
     restoreScrollPositions(scrolls);
+    // re-evaluate dirty indicator after restore (wire re-creates inputs after refresh)
+    for (const id of ['wname','globalPrompt','compileAgentId','compilePrompt']) {
+      const el = document.getElementById(id);
+      if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }).finally(() => { ticking = false; scheduleNext(); });
 }
 
@@ -411,11 +421,12 @@ async function refresh(expectedId = currentId) {
 function wire(workspace) {
   // ── dirty indicator for workspace settings ────────────────────
   const saveBtn = $('#saveWorkspace');
-  const initVals = {
-    wname: $('#wname')?.value ?? '',
-    globalPrompt: $('#globalPrompt')?.value ?? '',
-    compileAgentId: $('#compileAgentId')?.value ?? '',
-    compilePrompt: $('#compilePrompt')?.value ?? '',
+  // compare against server values, not DOM snapshot, so dirty survives auto-refresh ticks
+  const serverVals = {
+    wname: String(workspace.name || ''),
+    globalPrompt: String(workspace.globalPrompt || ''),
+    compileAgentId: String(workspace.compileAgentId || ''),
+    compilePrompt: String(workspace.compilePrompt || ''),
   };
   function updateDirty() {
     const cur = {
@@ -424,18 +435,22 @@ function wire(workspace) {
       compileAgentId: $('#compileAgentId')?.value ?? '',
       compilePrompt: $('#compilePrompt')?.value ?? '',
     };
-    const dirty = cur.wname !== initVals.wname || cur.globalPrompt !== initVals.globalPrompt || cur.compileAgentId !== initVals.compileAgentId || cur.compilePrompt !== initVals.compilePrompt;
+    const dirty = cur.wname !== serverVals.wname || cur.globalPrompt !== serverVals.globalPrompt || cur.compileAgentId !== serverVals.compileAgentId || cur.compilePrompt !== serverVals.compilePrompt;
     if (saveBtn) {
       saveBtn.textContent = dirty ? 'ワークスペース設定を保存 · 未保存' : 'ワークスペース設定を保存';
       saveBtn.classList.toggle('needs-save', dirty);
       saveBtn.title = dirty ? '未保存の変更があります — クリックで保存' : 'ワークスペース・System Prompt・Compile設定を保存';
     }
+    return dirty;
   }
   ['wname','globalPrompt','compileAgentId','compilePrompt'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', updateDirty);
   });
   updateDirty();
+  // re-evaluate after tick's restoreFormState (which happens after this wire)
+  setTimeout(updateDirty, 60);
+  setTimeout(updateDirty, 250);
 
   $('#saveWorkspace').onclick = async (e) => {
     await withBusy(e.currentTarget, async () => {

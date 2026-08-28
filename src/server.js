@@ -46,7 +46,13 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     const parts = url.pathname.split('/').filter(Boolean);
     if (url.pathname === '/api/health' && req.method === 'GET') { const librechat = await client.health(); return json(res, librechat.ok ? 200 : 503, { ok: librechat.ok, librechat, publicUrl: config.publicUrl || null }); }
     if (url.pathname === '/api/agents' && req.method === 'GET') return json(res, 200, { agents: await client.listAgents() });
-    if (url.pathname === '/api/workspaces' && req.method === 'GET') return json(res, 200, { workspaces: store.listWorkspaces() });
+    if (url.pathname === '/api/workspaces' && req.method === 'GET') {
+      const workspaces = store.listWorkspaces().map((w) => {
+        const runtimeState = store.runtimeState(w.id, scheduler.runningMemberIds(w.id));
+        return { ...w, runtimeState, settled: runtimeState === 'SETTLED' };
+      });
+      return json(res, 200, { workspaces });
+    }
     if (url.pathname === '/api/workspaces' && req.method === 'POST') return json(res, 201, workspaceView(store.createWorkspace(await readBody(req)).id, req));
 
     const workspaceId = parts[2]; if (parts[0] !== 'api' || parts[1] !== 'workspaces' || !workspaceId) return false;
