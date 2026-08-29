@@ -79,6 +79,192 @@ async function refreshHealth() {
   }
 }
 
+// ── Runtime Status (persistent AI stack indicator) ───────────────
+let runtimeStatuses = [];
+let runtimePollTimer = null;
+let runtimePolling = false;
+let runtimeAbort = null;
+
+function getTauriInvoke() {
+  try {
+    const t = window.__TAURI__;
+    if (t && t.core && t.core.invoke) return t.core.invoke;
+    if (t && t.invoke) return t.invoke;
+  } catch {}
+  return null;
+}
+
+function renderRuntime(statuses) {
+  const btn = $('#runtimeStatus');
+  const dialogDetail = $('#runtimeDetail');
+  if (!btn) return;
+  // Use DesktopUI helpers if available (loaded via desktop-ui.js in Tauri, fallback inline)
+  const UI = window.DesktopUI || {
+    serviceDisplayLabel: (n,s) => s,
+    aggregateStatus: (list) => {
+      if (!list || !list.length) return { text: 'AI Stack ● 確認中', cls: 'checking' };
+      const states = list.map(x=>String(x.state).toLowerCase());
+      if (states.every(s=>s==='ready')) return { text: 'AI Stack ● 準備完了', cls: 'ready' };
+      if (states.some(s=>s==='error')) return { text: 'AI Stack ● 要確認', cls: 'error' };
+      return { text: 'AI Stack ● 起動中', cls: 'starting' };
+    },
+    ownershipText: () => '',
+    dotClassForState: (s) => String(s).toLowerCase(),
+  };
+  const agg = UI.aggregateStatus(statuses);
+  btn.className = `runtime-compact ${agg.cls}`;
+  btn.querySelector('.runtime-text').textContent = agg.text;
+  btn.setAttribute('aria-label', agg.text);
+  // Detail panel
+  if (dialogDetail) {
+    if (!statuses || !statuses.length) {
+      dialogDetail.innerHTML = '<div class="small">確認中...</div>';
+    } else {
+      dialogDetail.innerHTML = statuses.map((s) => {
+        const label = window.DesktopUI ? window.DesktopUI.serviceDisplayLabel(s.name, s.state) : String(s.state);
+        const dotCls = window.DesktopUI ? window.DesktopUI.dotClassForState(s.state) : String(s.state).toLowerCase();
+        const own = window.DesktopUI ? window.DesktopUI.ownershipText(s.ownership) : (s.ownership || '');
+        const ownHtml = own ? `<span class="runtime-row-own">${esc(own)}</span>` : '';
+        const msg = s.message ? esc(s.message) : '';
+        return `<div class="runtime-row">
+          <span class="runtime-row-name">${esc(s.name)}</span>
+          <span class="runtime-row-meta">
+            <span class="runtime-row-dot ${esc(dotCls)}" aria-hidden="true"></span>
+            <span class="small" style="font-weight:600">${esc(label)}</span>
+            ${msg ? `<span class="runtime-row-msg" title="${msg}">${msg}</span>` : ''}
+            ${ownHtml}
+          </span>
+        </div>`;
+      }).join('');
+    }
+  }
+}
+
+async function pollRuntime() {
+  if (runtimePolling) return;
+  runtimePolling = true;
+  if (runtimeAbort) runtimeAbort.abort();
+  const controller = new AbortController();
+  runtimeAbort = controller;
+  try {
+    const invoke = getTauriInvoke();
+    let statuses = null;
+    if (invoke) {
+      try {
+        statuses = await invoke('runtime_status');
+        // Basic check: must be array of 3 with no secrets
+        if (Array.isArray(statuses)) {
+          // never expose key
+          const hasSecret = JSON.stringify(statuses).toLowerCase().includes('sk-') || JSON.stringify(statuses).toLowerCase().includes('bearer');
+          if (hasSecret) throw new Error('secret leaked');
+        }
+      } catch (e) {
+        // fallback to HTTP for MultiContext health if Tauri fails
+        if (controller.signal.aborted) return;
+        throw e;
+      }
+    }
+    if (!statuses) {
+      // Browser/non-Tauri fallback: use /api/health
+      const health = await request('/api/health', { signal: controller.signal });
+      const mcState = health.ok ? 'ready' : 'error';
+      const mcMsg = health.ok ? '準備完了' : (health.librechat && !health.librechat.ok ? 'LibreChat 接続を確認してください' : 'MultiContext が利用できません');
+      statuses = [
+        { name: 'GPT-OSS', state: mcState, message: mcMsg, ownership: null, attempt_id: 0 },
+        { name: 'LibreChat', state: health.librechat && health.librechat.ok ? 'ready' : 'error', message: health.librechat && health.librechat.ok ? '接続済み' : '接続を確認', ownership: null, attempt_id: 0 },
+        { name: 'MultiContext', state: mcState, message: mcMsg, ownership: null, attempt_id: 0 },
+      ];
+      // Hide model detail if not Tauri (ownership unavailable)
+      // Keep 3 entries for aggregate but degrade gracefully
+    }
+    if (controller.signal.aborted) return;
+    runtimeStatuses = statuses;
+    try { sessionStorage.setItem('multicontext_runtime', JSON.stringify(statuses)); } catch {}
+    renderRuntime(statuses);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    // On network failure, keep last known statuses, don't crash
+    console.warn('runtime poll failed', e);
+  } finally {
+    runtimePolling = false;
+    if (runtimeAbort === controller) runtimeAbort = null;
+    scheduleRuntimePoll();
+  }
+}
+
+function scheduleRuntimePoll() {
+  clearTimeout(runtimePollTimer);
+  runtimePollTimer = setTimeout(pollRuntime, 10000);
+}
+
+function initRuntimeStatus() {
+  // Try to restore transferred startup state for immediate READY display
+  try {
+    const raw = sessionStorage.getItem('multicontext_runtime');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length === 3) {
+        runtimeStatuses = parsed;
+        renderRuntime(parsed);
+      }
+    }
+  } catch {}
+  // Also try get_services cache from Tauri (if startup already did)
+  const invoke = getTauriInvoke();
+  if (invoke) {
+    invoke('get_services').then((cached) => {
+      if (Array.isArray(cached) && cached.length === 3) {
+        // Only use if we have no runtime yet or cached is more recent (has attempt_id)
+        const hasRecent = cached.some(s => s.state === 'ready');
+        if (hasRecent && !runtimeStatuses.length) {
+          runtimeStatuses = cached;
+          renderRuntime(cached);
+          try { sessionStorage.setItem('multicontext_runtime', JSON.stringify(cached)); } catch {}
+        }
+      }
+    }).catch(() => {});
+  }
+  // Wire dialog
+  const btn = $('#runtimeStatus');
+  const dialog = $('#runtimeDialog');
+  const closeBtn = $('#runtimeClose');
+  const refreshBtn = $('#runtimeRefresh');
+  const logsBtn = $('#runtimeLogs');
+  if (btn && dialog) {
+    btn.addEventListener('click', () => {
+      renderRuntime(runtimeStatuses);
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open','');
+      btn.setAttribute('aria-expanded','true');
+    });
+    closeBtn?.addEventListener('click', () => {
+      if (typeof dialog.close === 'function') dialog.close();
+      else dialog.removeAttribute('open');
+      btn.setAttribute('aria-expanded','false');
+    });
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) {
+        if (typeof dialog.close === 'function') dialog.close();
+        btn.setAttribute('aria-expanded','false');
+      }
+    });
+    refreshBtn?.addEventListener('click', () => {
+      refreshBtn.disabled = true;
+      pollRuntime().finally(() => { refreshBtn.disabled = false; });
+    });
+    logsBtn?.addEventListener('click', async () => {
+      const inv = getTauriInvoke();
+      if (inv) {
+        try { await inv('open_logs_dir'); toast('ログフォルダを開きました','success'); } catch (e) { toast(String(e),'error'); }
+      } else {
+        toast('ログはデスクトップアプリで確認できます','');
+      }
+    });
+  }
+  // Start polling after a short delay, don't overlap with initial load
+  setTimeout(pollRuntime, 2000);
+}
+
 function workspaceDot(members) {
   const arr = Object.values(members);
   if (!arr.length) return 'idle';
@@ -708,4 +894,5 @@ const emptyNew = $('#emptyNewWorkspace');
 if (emptyNew) emptyNew.onclick = () => $('#newWorkspace').click();
 $('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInput').value); toast('トークンを保存しました', 'success'); setTimeout(() => { refreshHealth(); refreshList(); }, 0); };
 
+initRuntimeStatus();
 await Promise.all([refreshHealth(), refreshAgents(), refreshList().catch(() => {})]);

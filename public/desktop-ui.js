@@ -90,6 +90,56 @@
     return next;
   }
 
+  // ── Runtime status helpers (shared between startup and workspace) ──
+  const STATE_LABELS = {
+    "モデル": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
+    "LibreChat": { ready: "接続済み", starting: "接続中", checking: "接続中", needs_setup: "要設定", error: "エラー" },
+    "MultiContext": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
+  };
+
+  function normalizeState(state) {
+    if (!state) return "checking";
+    const s = String(state).toLowerCase();
+    if (s === "ready") return "ready";
+    if (s === "starting") return "starting";
+    if (s === "checking") return "checking";
+    if (s === "needs_setup" || s === "needssetup" || s === "needs-setup") return "needs_setup";
+    if (s === "error") return "error";
+    return "checking";
+  }
+
+  function serviceDisplayLabel(name, state) {
+    const map = STATE_LABELS[name] || STATE_LABELS["MultiContext"];
+    const n = normalizeState(state);
+    return map[n] || map.checking;
+  }
+
+  function dotClassForState(state) {
+    const n = normalizeState(state);
+    if (n === "ready") return "ready";
+    if (n === "starting" || n === "checking") return "starting";
+    if (n === "needs_setup") return "needs_setup";
+    return "error";
+  }
+
+  function aggregateStatus(statuses) {
+    const list = statuses || [];
+    if (!list.length) return { label: "確認中", cls: "checking", text: "AI Stack ● 確認中" };
+    const states = list.map((s) => normalizeState(s.state));
+    if (states.every((s) => s === "ready")) return { label: "準備完了", cls: "ready", text: "AI Stack ● 準備完了" };
+    if (states.some((s) => s === "error")) return { label: "要確認", cls: "error", text: "AI Stack ● 要確認" };
+    if (states.some((s) => s === "needs_setup")) return { label: "要設定", cls: "needs_setup", text: "AI Stack ● 要設定" };
+    return { label: "起動中", cls: "starting", text: "AI Stack ● 起動中" };
+  }
+
+  // For browser mode: degrade gracefully when Tauri is absent
+  function isTauriAvailable() {
+    try {
+      const t = typeof window !== "undefined" ? window.__TAURI__ : null;
+      return !!(t && (t.core || t.invoke));
+    } catch { return false; }
+  }
+
   return {
     SERVICE_LABELS,
     STARTUP_SERVICES,
@@ -100,5 +150,10 @@
     librechatConnectionText,
     ownershipText,
     applyStartupEvent,
+    serviceDisplayLabel,
+    dotClassForState,
+    aggregateStatus,
+    normalizeState,
+    isTauriAvailable,
   };
 });

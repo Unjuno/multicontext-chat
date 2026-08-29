@@ -106,7 +106,26 @@ so a structured `{ok:false, librechat:{ok:false}}` yields a precise credential
 vs. offline vs. wrong-service message. `Retry` always starts a fresh attempt
 (`state.statuses = {}` + new `attemptId`; delayed events from a previous attempt
 are ignored). The `connection_status` command reports LibreChat reachability/auth
-against the Remote Agents API without exposing the key.
+against the Remote Agents API without exposing the key. Before navigation the
+latest statuses are stored in `sessionStorage` (`multicontext_runtime`) so the
+workspace can show READY immediately without a confusing checking period.
+
+## Runtime status in workspace
+
+After navigation the normal workspace shows a compact persistent indicator in the
+header:
+
+`AI Stack ● 準備完了 / 起動中 / 要確認`
+
+Clicking it opens a detail popover with per-service rows:
+
+- GPT-OSS — `準備完了` / `起動中` / `確認中` / `エラー` (strict `is_model_healthy` on `{"data":[...]}` / `{"models":[...]}`)
+- LibreChat — `接続済み` / `接続中` / `要設定` / `エラー` (Remote Agents `GET /api/agents/v1/responses/models` with `Bearer`, never exposed)
+- MultiContext — `準備完了` / `確認中` / `エラー` (strict `ok===true`, 503 body parsed)
+
+Aggregate: all `ready` → `準備完了`, any `error` → `要確認`, otherwise `起動中` / `要設定`.
+
+Polling: `runtime_status` Tauri command every ~10s (non-overlapping, abort stale, no draft overwrite, no workspace refresh side effects). In browser/non-Tauri mode it degrades to `fetch /api/health` and hides Desktop ownership. Detail actions: `再確認` (poll now), `ログを見る` (`open_logs_dir`). Ownership is shown only in expanded details as `Desktop が起動` / `外部で実行中`, never as raw enum. No secrets are serialized.
 
 ## Production Build
 

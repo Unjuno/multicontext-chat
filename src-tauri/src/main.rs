@@ -166,6 +166,95 @@ fn get_services(state: tauri::State<AppState>) -> Vec<ServiceStatus> {
 }
 
 #[tauri::command]
+async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<ServiceStatus>, String> {
+    let cfg = state.config.lock().unwrap().clone();
+    let client = health::client();
+    let attempt_id = *state.attempt.lock().unwrap();
+    let mut out = Vec::with_capacity(3);
+
+    // GPT-OSS: strict model health (data/models non-empty), not just process exists
+    let model_healthy = health::is_model_healthy(&client, &cfg.model_url).await;
+    let model_started = state.children.children.lock().unwrap().contains_key("モデル");
+    let model_ownership = ownership_from(model_started, model_healthy);
+    let (model_state, model_msg) = if model_healthy {
+        (ServiceState::Ready, "準備完了".to_string())
+    } else {
+        // Distinguish checking vs error via stored startup state if available
+        let stored = state.services.lock().unwrap().get("モデル").cloned();
+        match stored.map(|s| s.state) {
+            Some(ServiceState::Starting) => (ServiceState::Starting, "起動中...".to_string()),
+            Some(ServiceState::Checking) => (ServiceState::Checking, "確認中...".to_string()),
+            _ => (ServiceState::Error, "GPT-OSS を起動できません".to_string()),
+        }
+    };
+    out.push(ServiceStatus {
+        name: "モデル".to_string(),
+        state: model_state,
+        message: model_msg,
+        ownership: model_ownership,
+        attempt_id,
+    });
+
+    // LibreChat: Remote Agents key validation (never expose key)
+    let librechat_started = state.children.children.lock().unwrap().contains_key("LibreChat");
+    let (librechat_state, librechat_msg, librechat_healthy) = match keychain::get_key() {
+        Some(key) if !key.is_empty() => match health::librechat_auth(&cfg.librechat_url, &key).await {
+            AuthStatus::Ok => (ServiceState::Ready, "接続済み".to_string(), true),
+            AuthStatus::Forbidden => (ServiceState::Error, "接続キーを確認してください".to_string(), false),
+            AuthStatus::Unreachable => (ServiceState::Error, "LibreChat に接続できません".to_string(), false),
+        },
+        _ => {
+            let client2 = health::client();
+            let reachable = health::probe(LibreChat, &cfg.librechat_url, &client2).await;
+            if reachable {
+                (ServiceState::Ready, "準備完了".to_string(), true)
+            } else {
+                (ServiceState::NeedsSetup, "要設定".to_string(), false)
+            }
+        }
+    };
+    let librechat_ownership = ownership_from(librechat_started, librechat_healthy);
+    out.push(ServiceStatus {
+        name: "LibreChat".to_string(),
+        state: librechat_state,
+        message: librechat_msg,
+        ownership: librechat_ownership,
+        attempt_id,
+    });
+
+    // MultiContext: strict ok===true, body parsed even on 503
+    let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
+    let mc_started = state.children.children.lock().unwrap().contains_key("MultiContext");
+    let (mc_state, mc_msg, mc_healthy) = match health::multicontext_health(&client, &mc_url).await {
+        McHealth::Ready => (ServiceState::Ready, "準備完了".to_string(), true),
+        McHealth::Unhealthy { kind, librechat_ok: _, detail } => {
+            let msg = connection_error_message(kind, None, &detail);
+            // Map WrongService/Generic to Error, LibreChat already handled
+            (ServiceState::Error, msg, false)
+        }
+        McHealth::Unreachable => (ServiceState::Error, "MultiContext が応答しません".to_string(), false),
+    };
+    let mc_ownership = ownership_from(mc_started, mc_healthy);
+    out.push(ServiceStatus {
+        name: "MultiContext".to_string(),
+        state: mc_state,
+        message: mc_msg,
+        ownership: mc_ownership,
+        attempt_id,
+    });
+
+    // Keep services cache reasonably current without overwriting attempt_id semantics
+    {
+        let mut cache = state.services.lock().unwrap();
+        for s in &out {
+            cache.insert(s.name.clone(), s.clone());
+        }
+    }
+
+    Ok(out)
+}
+
+#[tauri::command]
 fn validate_executable(path: String) -> bool {
     let p = PathBuf::from(&path);
     if !p.exists() {
@@ -673,6 +762,7 @@ fn main() {
             has_api_key,
             check_health,
             get_services,
+            runtime_status,
             get_logs,
             open_logs_dir,
             validate_executable,

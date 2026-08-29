@@ -11,13 +11,28 @@
     <div class="brand">
       <button id="menuToggle" class="icon-btn" aria-label="メニューを開く" aria-expanded="false" aria-controls="sidebar">☰</button>
       <strong>MultiContext</strong>
-      <span id="health" role="status" aria-live="polite"></span>
+      <span id="health" role="status" aria-live="polite" hidden></span>
+      <button id="runtimeStatus" class="runtime-compact" aria-label="AIスタック状態" aria-haspopup="dialog" aria-expanded="false" title="AI Stack">
+        <span class="runtime-dot" aria-hidden="true"></span>
+        <span class="runtime-text">AI Stack ● 確認中</span>
+      </button>
     </div>
     <div class="header-actions">
       <span class="kbd-hint" aria-hidden="true"><kbd>⌘</kbd>+<kbd>↵</kbd>で送信</span>
       <button id="newWorkspace" class="sm">+ 新規ワークスペース</button>
     </div>
   </header>
+  <dialog id="runtimeDialog" aria-labelledby="runtimeDialogTitle">
+    <div class="runtime-detail-head">
+      <h3 id="runtimeDialogTitle">AIスタック状態</h3>
+      <button id="runtimeClose" class="sm" aria-label="閉じる">×</button>
+    </div>
+    <div id="runtimeDetail" class="runtime-detail"></div>
+    <div class="runtime-actions">
+      <button id="runtimeRefresh" class="sm">再確認</button>
+      <button id="runtimeLogs" class="sm">ログを見る</button>
+    </div>
+  </dialog>
 
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
   <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
@@ -53,6 +68,7 @@
     </form>
   </dialog>
 
+  <script src="/desktop-ui.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>
