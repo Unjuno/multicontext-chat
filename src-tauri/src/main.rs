@@ -84,10 +84,10 @@ fn emit_service(
     sstate: ServiceState,
     msg: &str,
     healthy: bool,
+    attempt_id: u64,
 ) {
     let started = state.children.children.lock().unwrap().contains_key(name);
     let ownership = ownership_from(started, healthy);
-    let attempt_id = *state.attempt.lock().unwrap();
     let status = ServiceStatus {
         name: name.to_string(),
         state: sstate,
@@ -457,10 +457,11 @@ async fn ensure_model(
     state: &tauri::State<'_, AppState>,
     cfg: &DesktopConfig,
     client: &reqwest::Client,
+    attempt_id: u64,
 ) -> Result<(), String> {
-    emit_service(app, state, "モデル", ServiceState::Checking, "確認中...", false);
+    emit_service(app, state, "モデル", ServiceState::Checking, "確認中...", false, attempt_id);
     if health::is_model_healthy(client, &cfg.model_url).await {
-        emit_service(app, state, "モデル", ServiceState::Ready, "準備完了", true);
+        emit_service(app, state, "モデル", ServiceState::Ready, "準備完了", true, attempt_id);
         return Ok(());
     }
     if !cfg.manage_model {
@@ -471,25 +472,26 @@ async fn ensure_model(
             ServiceState::NeedsSetup,
             "未起動 — 外部で起動してください",
             false,
+            attempt_id,
         );
         return Err("モデルが起動していません（管理無効）".to_string());
     }
     // Retry safety: drop any stale/failed tracked child before spawning anew.
     process::reap_dead(&state.children);
     process::terminate(&state.children, "モデル");
-    emit_service(app, state, "モデル", ServiceState::Starting, "起動中...", false);
+    emit_service(app, state, "モデル", ServiceState::Starting, "起動中...", false, attempt_id);
     if let Err(e) = start_model(app, state, cfg) {
-        emit_service(app, state, "モデル", ServiceState::Error, &e, false);
+        emit_service(app, state, "モデル", ServiceState::Error, &e, false, attempt_id);
         return Err(e);
     }
     if health::wait_model_ready(&cfg.model_url, 40, Duration::from_secs(2)).await {
-        emit_service(app, state, "モデル", ServiceState::Ready, "準備完了 (管理)", true);
+        emit_service(app, state, "モデル", ServiceState::Ready, "準備完了 (管理)", true, attempt_id);
         Ok(())
     } else {
         // Clean up the managed child we just spawned; never leave it orphaned.
         process::terminate(&state.children, "モデル");
         let msg = "GPT-OSS を起動できません。ログを確認してください。".to_string();
-        emit_service(app, state, "モデル", ServiceState::Error, &msg, false);
+        emit_service(app, state, "モデル", ServiceState::Error, &msg, false, attempt_id);
         Err("モデルの起動がタイムアウトしました".to_string())
     }
 }
@@ -500,10 +502,11 @@ async fn ensure_librechat(
     cfg: &DesktopConfig,
     client: &reqwest::Client,
     node: &str,
+    attempt_id: u64,
 ) -> Result<(), String> {
-    emit_service(app, state, "LibreChat", ServiceState::Checking, "接続中...", false);
+    emit_service(app, state, "LibreChat", ServiceState::Checking, "接続中...", false, attempt_id);
     if health::probe(LibreChat, &cfg.librechat_url, &client).await {
-        emit_service(app, state, "LibreChat", ServiceState::Ready, "準備完了", true);
+        emit_service(app, state, "LibreChat", ServiceState::Ready, "準備完了", true, attempt_id);
         return Ok(());
     }
     if !cfg.manage_librechat {
@@ -514,23 +517,24 @@ async fn ensure_librechat(
             ServiceState::NeedsSetup,
             "未起動 — 外部で起動してください",
             false,
+            attempt_id,
         );
         return Err("LibreChat が起動していません（管理無効）".to_string());
     }
     process::reap_dead(&state.children);
     process::terminate(&state.children, "LibreChat");
-    emit_service(app, state, "LibreChat", ServiceState::Starting, "接続中...", false);
+    emit_service(app, state, "LibreChat", ServiceState::Starting, "接続中...", false, attempt_id);
     if let Err(e) = start_librechat(app, state, cfg, node) {
-        emit_service(app, state, "LibreChat", ServiceState::Error, &e, false);
+        emit_service(app, state, "LibreChat", ServiceState::Error, &e, false, attempt_id);
         return Err(e);
     }
     if health::wait_ready(LibreChat, &cfg.librechat_url, 30, Duration::from_secs(2)).await {
-        emit_service(app, state, "LibreChat", ServiceState::Ready, "準備完了 (管理)", true);
+        emit_service(app, state, "LibreChat", ServiceState::Ready, "準備完了 (管理)", true, attempt_id);
         Ok(())
     } else {
         process::terminate(&state.children, "LibreChat");
         let msg = "LibreChat を起動できません。ログを確認してください。".to_string();
-        emit_service(app, state, "LibreChat", ServiceState::Error, &msg, false);
+        emit_service(app, state, "LibreChat", ServiceState::Error, &msg, false, attempt_id);
         Err("LibreChat の起動がタイムアウトしました".to_string())
     }
 }
@@ -541,51 +545,52 @@ async fn ensure_multicontext(
     cfg: &DesktopConfig,
     client: &reqwest::Client,
     node: &str,
+    attempt_id: u64,
 ) -> Result<(), String> {
     let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
-    emit_service(app, state, "MultiContext", ServiceState::Checking, "確認中...", false);
+    emit_service(app, state, "MultiContext", ServiceState::Checking, "確認中...", false, attempt_id);
     match health::multicontext_health(client, &mc_url).await {
         McHealth::Ready => {
-            emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true);
+            emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true, attempt_id);
             return Ok(());
         }
         McHealth::Unhealthy { kind, librechat_ok, detail } => {
             // Already running but not usable (e.g. missing/wrong key). Do NOT
             // restart onto the occupied port; surface the real cause instead.
             let msg = connection_error_message(kind, librechat_ok, &detail);
-            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
+            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false, attempt_id);
             return Err(msg);
         }
         McHealth::Unreachable => {}
     }
     process::reap_dead(&state.children);
     process::terminate(&state.children, "MultiContext");
-    emit_service(app, state, "MultiContext", ServiceState::Starting, "起動中...", false);
+    emit_service(app, state, "MultiContext", ServiceState::Starting, "起動中...", false, attempt_id);
     if let Err(e) = start_multicontext(app, state, cfg, node) {
-        emit_service(app, state, "MultiContext", ServiceState::Error, &e, false);
+        emit_service(app, state, "MultiContext", ServiceState::Error, &e, false, attempt_id);
         return Err(e);
     }
     if !health::wait_listening(&mc_url, 20, Duration::from_secs(2)).await {
         process::terminate(&state.children, "MultiContext");
         let msg = "MultiContext の起動がタイムアウトしました。ログを確認してください。".to_string();
-        emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
+        emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false, attempt_id);
         return Err(msg);
     }
     match health::multicontext_health(client, &mc_url).await {
         McHealth::Ready => {
-            emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true);
+            emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true, attempt_id);
             Ok(())
         }
         McHealth::Unhealthy { kind, librechat_ok, detail } => {
             process::terminate(&state.children, "MultiContext");
             let msg = connection_error_message(kind, librechat_ok, &detail);
-            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
+            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false, attempt_id);
             Err(msg)
         }
         McHealth::Unreachable => {
             process::terminate(&state.children, "MultiContext");
             let msg = "MultiContext が応答しません。ログを確認してください。".to_string();
-            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
+            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false, attempt_id);
             Err(msg)
         }
     }
@@ -597,20 +602,28 @@ async fn startup(
     app: tauri::AppHandle,
     attempt_id: Option<u64>,
 ) -> Result<Vec<ServiceStatus>, String> {
-    if let Some(id) = attempt_id {
-        *state.attempt.lock().unwrap() = id;
-    }
     let cfg = { state.config.lock().unwrap().clone() };
-    // Guard against concurrent/duplicate startup runs (e.g. auto-start on load
-    // plus an explicit 開始/再試行 click) which would double-launch services.
-    let _guard = {
+    // Guard against concurrent/duplicate startup runs and capture a run-local
+    // immutable attempt token. The token is NOT taken from global state on each
+    // emit; a late attempt 2 call that is rejected must not mutate attempt 1's
+    // in-flight events.
+    let run_attempt: u64;
+    let _guard: StartGuard<'_>;
+    {
         let mut starting = state.starting.lock().unwrap();
         if *starting {
             return Ok(state.services.lock().unwrap().values().cloned().collect());
         }
         *starting = true;
-        StartGuard { flag: &state.starting }
-    };
+        let mut attempt_lock = state.attempt.lock().unwrap();
+        let id = match attempt_id {
+            Some(v) => v,
+            None => attempt_lock.wrapping_add(1),
+        };
+        *attempt_lock = id;
+        run_attempt = id;
+        _guard = StartGuard { flag: &state.starting };
+    }
     trace(&app, &format!("startup begin: manage_model={} manage_librechat={} port={}", cfg.manage_model, cfg.manage_librechat, cfg.multicontext_port));
     cfg.validate()?;
     let node = resolve_node(&state)
@@ -619,11 +632,11 @@ async fn startup(
 
     let client = health::client();
 
-    ensure_model(&app, &state, &cfg, &client).await?;
+    ensure_model(&app, &state, &cfg, &client, run_attempt).await?;
 
-    ensure_librechat(&app, &state, &cfg, &client, &node).await?;
+    ensure_librechat(&app, &state, &cfg, &client, &node, run_attempt).await?;
 
-    ensure_multicontext(&app, &state, &cfg, &client, &node).await?;
+    ensure_multicontext(&app, &state, &cfg, &client, &node, run_attempt).await?;
 
     Ok(state.services.lock().unwrap().values().cloned().collect())
 }
