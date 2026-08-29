@@ -56,9 +56,12 @@
       .card .name { font-weight: 600; width: 110px; flex: 0 0 auto; }
       .card .msg {
         color: var(--muted); font-size: 13px; flex: 1 1 auto; min-width: 0;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        overflow-wrap: break-word; word-break: break-word;
       }
       .card .own { font-size: 11px; color: var(--muted); flex: 0 0 auto; text-align: right; }
+      #bannerMsg { overflow-wrap: break-word; word-break: break-word; }
+      button.destructive { color: var(--err); border-color: rgba(255,107,107,0.4); }
+      button.destructive:hover { background: rgba(255,107,107,0.12); }
       .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
       button {
         background: var(--panel2); color: var(--text);
@@ -112,7 +115,6 @@
     </style>
   </head>
   <body>
-    <img src="http://127.0.0.1:9999/html-loaded" style="display:none" alt="" />
     <div class="wrap">
       <div class="topbar">
         <button id="settingsBtn">設定</button>
@@ -174,8 +176,9 @@
             <span id="connState" class="conn-badge">確認中...</span>
             <input type="password" id="apiKey" autocomplete="off" placeholder="接続キー" />
             <button id="saveApiKey">保存</button>
+            <button id="deleteApiKey" class="destructive">保存済みキーを削除</button>
           </div>
-          <div class="hint">MultiContext が LibreChat に接続するためのキーです。macOS Keychain に保存され、設定ファイルには保存されません。</div>
+          <div class="hint">MultiContext が LibreChat に接続するためのキーです。macOS Keychain に保存され、設定ファイルには保存されません。空欄のまま保存しても保存済みキーは保持されます。</div>
           <div class="hint" id="apiKeyHint"></div>
         </div>
 
@@ -205,8 +208,8 @@
         </details>
 
         <div class="actions">
-          <button class="primary" id="saveBtn">保存</button>
-          <button id="startBtn">保存して開始</button>
+          <button class="primary" id="startBtn">保存して開始</button>
+          <button id="saveBtn">保存</button>
           <button id="closeBtn">閉じる</button>
         </div>
         <div class="err-text" id="settingsErr"></div>
@@ -240,20 +243,14 @@
 
       const invoke = getInvoke();
       const listen = getListen();
-      function beacon(p) {
-        try { fetch("http://127.0.0.1:9999/" + encodeURIComponent(p)).catch(() => {}); } catch (e) {}
-      }
-      beacon("hasTauri=" + (window.__TAURI__ ? "yes" : "no") + ";core=" + (window.__TAURI__ && window.__TAURI__.core ? "yes" : "no") + ";event=" + (window.__TAURI__ && window.__TAURI__.event ? "yes" : "no"));
       if (!invoke) {
         document.title = "TAURI_MISSING";
-        beacon("invoke=null");
       } else {
         document.title = "TAURI_OK";
-        beacon("invoke=ok");
       }
 
       const SERVICES = UI.STARTUP_SERVICES;
-      const state = { config: null, port: 4317, statuses: {} };
+      const state = { config: null, port: 4317, statuses: {}, attemptId: 0 };
       let navigated = false;
 
       function el(tag, props = {}, children = []) {
@@ -317,7 +314,6 @@
         navigated = true;
         document.getElementById("subtitle").textContent = "準備完了";
         document.getElementById("readyNote").style.display = "block";
-        beacon("navigate=ready");
         setTimeout(() => {
           window.location.href = `http://127.0.0.1:${state.port}/`;
         }, 900);
@@ -326,19 +322,21 @@
       async function runStartup() {
         hideError();
         buildCards();
+        state.statuses = {};
+        state.attemptId += 1;
+        const attempt = state.attemptId;
         navigated = false;
         document.getElementById("readyNote").style.display = "none";
         document.getElementById("subtitle").textContent = "MultiContext を準備しています…";
         try {
-          const statuses = await invoke("startup");
-          beacon("startup=returned:" + (statuses && statuses.length));
+          const statuses = await invoke("startup", { attempt_id: attempt });
           (statuses || []).forEach((s) => {
+            if (s.attempt_id != null && s.attempt_id !== attempt) return;
             state.statuses[s.name] = s;
             updateCard(s.name, s);
           });
           maybeNavigate();
         } catch (e) {
-          beacon("startup=error:" + (typeof e === "string" ? e : "obj"));
           showError(typeof e === "string" ? e : "起動に失敗しました");
         }
       }
@@ -346,6 +344,7 @@
       if (listen) {
         listen("startup-progress", (event) => {
           const s = event.payload;
+          if (s.attempt_id != null && s.attempt_id !== state.attemptId) return;
           state.statuses[s.name] = s;
           updateCard(s.name, s);
           maybeNavigate();
@@ -411,8 +410,15 @@
       }
       async function saveAndMaybeStart(start) {
         const cfg = readSettings();
+        const rawKey = document.getElementById("apiKey").value;
         document.getElementById("settingsErr").textContent = "";
         try {
+          if (rawKey) {
+            await invoke("save_api_key", { key: rawKey });
+            document.getElementById("apiKey").value = "";
+            document.getElementById("apiKeyHint").textContent = "保存しました。";
+            await refreshConnState();
+          }
           await invoke("save_config", { config: cfg });
           state.config = cfg;
           state.port = cfg.multicontext_port || 4317;
@@ -449,27 +455,39 @@
       document.getElementById("pickNode").onclick = () => pick("exe", "nodePath");
       document.getElementById("saveApiKey").onclick = async () => {
         const v = document.getElementById("apiKey").value;
+        if (!v) {
+          document.getElementById("apiKeyHint").textContent = "キーを入力してから保存してください（空欄では保存済みキーは保持されます）。";
+          return;
+        }
         try {
           await invoke("save_api_key", { key: v });
           document.getElementById("apiKey").value = "";
-          document.getElementById("apiKeyHint").textContent = v
-            ? "保存しました。"
-            : "削除しました。";
+          document.getElementById("apiKeyHint").textContent = "保存しました。";
           await refreshConnState();
         } catch (e) {
           document.getElementById("apiKeyHint").textContent =
             "保存できません: " + (typeof e === "string" ? e : JSON.stringify(e));
         }
       };
+      document.getElementById("deleteApiKey").onclick = async () => {
+        if (!confirm("保存済みの LibreChat 接続キーを削除しますか？")) return;
+        try {
+          await invoke("delete_api_key");
+          document.getElementById("apiKey").value = "";
+          document.getElementById("apiKeyHint").textContent = "削除しました。";
+          await refreshConnState();
+        } catch (e) {
+          document.getElementById("apiKeyHint").textContent =
+            "削除できません: " + (typeof e === "string" ? e : JSON.stringify(e));
+        }
+      };
 
       (async () => {
         if (!invoke) {
           document.title = "TAURI_MISSING";
-          beacon("startup=skipped:tauri-missing");
           showError("Tauri API が見つかりません (window.__TAURI__ が未定義)。");
           return;
         }
-        beacon("startup=invoking");
         invoke("frontend_ready", { marker: "page_loaded:tauri_ok" }).catch(() => {});
         try {
           state.config = await invoke("get_config");

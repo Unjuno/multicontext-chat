@@ -52,22 +52,28 @@ After the first save, config lives at
 - `librechat_url: http://127.0.0.1:3080`
 - `model_url: http://127.0.0.1:8080/v1`
 - `multicontext_port: 4317` (canonical; the old misspelling `multicontent_port` is still accepted as a backward-compatible alias)
-- `manage_librechat: false`, `manage_model: false` (reuse external)
+- `manage_librechat: true`, `manage_model: true` (new installs default to managed GPT-OSS + LibreChat; healthy external services are still reused first and never killed)
 
 If required fields are missing, the startup screen explains what is missing.
 
 **LibreChat 接続キー (no Terminal needed):** on the Settings screen, the
 `LibreChat 接続` section shows the current connection state
 (`要設定` / `接続済み` / `接続キーを確認してください` / `LibreChat に接続できません`)
-and an input for the key. Enter the key and press `保存`. It is stored in the
-macOS **Keychain** (`security` generic password, service
-`com.unjuno.multicontext`) and is **never** written to `config.json` or any log,
-and the actual value is never shown back in the UI after saving. On startup,
-Desktop reads it from the Keychain and injects it only into the managed
-MultiContext child process environment (`LIBRECHAT_API_KEY`). This makes a
-Finder-double-click launch fully self-contained. As a fallback, Desktop also
-forwards `LIBRECHAT_API_KEY` / proxy vars from its own environment if set via
-`launchctl setenv`. LibreChat continues to own provider credentials.
+and an input for the key. The key is a **LibreChat Remote Agents API key** and is
+validated against the Remote Agents API (`GET /api/agents/v1/responses/models`
+with `Authorization: Bearer <key>`), not the normal LibreChat browser/user JWT.
+Enter the key and press `保存`, or fill it together with the other paths and
+press `保存して開始` — the key is saved to Keychain first, then config, then
+startup. It is stored in the macOS **Keychain** (`security` generic password,
+service `com.unjuno.multicontext`) and is **never** written to `config.json` or
+any log, and the actual value is never shown back in the UI after saving. An
+empty key field preserves the stored key; deletion requires the explicit
+`保存済みキーを削除` action. On startup, Desktop reads it from the Keychain and
+injects it only into the managed MultiContext child process environment
+(`LIBRECHAT_API_KEY`). This makes a Finder-double-click launch fully
+self-contained. As a fallback, Desktop also forwards `LIBRECHAT_API_KEY` / proxy
+vars from its own environment if set via `launchctl setenv`. LibreChat continues
+to own provider credentials.
 
 If you prefer to run the backends manually, the original commands still apply:
 
@@ -90,14 +96,17 @@ npx tauri dev --help
 ```
 
 `desktop-startup.html` runs the `startup` command and listens to streamed
-`startup-progress` events. It shows user-facing states
+`startup-progress` events (each tagged with an `attempt_id` generation token).
+It shows user-facing states
 (`確認中` / `起動中` / `接続中` / `準備完了` / `要設定` / `エラー`) for each service and
 auto-navigates to `http://127.0.0.1:4317` exactly once, when every service is
 truly `READY`. MultiContext is only considered `READY` after its own
-`GET /api/health` returns `ok === true` (so a 503, a wrong service on the port,
-or a missing/wrong LibreChat key never produces a false READY). The
-`connection_status` command reports LibreChat reachability/auth without exposing
-the key.
+`GET /api/health` returns `ok === true` — the body is parsed even on HTTP 503
+so a structured `{ok:false, librechat:{ok:false}}` yields a precise credential
+vs. offline vs. wrong-service message. `Retry` always starts a fresh attempt
+(`state.statuses = {}` + new `attemptId`; delayed events from a previous attempt
+are ignored). The `connection_status` command reports LibreChat reachability/auth
+against the Remote Agents API without exposing the key.
 
 ## Production Build
 
@@ -128,8 +137,8 @@ xattr -d com.apple.quarantine "src-tauri/target/release/bundle/macos/MultiContex
 
 ## Configuration (external vs managed)
 
-- **External (default):** If LibreChat/model already healthy at configured URLs, Desktop reuses them (`ownership: EXTERNAL`) and does **not** terminate them on quit.
-- **Managed:** If `manage_librechat` or `manage_model` true and health fails, Desktop attempts to start the service and marks `STARTED_BY_MULTICONTEXT`, then stops it on quit (SIGTERM to the whole process group). MultiContext Node is always managed if not already running: Desktop resolves `server_root` via `app.path().resource_dir()/multicontext` (production) or the repo checkout (dev), then runs `find_node()` + `node src/server.js` from the bundled resources.
+- **External (reused first):** If LibreChat/model already healthy at configured URLs, Desktop reuses them (`ownership: EXTERNAL`) and does **not** terminate them on quit.
+- **Managed (new-install default `true`, “start if absent”):** If `manage_librechat` or `manage_model` true and health fails, Desktop attempts to start the service and marks `STARTED_BY_MULTICONTEXT`, then stops it on quit (SIGTERM to the whole process group). Existing saved configs keep their stored `manage_*` values. MultiContext Node is always managed if not already running: Desktop resolves `server_root` via `app.path().resource_dir()/multicontext` (production) or the repo checkout (dev), then runs `find_node()` + `node src/server.js` from the bundled resources.
 
 Readiness:
 - **Model:** considered healthy only when its OpenAI-compatible `/v1/models` returns a `{"data":[...]}` shape (a bare 200 HTML page is not treated as ready).

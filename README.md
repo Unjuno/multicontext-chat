@@ -69,13 +69,18 @@ npm run desktop:build # production MultiContext.app
 open src-tauri/target/release/bundle/macos/MultiContext.app
 ```
 
-After the first launch, just open `MultiContext.app` — it detects or starts the
-services and opens the existing UI automatically once everything is ready. On
+After the first launch, just open `MultiContext.app` — it detects healthy
+external GPT-OSS/LibreChat or starts managed ones (new installs default to
+managed) and opens the existing UI automatically once everything is ready. On
 first run, open Settings and set your LibreChat directory, llama-server, GPT-OSS
-model, chat template, and the LibreChat connection key (saved once in macOS
-Keychain via the `LibreChat 接続` section — no Terminal, no `config.json`, and
-the key is never shown back). See `docs/DESKTOP.md` for first-run setup (external
-vs managed services, Keychain credential storage, logs at
+model, chat template, and the LibreChat Remote Agents connection key (validated
+against the Remote Agents API, not normal user auth — saved once in macOS
+Keychain via the `LibreChat 接続` section — no Terminal, no `config.json`, empty
+field preserves the stored key, deletion requires explicit `保存済みキーを削除`,
+and the key is never shown back). `保存して開始` saves a newly entered key
+together with config in one step; `Retry` always performs a fresh readiness
+attempt. See `docs/DESKTOP.md` for first-run setup (external vs managed
+services, Keychain credential storage, logs at
 `~/Library/Logs/com.unjuno.multicontext/`, and Gatekeeper notes for unsigned
 builds).
 

@@ -9,7 +9,7 @@ mod runtime;
 
 use config::{DesktopConfig, Ownership, ServiceState, ServiceStatus};
 use health::HealthKind::*;
-use health::{AuthStatus, McHealth};
+use health::{AuthStatus, McFailureKind, McHealth};
 use process::Managed;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -24,6 +24,7 @@ struct AppState {
     children: Managed,
     dev_cwd: PathBuf,
     starting: Mutex<bool>,
+    attempt: Mutex<u64>,
 }
 
 /// Resets the `starting` flag when the startup command returns (success, error,
@@ -86,11 +87,13 @@ fn emit_service(
 ) {
     let started = state.children.children.lock().unwrap().contains_key(name);
     let ownership = ownership_from(started, healthy);
+    let attempt_id = *state.attempt.lock().unwrap();
     let status = ServiceStatus {
         name: name.to_string(),
         state: sstate,
         message: msg.to_string(),
         ownership,
+        attempt_id,
     };
     let _ = app.emit("startup-progress", status.clone());
     state.services.lock().unwrap().insert(name.to_string(), status);
@@ -129,7 +132,17 @@ fn save_config(
 
 #[tauri::command]
 fn save_api_key(key: String) -> Result<(), String> {
+    // An empty field must NOT delete a stored key; only `delete_api_key` does.
+    // This prevents a stray empty "保存" click from wiping the user's credential.
+    if key.is_empty() {
+        return Ok(());
+    }
     keychain::set_key(&key)
+}
+
+#[tauri::command]
+fn delete_api_key() -> Result<(), String> {
+    keychain::delete_key()
 }
 
 #[tauri::command]
@@ -412,17 +425,30 @@ async fn connection_status(state: tauri::State<'_, AppState>) -> Result<Connecti
 
 /// Build a concise, user-facing error message for the not-ready MultiContext
 /// stack. The stored key is never shown; we only report presence/connection.
-fn connection_error_message(librechat_ok: Option<bool>, detail: &str) -> String {
-    if keychain::has_key() {
-        if librechat_ok == Some(false) {
-            "接続キーを確認してください（LibreChat 接続に失敗しました）".to_string()
-        } else if librechat_ok == Some(true) {
-            format!("LibreChat は接続できましたが、MultiContext が利用できません: {}", detail)
-        } else {
-            format!("MultiContext が利用できません: {}", detail)
+/// Categories map to the user-facing messages required by the spec:
+/// * no stored key            -> "LibreChat 接続キーを設定してください"
+/// * Remote Agents key rejected -> "LibreChat 接続キーを確認してください"
+/// * wrong service on port    -> "MultiContext ポートが別のサービスで使用されています"
+fn connection_error_message(kind: McFailureKind, _librechat_ok: Option<bool>, detail: &str) -> String {
+    match kind {
+        McFailureKind::WrongService => {
+            "MultiContext ポートが別のサービスで使用されています".to_string()
         }
-    } else {
-        "LibreChat 接続キーを設定してください".to_string()
+        McFailureKind::LibreChat => {
+            if keychain::has_key() {
+                // `detail` already carries a safe, redacted user message.
+                detail.to_string()
+            } else {
+                "LibreChat 接続キーを設定してください".to_string()
+            }
+        }
+        McFailureKind::Generic => {
+            if keychain::has_key() {
+                format!("MultiContext が利用できません: {}", detail)
+            } else {
+                "LibreChat 接続キーを設定してください".to_string()
+            }
+        }
     }
 }
 
@@ -462,7 +488,7 @@ async fn ensure_model(
     } else {
         // Clean up the managed child we just spawned; never leave it orphaned.
         process::terminate(&state.children, "モデル");
-        let msg = "GPT-OSS (llama-server) の起動に失敗しました。ログを確認してください。".to_string();
+        let msg = "GPT-OSS を起動できません。ログを確認してください。".to_string();
         emit_service(app, state, "モデル", ServiceState::Error, &msg, false);
         Err("モデルの起動がタイムアウトしました".to_string())
     }
@@ -503,7 +529,7 @@ async fn ensure_librechat(
         Ok(())
     } else {
         process::terminate(&state.children, "LibreChat");
-        let msg = "LibreChat の起動に失敗しました。ログを確認してください。".to_string();
+        let msg = "LibreChat を起動できません。ログを確認してください。".to_string();
         emit_service(app, state, "LibreChat", ServiceState::Error, &msg, false);
         Err("LibreChat の起動がタイムアウトしました".to_string())
     }
@@ -523,10 +549,10 @@ async fn ensure_multicontext(
             emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true);
             return Ok(());
         }
-        McHealth::Unhealthy { librechat_ok, detail } => {
+        McHealth::Unhealthy { kind, librechat_ok, detail } => {
             // Already running but not usable (e.g. missing/wrong key). Do NOT
             // restart onto the occupied port; surface the real cause instead.
-            let msg = connection_error_message(librechat_ok, &detail);
+            let msg = connection_error_message(kind, librechat_ok, &detail);
             emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
             return Err(msg);
         }
@@ -550,9 +576,9 @@ async fn ensure_multicontext(
             emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true);
             Ok(())
         }
-        McHealth::Unhealthy { librechat_ok, detail } => {
+        McHealth::Unhealthy { kind, librechat_ok, detail } => {
             process::terminate(&state.children, "MultiContext");
-            let msg = connection_error_message(librechat_ok, &detail);
+            let msg = connection_error_message(kind, librechat_ok, &detail);
             emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
             Err(msg)
         }
@@ -569,7 +595,11 @@ async fn ensure_multicontext(
 async fn startup(
     state: tauri::State<'_, AppState>,
     app: tauri::AppHandle,
+    attempt_id: Option<u64>,
 ) -> Result<Vec<ServiceStatus>, String> {
+    if let Some(id) = attempt_id {
+        *state.attempt.lock().unwrap() = id;
+    }
     let cfg = { state.config.lock().unwrap().clone() };
     // Guard against concurrent/duplicate startup runs (e.g. auto-start on load
     // plus an explicit 開始/再試行 click) which would double-launch services.
@@ -608,6 +638,7 @@ fn main() {
             children: Managed::new(),
             dev_cwd,
             starting: Mutex::new(false),
+            attempt: Mutex::new(0),
         })
         .setup(|app| {
             let handle = app.handle().clone();
@@ -625,6 +656,7 @@ fn main() {
             get_config,
             save_config,
             save_api_key,
+            delete_api_key,
             has_api_key,
             check_health,
             get_services,
@@ -687,6 +719,7 @@ mod tests {
             state: ServiceState::Checking,
             message: "".into(),
             ownership: None,
+            attempt_id: 0,
         };
         s.state = ServiceState::Starting;
         assert_eq!(s.state, ServiceState::Starting);

@@ -1,3 +1,5 @@
+export const REMOTE_AGENTS_MODELS_PATH = "/api/agents/v1/responses/models";
+
 export class LibreChatClient {
   constructor({ baseUrl, apiKey, mode = 'compat', timeoutMs = 900000, fetchImpl = fetch }) {
     this.baseUrl = baseUrl.replace(/\/$/, ''); this.apiKey = apiKey; this.mode = mode; this.timeoutMs = timeoutMs; this.fetchImpl = fetchImpl;
@@ -13,7 +15,7 @@ export class LibreChatClient {
     const timer = setTimeout(() => controller.abort(new Error('LibreChat agents probe timed out')), Math.min(this.timeoutMs, 10_000));
     const relayAbort = () => controller.abort(signal?.reason ?? new Error('Aborted')); signal?.addEventListener('abort', relayAbort, { once: true });
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses/models`, { headers: this.headers(), signal: controller.signal });
+      const response = await this.fetchImpl(`${this.baseUrl}${REMOTE_AGENTS_MODELS_PATH}`, { headers: this.headers(), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
       return Array.isArray(data.data) ? data.data : [];

@@ -102,3 +102,43 @@ test("ownership text is empty for unknown, labelled for known kinds", () => {
   assert.equal(UI.ownershipText("external"), "外部");
   assert.equal(UI.ownershipText("startedbymulticontext"), "管理 (Desktop 起動)");
 });
+
+test("Retry clears stale READY: only GPT-OSS ready in new attempt must not navigate", () => {
+  // Attempt 1 reaches all READY.
+  let statuses = {};
+  statuses = UI.applyStartupEvent(statuses, status("モデル", "ready", { attempt_id: 1 }), 1);
+  statuses = UI.applyStartupEvent(statuses, status("LibreChat", "ready", { attempt_id: 1 }), 1);
+  statuses = UI.applyStartupEvent(statuses, status("MultiContext", "ready", { attempt_id: 1 }), 1);
+  assert.equal(UI.shouldNavigate(Object.values(statuses), false), true);
+  // Attempt 2 begins: fresh map.
+  let statuses2 = {};
+  statuses2 = UI.applyStartupEvent(statuses2, status("モデル", "ready", { attempt_id: 2 }), 2);
+  // Only GPT-OSS ready -> must not navigate.
+  assert.equal(UI.shouldNavigate(Object.values(statuses2), false), false);
+  // After LibreChat + MultiContext also READY in attempt 2, may navigate.
+  statuses2 = UI.applyStartupEvent(statuses2, status("LibreChat", "ready", { attempt_id: 2 }), 2);
+  statuses2 = UI.applyStartupEvent(statuses2, status("MultiContext", "ready", { attempt_id: 2 }), 2);
+  assert.equal(UI.shouldNavigate(Object.values(statuses2), false), true);
+});
+
+test("delayed event from attempt 1 arriving during attempt 2 is ignored", () => {
+  let statuses = {};
+  statuses = UI.applyStartupEvent(statuses, status("モデル", "ready", { attempt_id: 2 }), 2);
+  // Delayed LibreChat ready from attempt 1 should be ignored.
+  statuses = UI.applyStartupEvent(statuses, status("LibreChat", "ready", { attempt_id: 1 }), 2);
+  assert.equal(statuses.LibreChat, undefined);
+  assert.equal(UI.shouldNavigate(Object.values(statuses), false), false);
+  // Correct attempt 2 event is accepted.
+  statuses = UI.applyStartupEvent(statuses, status("LibreChat", "ready", { attempt_id: 2 }), 2);
+  statuses = UI.applyStartupEvent(statuses, status("MultiContext", "ready", { attempt_id: 2 }), 2);
+  assert.equal(UI.shouldNavigate(Object.values(statuses), false), true);
+});
+
+test("production startup HTML contains no localhost:9999 debug beacon", () => {
+  const html = readFileSync(
+    fileURLToPath(new URL("../public/desktop-startup.html", import.meta.url)),
+    "utf8"
+  );
+  assert.equal(html.includes("127.0.0.1:9999"), false, "must not contain 127.0.0.1:9999");
+  assert.equal(html.includes("beacon("), false, "must not contain beacon(");
+});

@@ -1,5 +1,19 @@
+use crate::process::redact;
 use reqwest::Client;
 use std::time::Duration;
+
+/// Remote Agents API route used by both the Node orchestrator (`src/librechat.js`)
+/// and the Desktop shell. Centralized so the two codebases cannot silently drift.
+pub const REMOTE_AGENTS_MODELS_PATH: &str = "/api/agents/v1/responses/models";
+
+/// Build the Remote Agents models URL for a LibreChat base URL.
+pub fn remote_agents_models_url(base: &str) -> String {
+    format!(
+        "{}{}",
+        base.trim_end_matches('/'),
+        REMOTE_AGENTS_MODELS_PATH
+    )
+}
 
 /// A service is healthy ONLY when the HTTP response is successful (2xx).
 /// A 404/500/connection-error/timeout is NOT healthy.
@@ -49,6 +63,18 @@ pub enum HealthKind {
     Model,
 }
 
+/// Why a running-but-unusable MultiContext reported failure.
+#[derive(Debug, Clone, PartialEq)]
+pub enum McFailureKind {
+    /// MultiContext is up but its LibreChat link is broken (missing/wrong key,
+    /// auth failure, or LibreChat reporting an error).
+    LibreChat,
+    /// A different HTTP service is occupying the MultiContext port.
+    WrongService,
+    /// MultiContext answered but the failure is not specifically about LibreChat.
+    Generic,
+}
+
 /// Result of probing the actual MultiContext usable-stack health endpoint.
 /// Distinguishes "not running at all" from "running but the stack is not
 /// actually usable" (e.g. missing/wrong LibreChat key, broken LibreChat link,
@@ -56,7 +82,11 @@ pub enum HealthKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum McHealth {
     Unreachable,
-    Unhealthy { librechat_ok: Option<bool>, detail: String },
+    Unhealthy {
+        kind: McFailureKind,
+        librechat_ok: Option<bool>,
+        detail: String,
+    },
     Ready,
 }
 
@@ -126,55 +156,116 @@ pub async fn wait_model_ready(base: &str, attempts: u32, interval: Duration) -> 
 
 /// Probe the actual MultiContext usable-stack health endpoint.
 ///
-/// This requires GET {base}/api/health to return HTTP 2xx AND a JSON body with
-/// `ok === true`. A 503, a body with `ok:false`, or a non-JSON body (some other
-/// service occupying the port) all mean the stack is NOT ready — even though a
-/// server may be listening.
+/// MultiContext returns structured JSON on both HTTP 200 and HTTP 503. We always
+/// try to read and parse the body so a 503 still yields the real cause (e.g. a
+/// broken LibreChat link) instead of a generic "not ready". A 2xx with
+/// `ok === true` is the only truly-ready signal; any other shape (503, `ok:false`,
+/// or non-MultiContext JSON from a foreign service on the port) is NOT ready.
 pub async fn multicontext_health(client: &Client, base: &str) -> McHealth {
     let url = format!("{}/api/health", base.trim_end_matches('/'));
-    match client.get(&url).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            if !status.is_success() {
-                return McHealth::Unhealthy {
-                    librechat_ok: None,
-                    detail: format!("HTTP {}", status.as_u16()),
-                };
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(_) => return McHealth::Unreachable,
+    };
+    let status = resp.status();
+    let body = match resp.text().await {
+        Ok(t) => t,
+        Err(_) => String::new(),
+    };
+    let json = serde_json::from_str::<serde_json::Value>(&body).ok();
+    let is_mc = json
+        .as_ref()
+        .map(|v| v.get("ok").is_some() || v.get("librechat").is_some())
+        .unwrap_or(false);
+
+    if status.is_success() {
+        if let Some(v) = &json {
+            if v.get("ok").and_then(|x| x.as_bool()).unwrap_or(false) {
+                return McHealth::Ready;
             }
-            match resp.json::<serde_json::Value>().await {
-                Ok(v) => {
-                    let ok = v.get("ok").and_then(|x| x.as_bool()).unwrap_or(false);
-                    if ok {
-                        return McHealth::Ready;
-                    }
-                    let lib = v
-                        .get("librechat")
-                        .and_then(|x| x.get("ok"))
-                        .and_then(|x| x.as_bool());
-                    return McHealth::Unhealthy {
-                        librechat_ok: lib,
-                        detail: "LibreChat 接続に問題があります".to_string(),
-                    };
-                }
-                Err(_) => {
-                    // Successful HTTP but not valid MultiContext JSON => wrong
-                    // service occupying the port.
-                    McHealth::Unhealthy {
-                        librechat_ok: None,
-                        detail: "MultiContext ポートに想定外のサービスがあります".to_string(),
-                    }
-                }
+            if is_mc {
+                return classify_mc_failure(v);
             }
         }
-        Err(_) => McHealth::Unreachable,
+        // 2xx but not valid MultiContext JSON (including valid JSON like {"foo":"bar"})
+        // => foreign service on the port.
+        return McHealth::Unhealthy {
+            kind: McFailureKind::WrongService,
+            librechat_ok: None,
+            detail: redact("MultiContext ポートに想定外のサービスがあります"),
+        };
+    }
+
+    // Non-2xx. If the body is recognizable MultiContext JSON, classify it.
+    if is_mc {
+        if let Some(v) = &json {
+            return classify_mc_failure(v);
+        }
+    }
+    // Non-2xx and not MultiContext JSON (404 from another server, 503 with HTML,
+    // or any foreign service answering on the port) => wrong service.
+    McHealth::Unhealthy {
+        kind: McFailureKind::WrongService,
+        librechat_ok: None,
+        detail: redact("MultiContext ポートに別のサービスで使用されています"),
     }
 }
 
-/// Directly test a LibreChat credential by calling an authenticated route.
-/// Used to distinguish "no key", "wrong key", and "LibreChat offline" so the
-/// UI can show a precise, non-technical message.
+/// Classify a MultiContext health body that is structured but not ok===true.
+/// Never copies the LibreChat error verbatim into user text without redaction,
+/// and never includes the credential.
+fn classify_mc_failure(v: &serde_json::Value) -> McHealth {
+    if let Some(lib) = v.get("librechat") {
+        let ok = lib.get("ok").and_then(|x| x.as_bool());
+        let err = lib
+            .get("error")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string());
+        let detail = if ok == Some(false) || err.as_deref().map(is_auth_like).unwrap_or(false) {
+            "LibreChat 接続キーを確認してください".to_string()
+        } else if let Some(e) = err {
+            format!("LibreChat 接続に問題があります: {}", redact(&e))
+        } else {
+            "LibreChat 接続に問題があります".to_string()
+        };
+        return McHealth::Unhealthy {
+            kind: McFailureKind::LibreChat,
+            librechat_ok: ok,
+            detail,
+        };
+    }
+    McHealth::Unhealthy {
+        kind: McFailureKind::Generic,
+        librechat_ok: None,
+        detail: redact("MultiContext が利用できません"),
+    }
+}
+
+/// Heuristic: does this LibreChat error string indicate an auth/credential
+/// problem (so the UI should ask the user to re-check the Remote Agents key)?
+fn is_auth_like(error: &str) -> bool {
+    let e = error.to_lowercase();
+    ["unauthoriz", "forbidden", "401", "403", "auth", "api key", "api_key", "token", "key "]
+        .iter()
+        .any(|k| e.contains(k))
+}
+
+/// Directly test a LibreChat *Remote Agents API* key by calling the authenticated
+/// Remote Agents models route — the same auth domain MultiContext itself depends
+/// on (`src/librechat.js` -> `GET {base}/api/agents/v1/responses/models`). This is
+/// NOT the normal LibreChat browser/user JWT, so the user JWT route must never be used here.
+///
+/// Classification:
+/// * 2xx with any valid JSON body                => AuthStatus::Ok
+/// * 401 / 403                                   => AuthStatus::Forbidden (bad key)
+/// * connection error / timeout                  => AuthStatus::Unreachable
+/// * other unexpected response                   => reachable but unhealthy; treat
+///                                                  as Unreachable (not "wrong key"
+///                                                  unless it is clearly auth-related)
+///
+/// The key is never written to logs or error strings.
 pub async fn librechat_auth(base: &str, key: &str) -> AuthStatus {
-    let url = format!("{}/api/me", base.trim_end_matches('/'));
+    let url = remote_agents_models_url(base);
     let client = client();
     let resp = client
         .get(&url)
@@ -190,8 +281,8 @@ pub async fn librechat_auth(base: &str, key: &str) -> AuthStatus {
             {
                 AuthStatus::Forbidden
             } else {
-                // Reachable but the auth route behaved unexpectedly; treat as a
-                // connectivity problem rather than a credential problem.
+                // Reachable but the Remote Agents route behaved unexpectedly;
+                // treat as a connectivity problem rather than a credential problem.
                 AuthStatus::Unreachable
             }
         }
@@ -353,13 +444,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_multicontext_503_not_ready() {
+        // 503 with no body => a foreign/non-MultiContext service on the port.
         let p = serve("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n", None);
         let c = client();
         assert_eq!(
             multicontext_health(&c, &format!("http://127.0.0.1:{}", p)).await,
             McHealth::Unhealthy {
+                kind: McFailureKind::WrongService,
                 librechat_ok: None,
-                detail: "HTTP 503".to_string()
+                detail: "MultiContext ポートに別のサービスで使用されています".to_string()
             }
         );
     }
@@ -377,22 +470,60 @@ mod tests {
         assert_eq!(
             multicontext_health(&c, &format!("http://127.0.0.1:{}", p)).await,
             McHealth::Unhealthy {
+                kind: McFailureKind::LibreChat,
                 librechat_ok: Some(false),
-                detail: "LibreChat 接続に問題があります".to_string()
+                detail: "LibreChat 接続キーを確認してください".to_string()
             }
         );
     }
 
     #[tokio::test]
-    async fn test_multicontext_wrong_service_not_ready() {
-        // Some other HTTP server answers on the port but is not MultiContext.
-        let p = serve("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK", None);
+    async fn test_multicontext_503_structured_librechat_error() {
+        // 503 with structured JSON must be parsed (not dropped as "HTTP 503").
+        let body = "{\"ok\":false,\"librechat\":{\"ok\":false,\"error\":\"unauthorized: invalid remote agents key\"}}";
+        let resp = format!(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let p = serve(&resp, None);
         let c = client();
         assert_eq!(
             multicontext_health(&c, &format!("http://127.0.0.1:{}", p)).await,
             McHealth::Unhealthy {
+                kind: McFailureKind::LibreChat,
+                librechat_ok: Some(false),
+                detail: "LibreChat 接続キーを確認してください".to_string()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_multicontext_200_non_mc_json() {
+        // Some other HTTP server answers on the port with valid but non-MC JSON.
+        let p = serve("HTTP/1.1 200 OK\r\nContent-Length: 13\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"foo\":\"bar\"}", None);
+        let c = client();
+        assert_eq!(
+            multicontext_health(&c, &format!("http://127.0.0.1:{}", p)).await,
+            McHealth::Unhealthy {
+                kind: McFailureKind::WrongService,
                 librechat_ok: None,
                 detail: "MultiContext ポートに想定外のサービスがあります".to_string()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_multicontext_404_other_service() {
+        // A 404 from a foreign service occupying the port.
+        let p = serve("HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found", None);
+        let c = client();
+        assert_eq!(
+            multicontext_health(&c, &format!("http://127.0.0.1:{}", p)).await,
+            McHealth::Unhealthy {
+                kind: McFailureKind::WrongService,
+                librechat_ok: None,
+                detail: "MultiContext ポートに別のサービスで使用されています".to_string()
             }
         );
     }
@@ -408,8 +539,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_librechat_auth_ok() {
-        let resp = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}";
-        let p = serve(resp, None);
+        // Remote Agents models route returns 200 with a models payload.
+        let body = "{\"data\":[{\"id\":\"gpt-oss\"}]}";
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let p = serve(&resp, None);
         assert_eq!(
             librechat_auth(&format!("http://127.0.0.1:{}", p), "sk-test").await,
             AuthStatus::Ok
@@ -427,10 +564,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_librechat_auth_forbidden_403() {
+        let resp = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
+        let p = serve(resp, None);
+        assert_eq!(
+            librechat_auth(&format!("http://127.0.0.1:{}", p), "sk-bad").await,
+            AuthStatus::Forbidden
+        );
+    }
+
+    #[tokio::test]
+    async fn test_librechat_auth_5xx_unreachable() {
+        // A 5xx is not an auth failure; treat as unreachable/unhealthy.
+        let resp = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+        let p = serve(resp, None);
+        assert_eq!(
+            librechat_auth(&format!("http://127.0.0.1:{}", p), "sk-test").await,
+            AuthStatus::Unreachable
+        );
+    }
+
+    #[tokio::test]
     async fn test_librechat_auth_unreachable() {
         assert_eq!(
             librechat_auth("http://127.0.0.1:1", "sk-test").await,
             AuthStatus::Unreachable
+        );
+    }
+
+    #[test]
+    fn test_remote_agents_models_url() {
+        assert_eq!(
+            remote_agents_models_url("http://127.0.0.1:3080/"),
+            "http://127.0.0.1:3080/api/agents/v1/responses/models"
         );
     }
 }

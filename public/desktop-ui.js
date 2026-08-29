@@ -80,6 +80,16 @@
     return "";
   }
 
+  // Apply a startup-progress event only if it belongs to the active attempt.
+  // `statuses` is a name->status map for the active attempt.
+  function applyStartupEvent(statuses, event, activeAttemptId) {
+    if (event == null || typeof event.name !== "string") return statuses;
+    if (event.attempt_id != null && event.attempt_id !== activeAttemptId) return statuses;
+    const next = Object.assign({}, statuses);
+    next[event.name] = event;
+    return next;
+  }
+
   return {
     SERVICE_LABELS,
     STARTUP_SERVICES,
@@ -89,5 +99,6 @@
     librechatConnectionKind,
     librechatConnectionText,
     ownershipText,
+    applyStartupEvent,
   };
 });

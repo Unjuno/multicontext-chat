@@ -27,6 +27,15 @@ pub struct ServiceStatus {
     pub state: ServiceState,
     pub message: String,
     pub ownership: Option<Ownership>,
+    /// Generation token for the startup run that produced this status. The
+    /// frontend ignores events whose attempt_id does not match its active run,
+    /// so delayed events from a previous Retry/startup cannot corrupt state.
+    #[serde(default)]
+    pub attempt_id: u64,
+}
+
+fn default_false() -> bool {
+    false
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,7 +49,9 @@ pub struct DesktopConfig {
     pub llama_path: Option<String>,
     pub model_path: Option<String>,
     pub template_path: Option<String>,
+    #[serde(default = "default_false")]
     pub manage_librechat: bool,
+    #[serde(default = "default_false")]
     pub manage_model: bool,
     pub node_path: Option<String>,
 }
@@ -55,8 +66,8 @@ impl Default for DesktopConfig {
             llama_path: None,
             model_path: None,
             template_path: None,
-            manage_librechat: false,
-            manage_model: false,
+            manage_librechat: true,
+            manage_model: true,
             node_path: None,
         }
     }
@@ -109,6 +120,8 @@ mod tests {
             librechat_url: "http://127.0.0.1:3080".to_string(),
             model_url: "http://127.0.0.1:8080".to_string(),
             multicontext_port: 4317,
+            manage_librechat: false,
+            manage_model: false,
             ..Default::default()
         };
         assert!(cfg.validate().is_ok());
@@ -163,5 +176,27 @@ mod tests {
         let new = r#"{"librechat_url":"http://127.0.0.1:3080","multicontext_port":9999,"model_url":"http://127.0.0.1:8080/v1"}"#;
         let cfg2: DesktopConfig = serde_json::from_str(new).unwrap();
         assert_eq!(cfg2.multicontext_port, 9999);
+    }
+
+    #[test]
+    fn test_config_default_managed_true() {
+        let cfg = DesktopConfig::default();
+        assert!(cfg.manage_model, "new installs must default to managed GPT-OSS");
+        assert!(cfg.manage_librechat, "new installs must default to managed LibreChat");
+    }
+
+    #[test]
+    fn test_config_old_saved_preserved() {
+        // Old saved config without managed fields must deserialize to false (serde default),
+        // preserving existing behavior; new installs get true via Default::default().
+        let old = r#"{"librechat_url":"http://127.0.0.1:3080","model_url":"http://127.0.0.1:8080/v1"}"#;
+        let cfg: DesktopConfig = serde_json::from_str(old).unwrap();
+        assert!(!cfg.manage_model);
+        assert!(!cfg.manage_librechat);
+        // Explicit true must be preserved.
+        let with = r#"{"librechat_url":"http://127.0.0.1:3080","model_url":"http://127.0.0.1:8080/v1","manage_model":true,"manage_librechat":true}"#;
+        let cfg2: DesktopConfig = serde_json::from_str(with).unwrap();
+        assert!(cfg2.manage_model);
+        assert!(cfg2.manage_librechat);
     }
 }
