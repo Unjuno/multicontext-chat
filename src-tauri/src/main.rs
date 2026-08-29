@@ -3,11 +3,13 @@
 mod config;
 mod health;
 mod keychain;
+mod launch;
 mod process;
 mod runtime;
 
 use config::{DesktopConfig, Ownership, ServiceState, ServiceStatus};
 use health::HealthKind::*;
+use health::{AuthStatus, McHealth};
 use process::Managed;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -225,7 +227,9 @@ fn frontend_ready(app: tauri::AppHandle, marker: String) {
     let dir = log_dir(&app);
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("frontend.log");
-    let line = format!("[{}] {}\n", now_secs(), marker);
+    // Defensively redact any secret-bearing text before writing to logs.
+    let safe = process::redact(&marker);
+    let line = format!("[{}] {}\n", now_secs(), safe);
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         use std::io::Write;
         let _ = f.write_all(line.as_bytes());
@@ -257,26 +261,11 @@ fn start_model(
     cfg: &DesktopConfig,
 ) -> Result<(), String> {
     let llama = cfg.llama_path.clone().ok_or("llama-server が未設定です")?;
-    let model = cfg.model_path.clone().ok_or("モデルファイルが未設定です")?;
+    let model = cfg.model_path.clone().ok_or("GPT-OSS モデルファイルが未設定です")?;
     let template = cfg.template_path.clone().ok_or("チャットテンプレートが未設定です")?;
     let (host, port) = runtime::parse_host_port(&cfg.model_url);
-    let args: Vec<String> = vec![
-        "-m".into(),
-        model,
-        "--jinja".into(),
-        "--chat-template-file".into(),
-        template,
-        "--chat-template-kwargs".into(),
-        r#"{"reasoning_effort":"low"}"#.into(),
-        "--host".into(),
-        host,
-        "--port".into(),
-        port.to_string(),
-        "--ctx-size".into(),
-        "8192".into(),
-        "--parallel".into(),
-        "4".into(),
-    ];
+    let profile = launch::GptOssProfile::default();
+    let args = launch::build_model_args(&profile, &model, &template, &host, port);
     let cwd = PathBuf::from("/");
     let envs: HashMap<String, String> = HashMap::new();
     let log = log_dir(app).join("model.log");
@@ -334,7 +323,7 @@ fn start_multicontext(
     std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
     let data_file = data_dir.join("state.json");
     let mut envs: HashMap<String, String> = HashMap::new();
-    envs.insert("MULTICONTEXT_PORT".into(), cfg.multicontent_port.to_string());
+    envs.insert("MULTICONTEXT_PORT".into(), cfg.multicontext_port.to_string());
     envs.insert(
         "MULTICONTEXT_DATA_FILE".into(),
         data_file.to_string_lossy().to_string(),
@@ -388,6 +377,194 @@ fn start_multicontext(
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+pub struct ConnectionStatus {
+    pub has_key: bool,
+    pub librechat_reachable: bool,
+    pub auth_ok: bool,
+}
+
+/// Report the user-facing LibreChat connection state without exposing the key.
+#[tauri::command]
+async fn connection_status(state: tauri::State<'_, AppState>) -> Result<ConnectionStatus, String> {
+    let cfg = state.config.lock().unwrap().clone();
+    let status = match keychain::get_key() {
+        Some(key) if !key.is_empty() => {
+            let auth = health::librechat_auth(&cfg.librechat_url, &key).await;
+            ConnectionStatus {
+                has_key: true,
+                librechat_reachable: !matches!(auth, AuthStatus::Unreachable),
+                auth_ok: matches!(auth, AuthStatus::Ok),
+            }
+        }
+        _ => {
+            let client = health::client();
+            let reachable = health::probe(LibreChat, &cfg.librechat_url, &client).await;
+            ConnectionStatus {
+                has_key: false,
+                librechat_reachable: reachable,
+                auth_ok: false,
+            }
+        }
+    };
+    Ok(status)
+}
+
+/// Build a concise, user-facing error message for the not-ready MultiContext
+/// stack. The stored key is never shown; we only report presence/connection.
+fn connection_error_message(librechat_ok: Option<bool>, detail: &str) -> String {
+    if keychain::has_key() {
+        if librechat_ok == Some(false) {
+            "接続キーを確認してください（LibreChat 接続に失敗しました）".to_string()
+        } else if librechat_ok == Some(true) {
+            format!("LibreChat は接続できましたが、MultiContext が利用できません: {}", detail)
+        } else {
+            format!("MultiContext が利用できません: {}", detail)
+        }
+    } else {
+        "LibreChat 接続キーを設定してください".to_string()
+    }
+}
+
+async fn ensure_model(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, AppState>,
+    cfg: &DesktopConfig,
+    client: &reqwest::Client,
+) -> Result<(), String> {
+    emit_service(app, state, "モデル", ServiceState::Checking, "確認中...", false);
+    if health::is_model_healthy(client, &cfg.model_url).await {
+        emit_service(app, state, "モデル", ServiceState::Ready, "準備完了", true);
+        return Ok(());
+    }
+    if !cfg.manage_model {
+        emit_service(
+            app,
+            state,
+            "モデル",
+            ServiceState::NeedsSetup,
+            "未起動 — 外部で起動してください",
+            false,
+        );
+        return Err("モデルが起動していません（管理無効）".to_string());
+    }
+    // Retry safety: drop any stale/failed tracked child before spawning anew.
+    process::reap_dead(&state.children);
+    process::terminate(&state.children, "モデル");
+    emit_service(app, state, "モデル", ServiceState::Starting, "起動中...", false);
+    if let Err(e) = start_model(app, state, cfg) {
+        emit_service(app, state, "モデル", ServiceState::Error, &e, false);
+        return Err(e);
+    }
+    if health::wait_model_ready(&cfg.model_url, 40, Duration::from_secs(2)).await {
+        emit_service(app, state, "モデル", ServiceState::Ready, "準備完了 (管理)", true);
+        Ok(())
+    } else {
+        // Clean up the managed child we just spawned; never leave it orphaned.
+        process::terminate(&state.children, "モデル");
+        let msg = "GPT-OSS (llama-server) の起動に失敗しました。ログを確認してください。".to_string();
+        emit_service(app, state, "モデル", ServiceState::Error, &msg, false);
+        Err("モデルの起動がタイムアウトしました".to_string())
+    }
+}
+
+async fn ensure_librechat(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, AppState>,
+    cfg: &DesktopConfig,
+    client: &reqwest::Client,
+    node: &str,
+) -> Result<(), String> {
+    emit_service(app, state, "LibreChat", ServiceState::Checking, "接続中...", false);
+    if health::probe(LibreChat, &cfg.librechat_url, &client).await {
+        emit_service(app, state, "LibreChat", ServiceState::Ready, "準備完了", true);
+        return Ok(());
+    }
+    if !cfg.manage_librechat {
+        emit_service(
+            app,
+            state,
+            "LibreChat",
+            ServiceState::NeedsSetup,
+            "未起動 — 外部で起動してください",
+            false,
+        );
+        return Err("LibreChat が起動していません（管理無効）".to_string());
+    }
+    process::reap_dead(&state.children);
+    process::terminate(&state.children, "LibreChat");
+    emit_service(app, state, "LibreChat", ServiceState::Starting, "接続中...", false);
+    if let Err(e) = start_librechat(app, state, cfg, node) {
+        emit_service(app, state, "LibreChat", ServiceState::Error, &e, false);
+        return Err(e);
+    }
+    if health::wait_ready(LibreChat, &cfg.librechat_url, 30, Duration::from_secs(2)).await {
+        emit_service(app, state, "LibreChat", ServiceState::Ready, "準備完了 (管理)", true);
+        Ok(())
+    } else {
+        process::terminate(&state.children, "LibreChat");
+        let msg = "LibreChat の起動に失敗しました。ログを確認してください。".to_string();
+        emit_service(app, state, "LibreChat", ServiceState::Error, &msg, false);
+        Err("LibreChat の起動がタイムアウトしました".to_string())
+    }
+}
+
+async fn ensure_multicontext(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, AppState>,
+    cfg: &DesktopConfig,
+    client: &reqwest::Client,
+    node: &str,
+) -> Result<(), String> {
+    let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
+    emit_service(app, state, "MultiContext", ServiceState::Checking, "確認中...", false);
+    match health::multicontext_health(client, &mc_url).await {
+        McHealth::Ready => {
+            emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true);
+            return Ok(());
+        }
+        McHealth::Unhealthy { librechat_ok, detail } => {
+            // Already running but not usable (e.g. missing/wrong key). Do NOT
+            // restart onto the occupied port; surface the real cause instead.
+            let msg = connection_error_message(librechat_ok, &detail);
+            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
+            return Err(msg);
+        }
+        McHealth::Unreachable => {}
+    }
+    process::reap_dead(&state.children);
+    process::terminate(&state.children, "MultiContext");
+    emit_service(app, state, "MultiContext", ServiceState::Starting, "起動中...", false);
+    if let Err(e) = start_multicontext(app, state, cfg, node) {
+        emit_service(app, state, "MultiContext", ServiceState::Error, &e, false);
+        return Err(e);
+    }
+    if !health::wait_listening(&mc_url, 20, Duration::from_secs(2)).await {
+        process::terminate(&state.children, "MultiContext");
+        let msg = "MultiContext の起動がタイムアウトしました。ログを確認してください。".to_string();
+        emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
+        return Err(msg);
+    }
+    match health::multicontext_health(client, &mc_url).await {
+        McHealth::Ready => {
+            emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true);
+            Ok(())
+        }
+        McHealth::Unhealthy { librechat_ok, detail } => {
+            process::terminate(&state.children, "MultiContext");
+            let msg = connection_error_message(librechat_ok, &detail);
+            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
+            Err(msg)
+        }
+        McHealth::Unreachable => {
+            process::terminate(&state.children, "MultiContext");
+            let msg = "MultiContext が応答しません。ログを確認してください。".to_string();
+            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false);
+            Err(msg)
+        }
+    }
+}
+
 #[tauri::command]
 async fn startup(
     state: tauri::State<'_, AppState>,
@@ -404,7 +581,7 @@ async fn startup(
         *starting = true;
         StartGuard { flag: &state.starting }
     };
-    trace(&app, &format!("startup begin: manage_model={} manage_librechat={} port={}", cfg.manage_model, cfg.manage_librechat, cfg.multicontent_port));
+    trace(&app, &format!("startup begin: manage_model={} manage_librechat={} port={}", cfg.manage_model, cfg.manage_librechat, cfg.multicontext_port));
     cfg.validate()?;
     let node = resolve_node(&state)
         .ok_or("Node.js が見つかりません。設定で Node のパスを指定してください。")?;
@@ -412,128 +589,11 @@ async fn startup(
 
     let client = health::client();
 
-    // ---- MODEL ----
-    emit_service(&app, &state, "モデル", ServiceState::Checking, "確認中...", false);
-    if health::probe(Model, &cfg.model_url, &client).await {
-        emit_service(&app, &state, "モデル", ServiceState::Ready, "接続済み (外部)", true);
-    } else if cfg.manage_model {
-        trace(&app, "model not healthy, manage_model=true -> starting");
-        emit_service(
-            &app,
-            &state,
-            "モデル",
-            ServiceState::Starting,
-            "起動中...",
-            false,
-        );
-        if let Err(e) = start_model(&app, &state, &cfg) {
-            emit_service(&app, &state, "モデル", ServiceState::Error, &e, false);
-            return Err(e);
-        }
-        if health::wait_ready(Model, &cfg.model_url, 40, Duration::from_secs(2)).await {
-            emit_service(&app, &state, "モデル", ServiceState::Ready, "起動済み (管理)", true);
-        } else {
-            emit_service(
-                &app,
-                &state,
-                "モデル",
-                ServiceState::Error,
-                "モデルの起動がタイムアウトしました",
-                false,
-            );
-            return Err("モデルの起動がタイムアウトしました".to_string());
-        }
-    } else {
-        emit_service(
-            &app,
-            &state,
-            "モデル",
-            ServiceState::Error,
-            "未起動 — 外部で起動してください",
-            false,
-        );
-        trace(&app, "model not healthy and manage_model=false -> error");
-        return Err("モデルが起動していません (管理無効)".to_string());
-    }
+    ensure_model(&app, &state, &cfg, &client).await?;
 
-    // ---- LIBRECHAT ----
-    emit_service(&app, &state, "LibreChat", ServiceState::Checking, "確認中...", false);
-    if health::probe(LibreChat, &cfg.librechat_url, &client).await {
-        emit_service(&app, &state, "LibreChat", ServiceState::Ready, "接続済み (外部)", true);
-    } else if cfg.manage_librechat {
-        trace(&app, "librechat not healthy, manage_librechat=true -> starting");
-        emit_service(
-            &app,
-            &state,
-            "LibreChat",
-            ServiceState::Starting,
-            "起動中...",
-            false,
-        );
-        if let Err(e) = start_librechat(&app, &state, &cfg, &node) {
-            emit_service(&app, &state, "LibreChat", ServiceState::Error, &e, false);
-            return Err(e);
-        }
-        if health::wait_ready(LibreChat, &cfg.librechat_url, 30, Duration::from_secs(2)).await {
-            emit_service(&app, &state, "LibreChat", ServiceState::Ready, "起動済み (管理)", true);
-        } else {
-            emit_service(
-                &app,
-                &state,
-                "LibreChat",
-                ServiceState::Error,
-                "LibreChat の起動がタイムアウトしました",
-                false,
-            );
-            return Err("LibreChat の起動がタイムアウトしました".to_string());
-        }
-    } else {
-        emit_service(
-            &app,
-            &state,
-            "LibreChat",
-            ServiceState::Error,
-            "未起動 — 外部で起動してください",
-            false,
-        );
-        trace(&app, "librechat not healthy and manage_librechat=false -> error");
-        return Err("LibreChat が起動していません (管理無効)".to_string());
-    }
+    ensure_librechat(&app, &state, &cfg, &client, &node).await?;
 
-    // ---- MULTICONTEXT ----
-    let mc_url = format!("http://127.0.0.1:{}", cfg.multicontent_port);
-    emit_service(&app, &state, "MultiContext", ServiceState::Checking, "確認中...", false);
-    if health::is_listening(&client, &mc_url).await {
-        emit_service(&app, &state, "MultiContext", ServiceState::Ready, "起動済み (外部)", true);
-    } else {
-        emit_service(
-            &app,
-            &state,
-            "MultiContext",
-            ServiceState::Starting,
-            "起動中...",
-            false,
-        );
-        if let Err(e) = start_multicontext(&app, &state, &cfg, &node) {
-            trace(&app, &format!("start_multicontext failed: {}", e));
-            emit_service(&app, &state, "MultiContext", ServiceState::Error, &e, false);
-            return Err(e);
-        }
-        trace(&app, "start_multicontext ok, waiting for listen");
-        if health::wait_listening(&mc_url, 20, Duration::from_secs(2)).await {
-            emit_service(&app, &state, "MultiContext", ServiceState::Ready, "起動済み", true);
-        } else {
-            emit_service(
-                &app,
-                &state,
-                "MultiContext",
-                ServiceState::Error,
-                "MultiContext の起動がタイムアウトしました",
-                false,
-            );
-            return Err("MultiContext の起動がタイムアウトしました".to_string());
-        }
-    }
+    ensure_multicontext(&app, &state, &cfg, &client, &node).await?;
 
     Ok(state.services.lock().unwrap().values().cloned().collect())
 }
@@ -574,6 +634,7 @@ fn main() {
             pick_path,
             frontend_ready,
             startup,
+            connection_status,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

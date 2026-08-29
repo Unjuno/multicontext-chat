@@ -82,6 +82,46 @@ pub fn stop_all(managed: &Managed) {
     }
 }
 
+/// Terminate exactly one tracked managed child (signal its process group) and
+/// reap it. Used on startup failure and on Retry to avoid orphaning or
+/// double-launching. External services are never in the map, so they are never
+/// affected. Safe to call when the label is absent.
+pub fn terminate(managed: &Managed, label: &str) {
+    let mut map = managed.children.lock().unwrap();
+    if let Some((pid, mut child)) = map.remove(label) {
+        #[cfg(unix)]
+        unsafe {
+            let _ = libc::kill(-(pid as i32), libc::SIGTERM);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = std::process::Command::new("kill").arg(pid.to_string()).output();
+        }
+        // Reap the direct child so it does not become a zombie.
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+/// Remove tracked children whose process has already exited. Call before
+/// (re)launching a managed service so a stale handle from a previous session
+/// or a crashed child cannot shadow a fresh launch.
+pub fn reap_dead(managed: &Managed) {
+    let mut map = managed.children.lock().unwrap();
+    let labels: Vec<String> = map.keys().cloned().collect();
+    let mut dead = Vec::new();
+    for label in labels {
+        if let Some((_, child)) = map.get_mut(&label) {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                dead.push(label);
+            }
+        }
+    }
+    for label in dead {
+        map.remove(&label);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +146,77 @@ mod tests {
             line.to_string()
         };
         assert_eq!(out, "[REDACTED LINE]");
+    }
+
+    #[test]
+    fn test_terminate_removes_tracked_child() {
+        let managed = Managed::new();
+        let log = std::env::temp_dir().join(format!("mc-test-term-{}.log", std::process::id()));
+        let (_pid, child) = spawn_service(
+            "sleep",
+            &["5".to_string()],
+            &std::path::PathBuf::from("/"),
+            &HashMap::new(),
+            &log,
+        )
+        .expect("spawn sleep");
+        managed
+            .children
+            .lock()
+            .unwrap()
+            .insert("テスト".into(), (_pid, child));
+        assert!(managed.children.lock().unwrap().contains_key("テスト"));
+        terminate(&managed, "テスト");
+        assert!(!managed.children.lock().unwrap().contains_key("テスト"));
+        // The process should be gone shortly after SIGTERM.
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let alive = std::process::Command::new("pgrep")
+            .arg("-f")
+            .arg("sleep 5")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        assert!(!alive, "terminated child should not linger");
+    }
+
+    #[test]
+    fn test_reap_dead_removes_exited_child() {
+        let managed = Managed::new();
+        let log = std::env::temp_dir().join(format!("mc-test-reap-{}.log", std::process::id()));
+        // `true` exits immediately, so it becomes a zombie the harness can reap.
+        let (_pid, child) = spawn_service(
+            "true",
+            &[],
+            &std::path::PathBuf::from("/"),
+            &HashMap::new(),
+            &log,
+        )
+        .expect("spawn true");
+        managed
+            .children
+            .lock()
+            .unwrap()
+            .insert("即死".into(), (_pid, child));
+        // Wait for the immediately-exiting child to actually terminate before
+        // expecting reap_dead to remove it (avoids a race on try_wait).
+        let exited = {
+            let mut done = false;
+            for _ in 0..100 {
+                {
+                    let mut map = managed.children.lock().unwrap();
+                    if let Some((_, c)) = map.get_mut("即死") {
+                        if matches!(c.try_wait(), Ok(Some(_))) {
+                            done = true;
+                            break;
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            done
+        };
+        assert!(exited, "test child should have exited");
+        reap_dead(&managed);
+        assert!(!managed.children.lock().unwrap().contains_key("即死"));
     }
 }

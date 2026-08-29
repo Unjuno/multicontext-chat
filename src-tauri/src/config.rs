@@ -14,6 +14,10 @@ pub enum ServiceState {
     Checking,
     Starting,
     Ready,
+    /// The service is configured/expected but requires user action before it
+    /// can become usable (e.g. an external service that is not running and not
+    /// Desktop-managed, or a missing credential).
+    NeedsSetup,
     Error,
 }
 
@@ -26,10 +30,12 @@ pub struct ServiceStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DesktopConfig {
     pub librechat_path: Option<String>,
     pub librechat_url: String,
-    pub multicontent_port: u16,
+    #[serde(rename = "multicontext_port", alias = "multicontent_port")]
+    pub multicontext_port: u16,
     pub model_url: String,
     pub llama_path: Option<String>,
     pub model_path: Option<String>,
@@ -44,7 +50,7 @@ impl Default for DesktopConfig {
         Self {
             librechat_path: None,
             librechat_url: "http://127.0.0.1:3080".to_string(),
-            multicontent_port: 4317,
+            multicontext_port: 4317,
             model_url: "http://127.0.0.1:8080/v1".to_string(),
             llama_path: None,
             model_path: None,
@@ -64,7 +70,7 @@ impl DesktopConfig {
         if !self.model_url.starts_with("http://") && !self.model_url.starts_with("https://") {
             return Err("モデル URL は http(s) で指定してください".to_string());
         }
-        if self.multicontent_port == 0 {
+        if self.multicontext_port == 0 {
             return Err("MultiContext ポートは 1 以上にしてください".to_string());
         }
         if self.manage_librechat {
@@ -102,7 +108,7 @@ mod tests {
         let cfg = DesktopConfig {
             librechat_url: "http://127.0.0.1:3080".to_string(),
             model_url: "http://127.0.0.1:8080".to_string(),
-            multicontent_port: 4317,
+            multicontext_port: 4317,
             ..Default::default()
         };
         assert!(cfg.validate().is_ok());
@@ -144,5 +150,18 @@ mod tests {
             ..Default::default()
         };
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn test_port_alias_migration() {
+        // Old config files used the misspelled field `multicontent_port`.
+        // It must deserialize into `multicontext_port` (backward compatible).
+        let old = r#"{"librechat_url":"http://127.0.0.1:3080","multicontent_port":4317,"model_url":"http://127.0.0.1:8080/v1"}"#;
+        let cfg: DesktopConfig = serde_json::from_str(old).unwrap();
+        assert_eq!(cfg.multicontext_port, 4317);
+        // The canonical spelling must also round-trip.
+        let new = r#"{"librechat_url":"http://127.0.0.1:3080","multicontext_port":9999,"model_url":"http://127.0.0.1:8080/v1"}"#;
+        let cfg2: DesktopConfig = serde_json::from_str(new).unwrap();
+        assert_eq!(cfg2.multicontext_port, 9999);
     }
 }
