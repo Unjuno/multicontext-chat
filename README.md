@@ -59,7 +59,9 @@ If LibreChat must call the generated cross-chat Actions, configure `MULTICONTEXT
 
 ## Desktop (macOS)
 
-Native launcher that double-clicks from Finder/Dock:
+Native launcher you can double-click from Finder/Dock. It bundles the
+MultiContext Node server (no dependency on the Git checkout) and can start
+LibreChat and your model backend for you.
 
 ```bash
 npm run desktop:dev   # Tauri dev
@@ -67,7 +69,11 @@ npm run desktop:build # production MultiContext.app
 open src-tauri/target/release/bundle/macos/MultiContext.app
 ```
 
-See `docs/DESKTOP.md` for first-run setup, external vs managed services, logs at `~/Library/Logs/MultiContext/`, and Gatekeeper notes for unsigned builds.
+After the first launch, just open `MultiContext.app` — it detects or starts the
+services and opens the existing UI. See `docs/DESKTOP.md` for first-run setup
+(external vs managed services, `LIBRECHAT_API_KEY` forwarding, logs at
+`~/Library/Logs/com.unjuno.multicontext/`, and Gatekeeper notes for unsigned
+builds).
 
 ## Runtime states
 

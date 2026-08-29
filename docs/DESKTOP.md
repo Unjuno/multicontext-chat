@@ -30,28 +30,48 @@ Existing `npm start` continues to work without Tauri.
 - Rust 1.77+ (`rustc --version`)
 - Tauri CLI `2.x` (`npx tauri --version` or `@tauri-apps/cli`)
 - LibreChat checkout (if managed) and/or running `http://127.0.0.1:3080`
-- Model backend at `http://127.0.0.1:8080` (or external), template `scripts/llama/gpt-oss-chat-template.fixed.jinja`
+- Model backend at `http://127.0.0.1:8080/v1` (OpenAI-compatible base; or external), template `scripts/llama/gpt-oss-chat-template.fixed.jinja`
 
 ## First-time Setup
 
-1. Configure LibreChat:
-   ```
-   node scripts/patch-librechat.mjs /path/to/LibreChat
-   # rebuild LibreChat, set OPENAI_REVERSE_PROXY=http://127.0.0.1:8080/v1
-   ```
-2. Configure model:
-   ```
-   llama-server -m /path/to/gpt-oss-20b-MXFP4.gguf --jinja \
-     --chat-template-file scripts/llama/gpt-oss-chat-template.fixed.jinja \
-     --chat-template-kwargs '{"reasoning_effort":"low"}' --host 127.0.0.1 --port 8080
-   ```
-3. Desktop config is stored at `~/Library/Application Support/com.unjuno.multicontext/config.json` (created on first save via Tauri `app_config_dir`). Defaults:
-   - `librechat_url: http://127.0.0.1:3080`
-   - `model_url: http://127.0.0.1:8080`
-   - `multicontent_port: 4317`
-   - `manage_librechat: false`, `manage_model: false` (reuse external)
+The desktop app is self-contained: it bundles the MultiContext Node server into
+`MultiContext.app/Contents/Resources/multicontext/` and starts it from there, so
+it does **not** depend on the Git checkout remaining at a development path.
+
+**Simplest path (external services already running):**
+
+1. Start LibreChat and your model backend (gpt-oss / llama.cpp) yourself, OR
+2. Let Desktop manage them: open Settings (⚙) on the startup screen, set
+   `LibreChat: 管理` + its checkout path, `モデル: 管理` + `llama-server`,
+   model `.gguf`, and chat template, then `保存` → `開始`.
+
+After the first save, config lives at
+`~/Library/Application Support/com.unjuno.multicontext/config.json`
+(created via Tauri `app_config_dir`). Defaults:
+
+- `librechat_url: http://127.0.0.1:3080`
+- `model_url: http://127.0.0.1:8080/v1`
+- `multicontent_port: 4317`
+- `manage_librechat: false`, `manage_model: false` (reuse external)
 
 If required fields are missing, the startup screen explains what is missing.
+
+**LibreChat API key:** the desktop app does not store secrets. It forwards
+`LIBRECHAT_API_KEY` (and proxy vars) from its own environment to the managed
+MultiContext server. For a Finder-launched app, set it once with
+`launchctl setenv LIBRECHAT_API_KEY "<value>"` (or your normal shell export when
+running `npm start`). LibreChat continues to own provider credentials.
+
+If you prefer to run the backends manually, the original commands still apply:
+
+```
+node scripts/patch-librechat.mjs /path/to/LibreChat
+# rebuild LibreChat, set OPENAI_REVERSE_PROXY=http://127.0.0.1:8080/v1
+
+llama-server -m /path/to/gpt-oss-20b-MXFP4.gguf --jinja \
+  --chat-template-file scripts/llama/gpt-oss-chat-template.fixed.jinja \
+  --chat-template-kwargs '{"reasoning_effort":"low"}' --host 127.0.0.1 --port 8080
+```
 
 ## Development
 
@@ -94,7 +114,7 @@ xattr -d com.apple.quarantine "src-tauri/target/release/bundle/macos/MultiContex
 ## Configuration (external vs managed)
 
 - **External (default):** If LibreChat/model already healthy at configured URLs, Desktop reuses them (`ownership: EXTERNAL`) and does **not** terminate them on quit.
-- **Managed:** If `manage_librechat` or `manage_model` true and health fails, Desktop attempts to start the service and marks `STARTED_BY_MULTICONTEXT`, then stops it on quit (SIGTERM). MultiContext Node is always managed if not already running (started via `find_node()` + `node src/server.js`).
+- **Managed:** If `manage_librechat` or `manage_model` true and health fails, Desktop attempts to start the service and marks `STARTED_BY_MULTICONTEXT`, then stops it on quit (SIGTERM to the whole process group). MultiContext Node is always managed if not already running: Desktop resolves `server_root` via `app.path().resource_dir()/multicontext` (production) or the repo checkout (dev), then runs `find_node()` + `node src/server.js` from the bundled resources.
 
 Validation:
 - `validate_executable` checks `librechat_path`, `llama_path`, `model_path` exist and are executable.
@@ -103,7 +123,8 @@ Validation:
 ## Logs
 
 - Tauri logs: `~/Library/Logs/com.unjuno.multicontext/` (via `app_log_dir`)
-- MultiContext managed: `~/Library/Logs/MultiContext/multicontext-YYYYMMDD.log` (redacted: any line containing `sk-` or `bearer` is `[REDACTED]`)
+  including `desktop.log`, `multicontext.log`, `model.log`, `librechat.log`.
+- MultiContext managed: `~/Library/Logs/com.unjuno.multicontext/multicontext.log` (redacted: any line containing `sk-` or `bearer` is `[REDACTED]`)
 
 UI: `ログを表示` -> `open_logs_dir` (Finder) or `get_logs` (in-app).
 

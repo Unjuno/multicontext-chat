@@ -1,109 +1,388 @@
 <!doctype html>
 <html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MultiContext - 起動中</title>
-<style>
-:root{--bg:#f8f8f6;--surface:#fff;--border:#e5e5e3;--text:#171717;--muted:#525252;--accent:#2563eb;--accent-light:#eff6ff;--running:#f59e0b;--ready:#22c55e;--error:#dc2626;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;--mono:"SF Mono",Consolas,monospace}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:520px;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.06)}
-h1{font-size:18px;font-weight:700;letter-spacing:-0.02em;margin-bottom:6px}
-.sub{font-size:13px;color:var(--muted);margin-bottom:20px}
-.service{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface)}
-.service:last-child{margin-bottom:0}
-.svc-name{font-size:13px;font-weight:500}
-.svc-msg{font-size:11px;color:var(--muted);font-family:var(--mono)}
-.status{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
-.status.ready{background:#f0fdf4;color:#166534}
-.status.starting{background:#fffbeb;color:#92400e}
-.status.error{background:#fef2f2;color:#991b1b}
-.status.checking{background:#f5f3ff;color:#6d28d9}
-.actions{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
-button{font:inherit;padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:13px;font-weight:500}
-button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-button:hover{opacity:0.92}
-.log{margin-top:14px;font-size:11px;color:var(--muted);max-height:120px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:var(--mono);white-space:pre-wrap}
-.small{font-size:11px;color:var(--muted)}
-</style>
-</head>
-<body>
-<div class="card">
-<h1>MultiContext</h1>
-<div class="sub">MultiContext を準備しています…</div>
-<div id="services"></div>
-<div class="actions">
-<button class="primary" id="retry">再試行</button>
-<button id="settings">設定</button>
-<button id="openLogs">ログを表示</button>
-<button id="openApp" style="display:none" class="primary">アプリを開く</button>
-</div>
-<div id="log" class="log" style="display:none"></div>
-<div class="small" id="hint" style="margin-top:10px"></div>
-</div>
-<script type="module">
-const { invoke } = window.__TAURI__.core;
-const servicesEl = document.getElementById('services');
-const logEl = document.getElementById('log');
-const hintEl = document.getElementById('hint');
-const retryBtn = document.getElementById('retry');
-const settingsBtn = document.getElementById('settings');
-const openLogsBtn = document.getElementById('openLogs');
-const openAppBtn = document.getElementById('openApp');
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MultiContext</title>
+    <style>
+      :root {
+        --bg: #0f1117;
+        --panel: #171a23;
+        --panel2: #1f2430;
+        --text: #e6e8ee;
+        --muted: #9aa3b2;
+        --accent: #5b8cff;
+        --ok: #3ecf8e;
+        --warn: #f5a623;
+        --err: #ff6b6b;
+        --border: #2a2f3a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .wrap { width: 100%; max-width: 560px; }
+      h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: 0.5px; }
+      .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .dot {
+        width: 10px; height: 10px; border-radius: 50%;
+        background: var(--muted); flex: 0 0 auto;
+      }
+      .dot.checking { background: var(--warn); }
+      .dot.starting { background: var(--warn); animation: pulse 1s infinite alternate; }
+      .dot.ready { background: var(--ok); }
+      .dot.error { background: var(--err); }
+      @keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
+      .card .name { font-weight: 600; width: 120px; }
+      .card .msg { color: var(--muted); font-size: 13px; flex: 1; }
+      .card .own { font-size: 11px; color: var(--muted); }
+      .actions { display: flex; gap: 10px; margin-top: 16px; }
+      button {
+        background: var(--panel2); color: var(--text);
+        border: 1px solid var(--border); border-radius: 8px;
+        padding: 8px 14px; font-size: 13px; cursor: pointer;
+      }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button:hover { filter: brightness(1.1); }
+      .banner { margin-top: 14px; padding: 12px 14px; border-radius: 10px; display: none; }
+      .banner.error { display: block; background: rgba(255,107,107,0.12); border: 1px solid var(--err); }
+      .topbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+      .modal {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+        display: none; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto;
+      }
+      .modal.open { display: flex; }
+      .sheet {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: 14px; padding: 20px; width: 100%; max-width: 620px;
+      }
+      .sheet h2 { margin: 0 0 14px; font-size: 17px; }
+      .field { margin-bottom: 14px; }
+      .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+      .row { display: flex; gap: 8px; align-items: center; }
+      input[type="text"], input[type="number"] {
+        flex: 1; background: var(--panel2); border: 1px solid var(--border);
+        color: var(--text); border-radius: 8px; padding: 8px 10px; font-size: 13px; min-width: 0;
+      }
+      .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+      .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+      .err-text { color: var(--err); font-size: 12px; margin-top: 8px; min-height: 14px; }
+      .ready-note { color: var(--ok); font-size: 13px; margin-top: 12px; display: none; }
+    </style>
+  </head>
+  <body>
+    <img src="http://127.0.0.1:9999/html-loaded" style="display:none" alt="" />
+    <div class="wrap">
+      <div class="topbar">
+        <button id="settingsBtn">設定</button>
+      </div>
+      <h1>MultiContext</h1>
+      <div class="sub" id="subtitle">MultiContext を準備しています…</div>
+      <div id="cards"></div>
+      <div class="ready-note" id="readyNote">準備完了 — アプリを開いています…</div>
+      <div class="banner error" id="banner">
+        <div id="bannerMsg" style="font-size: 13px; margin-bottom: 10px;"></div>
+        <div class="actions">
+          <button class="primary" id="retryBtn">再試行</button>
+          <button id="settingsFromErr">設定</button>
+          <button id="logsBtn">ログを表示</button>
+        </div>
+      </div>
+    </div>
 
-function render(services){
-  servicesEl.innerHTML = services.map(s=>{
-    const cls = s.state === 'Ready' || s.state === 'ready' ? 'ready' : s.state === 'Starting' || s.state === 'starting' ? 'starting' : s.state === 'Error' || s.state === 'error' ? 'error' : 'checking';
-    const label = s.state === 'Ready' ? '✓ 接続済み' : s.state === 'Starting' ? '● 起動中...' : s.state === 'Error' ? '✕ 未接続' : '… 確認中';
-    return `<div class="service"><div><div class="svc-name">${s.name}</div><div class="svc-msg">${s.message}</div></div><span class="status ${cls}">${label}</span></div>`;
-  }).join('');
-  const allReady = services.every(s=> s.state==='Ready' || s.state==='ready');
-  openAppBtn.style.display = allReady ? 'inline-block' : 'none';
-  hintEl.textContent = allReady ? '準備完了 — アプリを開くを押してください（自動で遷移します）' : '外部で起動しているサービスは自動で検出されます。';
-  if(allReady){
-    setTimeout(()=>{ window.location.href = 'http://127.0.0.1:4317'; }, 900);
-  }
-}
+    <div class="modal" id="modal">
+      <div class="sheet">
+        <h2>MultiContext の設定</h2>
 
-async function check(){
-  servicesEl.innerHTML = '<div class="small">確認中…</div>';
-  try{
-    const services = await invoke('check_all_services');
-    render(services);
-  }catch(e){
-    servicesEl.innerHTML = `<div class="service"><span style="color:#991b1b">確認失敗: ${e}</span></div>`;
-  }
-}
+        <div class="field">
+          <label>LibreChat URL</label>
+          <input type="text" id="librechatUrl" />
+          <div class="hint">外部で動作中の LibreChat へ接続する場合はその URL。</div>
+        </div>
 
-retryBtn.onclick = check;
-settingsBtn.onclick = async ()=>{
-  try{
-    const cfg = await invoke('get_config');
-    alert('設定: LibreChat=' + cfg.librechat_url + ' モデル=' + cfg.model_url + ' ポート=' + cfg.multicontent_port + '\n（設定画面は今後拡張）');
-  }catch(e){ alert('設定取得失敗: '+e); }
-};
-openLogsBtn.onclick = async ()=>{
-  try{
-    const logs = await invoke('get_logs');
-    logEl.style.display = 'block';
-    logEl.textContent = logs;
-  }catch(e){ alert(e); }
-};
-openAppBtn.onclick = ()=>{ window.location.href = 'http://127.0.0.1:4317'; };
+        <div class="field">
+          <div class="toggle">
+            <input type="checkbox" id="manageLibrechat" />
+            <label style="margin:0">LibreChat を Desktop で管理・起動する</label>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <input type="text" id="librechatPath" placeholder="LibreChat ディレクトリ" />
+            <button id="pickLibrechat">選択</button>
+          </div>
+        </div>
 
-// initial check with bounded retries
-check();
-let attempts=0;
-const interval=setInterval(async()=>{
-  attempts++;
-  if(attempts>15){ clearInterval(interval); return; }
-  try{
-    const services = await invoke('check_all_services');
-    const allReady = services.every(s=> s.state==='Ready' || s.state==='ready');
-    if(allReady){ clearInterval(interval); render(services); }
-  }catch{}
-}, 2000);
-</script>
-</body>
+        <div class="field">
+          <label>モデル URL</label>
+          <input type="text" id="modelUrl" />
+          <div class="hint">gpt-oss / llama.cpp などの OpenAI 互換エンドポイント。</div>
+        </div>
+
+        <div class="field">
+          <div class="toggle">
+            <input type="checkbox" id="manageModel" />
+            <label style="margin:0">モデルを Desktop で管理・起動する</label>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <input type="text" id="llamaPath" placeholder="llama-server 実行ファイル" />
+            <button id="pickLlama">選択</button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <input type="text" id="modelFilePath" placeholder="モデル (GGUF) ファイル" />
+            <button id="pickModel">選択</button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <input type="text" id="templatePath" placeholder="チャットテンプレート (.jinja)" />
+            <button id="pickTemplate">選択</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>MultiContext ポート</label>
+          <input type="number" id="port" />
+        </div>
+
+        <div class="field">
+          <label>Node.js 実行ファイル（システム Node を使う場合）</label>
+          <div class="row">
+            <input type="text" id="nodePath" placeholder="/opt/homebrew/bin/node" />
+            <button id="pickNode">選択</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="saveBtn">保存</button>
+          <button id="startBtn">保存して開始</button>
+          <button id="closeBtn">閉じる</button>
+        </div>
+        <div class="err-text" id="settingsErr"></div>
+      </div>
+    </div>
+
+    <script>
+      function getInvoke() {
+        const t = window.__TAURI__;
+        if (t && t.core && t.core.invoke) return t.core.invoke;
+        if (t && t.invoke) return t.invoke;
+        return null;
+      }
+      function getListen() {
+        const t = window.__TAURI__;
+        if (t && t.event && t.event.listen) return t.event.listen;
+        if (t && t.listen) return t.listen;
+        return null;
+      }
+      const invoke = getInvoke();
+      const listen = getListen();
+      function beacon(p) {
+        try { fetch("http://127.0.0.1:9999/" + encodeURIComponent(p)).catch(() => {}); } catch (e) {}
+      }
+      beacon("hasTauri=" + (window.__TAURI__ ? "yes" : "no") + ";core=" + (window.__TAURI__ && window.__TAURI__.core ? "yes" : "no") + ";event=" + (window.__TAURI__ && window.__TAURI__.event ? "yes" : "no"));
+      if (!invoke) {
+        document.title = "TAURI_MISSING";
+        beacon("invoke=null");
+      } else {
+        document.title = "TAURI_OK";
+        beacon("invoke=ok");
+      }
+
+      const SERVICES = ["モデル", "LibreChat", "MultiContext"];
+      const state = { config: null, port: 4317 };
+
+      function el(tag, props = {}, children = []) {
+        const e = document.createElement(tag);
+        Object.entries(props).forEach(([k, v]) => {
+          if (k === "class") e.className = v;
+          else if (k === "text") e.textContent = v;
+          else e.setAttribute(k, v);
+        });
+        (Array.isArray(children) ? children : [children]).forEach((c) => {
+          if (typeof c === "string") e.appendChild(document.createTextNode(c));
+          else if (c) e.appendChild(c);
+        });
+        return e;
+      }
+
+      function buildCards() {
+        const wrap = document.getElementById("cards");
+        wrap.innerHTML = "";
+        SERVICES.forEach((name) => {
+          const dot = el("div", { class: "dot checking" });
+          const msg = el("div", { class: "msg", text: "確認中..." });
+          const own = el("div", { class: "own", text: "" });
+          const card = el("div", { class: "card", "data-name": name }, [
+            dot,
+            el("div", { class: "name", text: name }),
+            msg,
+            own,
+          ]);
+          card._dot = dot;
+          card._msg = msg;
+          card._own = own;
+          wrap.appendChild(card);
+        });
+      }
+
+      function updateCard(name, status) {
+        const card = document.querySelector(`.card[data-name="${CSS.escape(name)}"]`);
+        if (!card) return;
+        card._dot.className = "dot " + status.state;
+        card._msg.textContent = status.message || "";
+        card._own.textContent =
+          status.ownership === "startedbymulticontext"
+            ? "管理 (Desktop 起動)"
+            : status.ownership === "external"
+            ? "外部"
+            : "";
+      }
+
+      function hideError() {
+        document.getElementById("banner").className = "banner";
+      }
+      function showError(msg) {
+        document.getElementById("bannerMsg").textContent = msg;
+        document.getElementById("banner").className = "banner error";
+      }
+
+      function allReady(statuses) {
+        return statuses.length === SERVICES.length && statuses.every((s) => s.state === "ready");
+      }
+
+      async function runStartup() {
+        hideError();
+        buildCards();
+        document.getElementById("readyNote").style.display = "none";
+        document.getElementById("subtitle").textContent = "MultiContext を準備しています…";
+        try {
+          const statuses = await invoke("startup");
+          beacon("startup=returned:" + (statuses && statuses.length));
+          statuses.forEach((s) => updateCard(s.name, s));
+          if (allReady(statuses)) {
+            document.getElementById("subtitle").textContent = "準備完了";
+            document.getElementById("readyNote").style.display = "block";
+            setTimeout(() => {
+              window.location.href = `http://127.0.0.1:${state.port}/`;
+            }, 900);
+          }
+        } catch (e) {
+          beacon("startup=error:" + (typeof e === "string" ? e : "obj"));
+          showError(typeof e === "string" ? e : "起動に失敗しました");
+        }
+      }
+
+      // ---- live progress ----
+      if (listen) {
+        listen("startup-progress", (event) => {
+          updateCard(event.payload.name, event.payload);
+        });
+      }
+
+      // ---- settings ----
+      function openSettings() {
+        const c = state.config || {};
+        document.getElementById("librechatUrl").value = c.librechat_url || "http://127.0.0.1:3080";
+        document.getElementById("manageLibrechat").checked = !!c.manage_librechat;
+        document.getElementById("librechatPath").value = c.librechat_path || "";
+        document.getElementById("modelUrl").value = c.model_url || "http://127.0.0.1:8080";
+        document.getElementById("manageModel").checked = !!c.manage_model;
+        document.getElementById("llamaPath").value = c.llama_path || "";
+        document.getElementById("modelFilePath").value = c.model_path || "";
+        document.getElementById("templatePath").value = c.template_path || "";
+        document.getElementById("port").value = c.multicontent_port || 4317;
+        document.getElementById("nodePath").value = c.node_path || "";
+        document.getElementById("settingsErr").textContent = "";
+        document.getElementById("modal").className = "modal open";
+      }
+      function closeSettings() {
+        document.getElementById("modal").className = "modal";
+      }
+      function readSettings() {
+        return {
+          librechat_url: document.getElementById("librechatUrl").value.trim(),
+          manage_librechat: document.getElementById("manageLibrechat").checked,
+          librechat_path: document.getElementById("librechatPath").value.trim() || null,
+          model_url: document.getElementById("modelUrl").value.trim(),
+          manage_model: document.getElementById("manageModel").checked,
+          llama_path: document.getElementById("llamaPath").value.trim() || null,
+          model_path: document.getElementById("modelFilePath").value.trim() || null,
+          template_path: document.getElementById("templatePath").value.trim() || null,
+          multicontent_port: parseInt(document.getElementById("port").value, 10) || 4317,
+          node_path: document.getElementById("nodePath").value.trim() || null,
+        };
+      }
+      async function saveAndMaybeStart(start) {
+        const cfg = readSettings();
+        document.getElementById("settingsErr").textContent = "";
+        try {
+          await invoke("save_config", { config: cfg });
+          state.config = cfg;
+          state.port = cfg.multicontent_port || 4317;
+          if (start) {
+            closeSettings();
+            runStartup();
+          } else {
+            closeSettings();
+          }
+        } catch (e) {
+          document.getElementById("settingsErr").textContent =
+            "保存できません: " + (typeof e === "string" ? e : JSON.stringify(e));
+        }
+      }
+
+      async function pick(kind, targetId) {
+        const p = await invoke("pick_path", { kind });
+        if (p) document.getElementById(targetId).value = p;
+      }
+
+      document.getElementById("settingsBtn").onclick = openSettings;
+      document.getElementById("settingsFromErr").onclick = openSettings;
+      document.getElementById("closeBtn").onclick = closeSettings;
+      document.getElementById("saveBtn").onclick = () => saveAndMaybeStart(false);
+      document.getElementById("startBtn").onclick = () => saveAndMaybeStart(true);
+      document.getElementById("retryBtn").onclick = runStartup;
+      document.getElementById("logsBtn").onclick = async () => {
+        await invoke("open_logs_dir");
+      };
+      document.getElementById("pickLibrechat").onclick = () => pick("dir", "librechatPath");
+      document.getElementById("pickLlama").onclick = () => pick("exe", "llamaPath");
+      document.getElementById("pickModel").onclick = () => pick("file", "modelFilePath");
+      document.getElementById("pickTemplate").onclick = () => pick("file", "templatePath");
+      document.getElementById("pickNode").onclick = () => pick("exe", "nodePath");
+
+      (async () => {
+        if (!invoke) {
+          document.title = "TAURI_MISSING";
+          beacon("startup=skipped:tauri-missing");
+          showError("Tauri API が見つかりません (window.__TAURI__ が未定義)。");
+          return;
+        }
+        beacon("startup=invoking");
+        invoke("frontend_ready", { marker: "page_loaded:tauri_ok" }).catch(() => {});
+        try {
+          state.config = await invoke("get_config");
+          state.port = state.config.multicontent_port || 4317;
+        } catch (e) {
+          state.config = null;
+        }
+        runStartup();
+      })();
+    </script>
+  </body>
 </html>
