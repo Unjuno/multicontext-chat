@@ -70,10 +70,11 @@ open src-tauri/target/release/bundle/macos/MultiContext.app
 ```
 
 After the first launch, just open `MultiContext.app` — it detects or starts the
-services and opens the existing UI. See `docs/DESKTOP.md` for first-run setup
-(external vs managed services, `LIBRECHAT_API_KEY` forwarding, logs at
-`~/Library/Logs/com.unjuno.multicontext/`, and Gatekeeper notes for unsigned
-builds).
+services and opens the existing UI. The LibreChat API key is saved once in
+macOS Keychain from the Settings screen (no Terminal, no `config.json`). See
+`docs/DESKTOP.md` for first-run setup (external vs managed services, Keychain
+credential storage, logs at `~/Library/Logs/com.unjuno.multicontext/`, and
+Gatekeeper notes for unsigned builds).
 
 ## Runtime states
 

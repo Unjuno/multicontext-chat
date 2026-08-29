@@ -56,11 +56,15 @@ After the first save, config lives at
 
 If required fields are missing, the startup screen explains what is missing.
 
-**LibreChat API key:** the desktop app does not store secrets. It forwards
-`LIBRECHAT_API_KEY` (and proxy vars) from its own environment to the managed
-MultiContext server. For a Finder-launched app, set it once with
-`launchctl setenv LIBRECHAT_API_KEY "<value>"` (or your normal shell export when
-running `npm start`). LibreChat continues to own provider credentials.
+**LibreChat API key (no Terminal needed):** on the Settings screen, enter the
+key in `LibreChat API Key` and press `保存`. It is stored in the macOS
+**Keychain** (`security` generic password, service `com.unjuno.multicontext`)
+and is **never** written to `config.json` or any log. On startup, Desktop reads
+it from the Keychain and injects it only into the managed MultiContext child
+process environment (`LIBRECHAT_API_KEY`). This makes a Finder-double-click
+launch fully self-contained. As a fallback, Desktop also forwards
+`LIBRECHAT_API_KEY` / proxy vars from its own environment if set via
+`launchctl setenv`. LibreChat continues to own provider credentials.
 
 If you prefer to run the backends manually, the original commands still apply:
 

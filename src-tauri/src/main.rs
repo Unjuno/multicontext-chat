@@ -2,6 +2,7 @@
 
 mod config;
 mod health;
+mod keychain;
 mod process;
 mod runtime;
 
@@ -122,6 +123,16 @@ fn save_config(
     std::fs::write(&path, data).map_err(|e| e.to_string())?;
     *state.config.lock().unwrap() = config;
     Ok(())
+}
+
+#[tauri::command]
+fn save_api_key(key: String) -> Result<(), String> {
+    keychain::set_key(&key)
+}
+
+#[tauri::command]
+fn has_api_key() -> bool {
+    keychain::has_key()
 }
 
 #[tauri::command]
@@ -330,11 +341,18 @@ fn start_multicontext(
     );
     envs.insert("MULTICONTEXT_LIBRECHAT_MODE".into(), "native".into());
     envs.insert("LIBRECHAT_BASE_URL".into(), cfg.librechat_url.clone());
+    // LibreChat API key: prefer the Keychain value the user saved in Settings
+    // (preferred, since it survives Finder launches without `launchctl`), then
+    // fall back to the app environment (e.g. `launchctl setenv`). The desktop
+    // app never stores the secret in config.json and never logs it.
+    let keychain_key = keychain::get_key();
+    if let Some(v) = &keychain_key {
+        if !v.is_empty() {
+            envs.insert("LIBRECHAT_API_KEY".into(), v.clone());
+        }
+    }
     // Pass through LibreChat credentials/proxy from the app environment.
-    // The desktop app does NOT own these secrets; it only forwards whatever
-    // the user's environment already provides (e.g. via `launchctl setenv`).
     for key in [
-        "LIBRECHAT_API_KEY",
         "LIBRECHAT_API_KEY_B",
         "HTTP_PROXY",
         "HTTPS_PROXY",
@@ -343,6 +361,14 @@ fn start_multicontext(
         if let Ok(v) = std::env::var(key) {
             if !v.is_empty() {
                 envs.insert(key.to_string(), v);
+            }
+        }
+    }
+    // Env var can override the keychain value if explicitly provided.
+    if keychain_key.is_none() {
+        if let Ok(v) = std::env::var("LIBRECHAT_API_KEY") {
+            if !v.is_empty() {
+                envs.insert("LIBRECHAT_API_KEY".into(), v);
             }
         }
     }
@@ -538,6 +564,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
+            save_api_key,
+            has_api_key,
             check_health,
             get_services,
             get_logs,

@@ -167,6 +167,15 @@
           </div>
         </div>
 
+        <div class="field">
+          <label>LibreChat API Key</label>
+          <div class="row">
+            <input type="password" id="apiKey" autocomplete="off" placeholder="LibreChat の API キー（Keychain に保存）" />
+            <button id="saveApiKey">保存</button>
+          </div>
+          <div class="hint" id="apiKeyHint"></div>
+        </div>
+
         <div class="actions">
           <button class="primary" id="saveBtn">保存</button>
           <button id="startBtn">保存して開始</button>
@@ -295,7 +304,7 @@
       }
 
       // ---- settings ----
-      function openSettings() {
+      async function openSettings() {
         const c = state.config || {};
         document.getElementById("librechatUrl").value = c.librechat_url || "http://127.0.0.1:3080";
         document.getElementById("manageLibrechat").checked = !!c.manage_librechat;
@@ -308,6 +317,15 @@
         document.getElementById("port").value = c.multicontent_port || 4317;
         document.getElementById("nodePath").value = c.node_path || "";
         document.getElementById("settingsErr").textContent = "";
+        document.getElementById("apiKey").value = "";
+        try {
+          const has = await invoke("has_api_key");
+          document.getElementById("apiKeyHint").textContent = has
+            ? "Keychain に保存済みです（この端末でのみ使用）。"
+            : "未保存。保存すると Desktop 起動時に MultiContext へ自動投入します。";
+        } catch (_) {
+          document.getElementById("apiKeyHint").textContent = "";
+        }
         document.getElementById("modal").className = "modal open";
       }
       function closeSettings() {
@@ -365,6 +383,19 @@
       document.getElementById("pickModel").onclick = () => pick("file", "modelFilePath");
       document.getElementById("pickTemplate").onclick = () => pick("file", "templatePath");
       document.getElementById("pickNode").onclick = () => pick("exe", "nodePath");
+      document.getElementById("saveApiKey").onclick = async () => {
+        const v = document.getElementById("apiKey").value;
+        try {
+          await invoke("save_api_key", { key: v });
+          document.getElementById("apiKey").value = "";
+          document.getElementById("apiKeyHint").textContent = v
+            ? "Keychain に保存しました。"
+            : "Keychain から削除しました。";
+        } catch (e) {
+          document.getElementById("apiKeyHint").textContent =
+            "保存できません: " + (typeof e === "string" ? e : JSON.stringify(e));
+        }
+      };
 
       (async () => {
         if (!invoke) {
