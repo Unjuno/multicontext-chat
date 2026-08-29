@@ -606,7 +606,8 @@ function wire(workspace) {
         const b = e.currentTarget; const prev = b.textContent; b.textContent = 'コピー済み'; setTimeout(() => b.textContent = prev, 1200);
       } catch { toast('コピーに失敗しました', 'error'); }
     };
-    $('[data-action=stop]', card).onclick = async (e) => {
+    const stop = $('[data-action=stop]', card);
+    if (stop) stop.onclick = async (e) => {
       await withBusy(e.currentTarget, async () => {
         await request(`/api/workspaces/${workspace.id}/members/${memberId}/stop`, { method: 'POST', body: '{}' });
         await refreshPreservingDrafts(workspace.id);
