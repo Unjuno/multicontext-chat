@@ -213,7 +213,8 @@
       }
 
       const SERVICES = ["モデル", "LibreChat", "MultiContext"];
-      const state = { config: null, port: 4317 };
+      const state = { config: null, port: 4317, statuses: {} };
+      let navigated = false;
 
       function el(tag, props = {}, children = []) {
         const e = document.createElement(tag);
@@ -271,25 +272,43 @@
       }
 
       function allReady(statuses) {
-        return statuses.length === SERVICES.length && statuses.every((s) => s.state === "ready");
+        return (
+          statuses.length === SERVICES.length &&
+          statuses.every((s) => s.state === "ready")
+        );
+      }
+
+      // Re-check readiness whenever we learn about a service, and navigate to
+      // the app once every service is READY. The `startup` command returns an
+      // early snapshot (services still starting), so navigation must be driven
+      // by the streaming `startup-progress` events, not just the initial call.
+      function maybeNavigate() {
+        if (navigated) return;
+        const statuses = SERVICES.map((n) => state.statuses[n]).filter(Boolean);
+        if (!allReady(statuses)) return;
+        navigated = true;
+        document.getElementById("subtitle").textContent = "準備完了";
+        document.getElementById("readyNote").style.display = "block";
+        beacon("navigate=ready");
+        setTimeout(() => {
+          window.location.href = `http://127.0.0.1:${state.port}/`;
+        }, 900);
       }
 
       async function runStartup() {
         hideError();
         buildCards();
+        navigated = false;
         document.getElementById("readyNote").style.display = "none";
         document.getElementById("subtitle").textContent = "MultiContext を準備しています…";
         try {
           const statuses = await invoke("startup");
           beacon("startup=returned:" + (statuses && statuses.length));
-          statuses.forEach((s) => updateCard(s.name, s));
-          if (allReady(statuses)) {
-            document.getElementById("subtitle").textContent = "準備完了";
-            document.getElementById("readyNote").style.display = "block";
-            setTimeout(() => {
-              window.location.href = `http://127.0.0.1:${state.port}/`;
-            }, 900);
-          }
+          (statuses || []).forEach((s) => {
+            state.statuses[s.name] = s;
+            updateCard(s.name, s);
+          });
+          maybeNavigate();
         } catch (e) {
           beacon("startup=error:" + (typeof e === "string" ? e : "obj"));
           showError(typeof e === "string" ? e : "起動に失敗しました");
@@ -299,7 +318,10 @@
       // ---- live progress ----
       if (listen) {
         listen("startup-progress", (event) => {
-          updateCard(event.payload.name, event.payload);
+          const s = event.payload;
+          state.statuses[s.name] = s;
+          updateCard(s.name, s);
+          maybeNavigate();
         });
       }
 
