@@ -27,18 +27,50 @@ export class Scheduler {
       try {
         const workspace = this.store.getWorkspace(workspaceId); const current = this.store.getMember(workspaceId, memberId);
         if (!workspace || !current || controller.signal.aborted) break;
-        const result = await this.client.runAgent({
-          agentId: current.agentId, globalPrompt: workspace.globalPrompt, developerPrompt: current.developerPrompt,
-          history: history.slice(-(this.maxHistoryMessages - 1)), prompt: item.prompt, conversationId,
-          signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id },
-        });
-        if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId)) continue;
-        this.store.completeRun(workspaceId, memberId, item.id, result);
-        this.store.trimMessages(workspaceId, memberId, this.maxHistoryMessages);
+        let effectiveAgentId = String(current.agentId || workspace.defaultAgentId || '').trim();
+        if (!effectiveAgentId) {
+          try {
+            const agents = await this.client.listAgents();
+            if (agents && agents.length) {
+              agents.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+              effectiveAgentId = String(agents[0].id || '');
+              if (effectiveAgentId && !workspace.defaultAgentId) {
+                try { this.store.updateWorkspace(workspaceId, { defaultAgentId: effectiveAgentId }); } catch {}
+              }
+            }
+          } catch {}
+        }
+        if (!effectiveAgentId) {
+          throw new Error('利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。');
+        }
+        // Map known English errors to Japanese
+        const japMap = (msg) => {
+          const m = String(msg || '');
+          if (m.includes('LibreChat agentId is required')) return '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
+          if (m.includes('Invalid API key') || m.includes('invalid_api_key')) return 'LibreChat接続キーを確認してください';
+          if (m.includes('Failed to connect') || m.includes('fetch failed') || m.includes('Connection refused')) return 'LibreChatに接続できません';
+          if (m.includes('GPT-OSS') || m.includes('llama')) return 'GPT-OSSを利用できません';
+          return m;
+        };
+        try {
+          const result = await this.client.runAgent({
+            agentId: effectiveAgentId, globalPrompt: workspace.globalPrompt, developerPrompt: current.developerPrompt,
+            history: history.slice(-(this.maxHistoryMessages - 1)), prompt: item.prompt, conversationId,
+            signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id },
+          });
+          if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId)) continue;
+          this.store.completeRun(workspaceId, memberId, item.id, result);
+          this.store.trimMessages(workspaceId, memberId, this.maxHistoryMessages);
+        } catch (inner) {
+          const msg = japMap(inner?.message || String(inner));
+          throw new Error(msg);
+        }
       } catch (error) {
         if (!this.store.getMember(workspaceId, memberId)) break;
+        const msg = String(error?.message || String(error));
+        const isConfigError = msg.includes('利用可能なLibreChat Agent') || msg.includes('LibreChat接続キー');
         if (controller.signal.aborted) this.store.failRun(workspaceId, memberId, item.id, 'Stopped by user', { requeue: false });
-        else this.store.failRun(workspaceId, memberId, item.id, error?.message || String(error), { requeue: true });
+        else this.store.failRun(workspaceId, memberId, item.id, msg, { requeue: !isConfigError });
         break;
       }
     }

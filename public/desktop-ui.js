@@ -95,6 +95,8 @@
     "モデル": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
     "LibreChat": { ready: "接続済み", starting: "接続中", checking: "接続中", needs_setup: "要設定", error: "エラー" },
     "MultiContext": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
+    "LibreChat Agent": { ready: "利用可能", starting: "確認中", checking: "確認中", needs_setup: "未設定", error: "未設定" },
+    "GPT-OSS": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
   };
 
   function normalizeState(state) {

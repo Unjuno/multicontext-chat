@@ -26,6 +26,38 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   const authorized = (req) => !config.appToken || req.headers.authorization === `Bearer ${config.appToken}`;
   const toolAuthorized = (req) => !config.toolSecret || req.headers['x-multicontext-key'] === config.toolSecret;
   const compilingWorkspaces = new Set();
+  let cachedDefaultAgentId = null;
+  let cachedDefaultAgentFetchedAt = 0;
+  async function getResolvedDefaultAgentId() {
+    const now = Date.now();
+    if (cachedDefaultAgentId && now - cachedDefaultAgentFetchedAt < 30000) return cachedDefaultAgentId;
+    try {
+      const agents = await client.listAgents();
+      if (agents && agents.length) {
+        agents.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+        const chosen = String(agents[0].id || '');
+        if (chosen) {
+          cachedDefaultAgentId = chosen;
+          cachedDefaultAgentFetchedAt = now;
+          return chosen;
+        }
+      }
+    } catch {}
+    return '';
+  }
+  async function ensureWorkspaceDefaultAgent(workspaceId) {
+    const workspace = store.requireWorkspace(workspaceId);
+    if (workspace.defaultAgentId) return workspace.defaultAgentId;
+    const resolved = await getResolvedDefaultAgentId();
+    if (resolved) {
+      store.updateWorkspace(workspaceId, { defaultAgentId: resolved });
+      return resolved;
+    }
+    return '';
+  }
+  function effectiveAgentIdForMember(workspace, member) {
+    return String(member.agentId || workspace.defaultAgentId || '').trim();
+  }
   const requestOrigin = (req) => {
     const proto = String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
     if (proto !== 'http' && proto !== 'https') return null;
@@ -53,14 +85,31 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       });
       return json(res, 200, { workspaces });
     }
-    if (url.pathname === '/api/workspaces' && req.method === 'POST') return json(res, 201, workspaceView(store.createWorkspace(await readBody(req)).id, req));
+    if (url.pathname === '/api/workspaces' && req.method === 'POST') {
+      const body = await readBody(req);
+      const workspace = store.createWorkspace(body);
+      if (!workspace.defaultAgentId) {
+        const resolved = await getResolvedDefaultAgentId();
+        if (resolved) store.updateWorkspace(workspace.id, { defaultAgentId: resolved });
+      }
+      return json(res, 201, workspaceView(workspace.id, req));
+    }
 
     const workspaceId = parts[2]; if (parts[0] !== 'api' || parts[1] !== 'workspaces' || !workspaceId) return false;
     if (parts.length === 3 && req.method === 'GET') return json(res, 200, workspaceView(workspaceId, req));
     if (parts.length === 3 && req.method === 'PATCH') { store.updateWorkspace(workspaceId, await readBody(req)); return json(res, 200, workspaceView(workspaceId, req)); }
     if (parts.length === 3 && req.method === 'DELETE') { scheduler.stopWorkspace(workspaceId); store.deleteWorkspace(workspaceId); return json(res, 204, null); }
 
-    if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') { const member = store.addMember(workspaceId, await readBody(req)); return json(res, 201, { member: publicMember(member), workspace: workspaceView(workspaceId, req) }); }
+    if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') {
+      const body = await readBody(req);
+      // If member has no explicit agent and workspace has no default, try to ensure workspace default
+      const workspace = store.requireWorkspace(workspaceId);
+      if (!body.agentId && !workspace.defaultAgentId) {
+        await ensureWorkspaceDefaultAgent(workspaceId);
+      }
+      const member = store.addMember(workspaceId, body);
+      return json(res, 201, { member: publicMember(member), workspace: workspaceView(workspaceId, req) });
+    }
     if (parts[3] === 'members' && parts[4]) {
       const memberId = parts[4];
       if (parts.length === 5 && req.method === 'PATCH') {
@@ -69,11 +118,74 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         store.updateMember(workspaceId, memberId, body); scheduler.kickMember(workspaceId, memberId); return json(res, 200, workspaceView(workspaceId, req));
       }
       if (parts.length === 5 && req.method === 'DELETE') { scheduler.stopMember(workspaceId, memberId); store.deleteMember(workspaceId, memberId); return json(res, 204, null); }
-      if (parts[5] === 'enqueue' && req.method === 'POST') { const body = await readBody(req); const item = store.enqueue(workspaceId, memberId, body.prompt, { source: 'user' }); scheduler.kickMember(workspaceId, memberId); return json(res, 202, { item }); }
+      if (parts[5] === 'enqueue' && req.method === 'POST') {
+        const body = await readBody(req);
+        const workspace = store.requireWorkspace(workspaceId);
+        const member = workspace.members[memberId];
+        if (!member) return json(res, 404, { error: 'Member not found' });
+        let effective = effectiveAgentIdForMember(workspace, member);
+        if (!effective) {
+          const resolved = await ensureWorkspaceDefaultAgent(workspaceId);
+          const updatedWorkspace = store.requireWorkspace(workspaceId);
+          const updatedMember = updatedWorkspace.members[memberId];
+          effective = effectiveAgentIdForMember(updatedWorkspace, updatedMember);
+          if (!effective && !resolved) {
+            // Try one more direct resolve for immediate feedback
+            const directResolved = await getResolvedDefaultAgentId();
+            if (!directResolved) return json(res, 400, { error: '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。' });
+            // If we got a resolved id but workspace still empty (list may have been empty earlier), set it
+            if (!updatedWorkspace.defaultAgentId) store.updateWorkspace(workspaceId, { defaultAgentId: directResolved });
+            effective = String(directResolved);
+          }
+          if (!effective) return json(res, 400, { error: '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。' });
+        }
+        // Auto-recover BLOCKED config error if now resolvable
+        const freshAfter = store.requireWorkspace(workspaceId).members[memberId];
+        if (freshAfter.status === 'error' && freshAfter.lastError && (String(freshAfter.lastError).includes('利用可能なLibreChat Agent') || String(freshAfter.lastError).includes('LibreChat agentId is required'))) {
+          if (effective) try { store.retryMember(workspaceId, memberId); } catch {}
+        }
+        const item = store.enqueue(workspaceId, memberId, body.prompt, { source: 'user' }); scheduler.kickMember(workspaceId, memberId); return json(res, 202, { item });
+      }
       if (parts[5] === 'retry' && req.method === 'POST') { scheduler.retryMember(workspaceId, memberId); return json(res, 202, workspaceView(workspaceId, req)); }
       if (parts[5] === 'stop' && req.method === 'POST') { scheduler.stopMember(workspaceId, memberId); return json(res, 200, workspaceView(workspaceId, req)); }
     }
-    if (parts[3] === 'broadcast' && req.method === 'POST') { const body = await readBody(req); const items = store.broadcast(workspaceId, body.prompt); scheduler.kickWorkspace(workspaceId); return json(res, 202, { items }); }
+    if (parts[3] === 'broadcast' && req.method === 'POST') {
+      const body = await readBody(req);
+      const workspace = store.requireWorkspace(workspaceId);
+      const activeMembers = Object.values(workspace.members).filter(m => m.active);
+      if (!activeMembers.length) return json(res, 409, { error: 'No active members' });
+      // Ensure workspace has a default agent if needed
+      const needsDefault = activeMembers.some(m => !effectiveAgentIdForMember(workspace, m));
+      if (needsDefault && !workspace.defaultAgentId) {
+        await ensureWorkspaceDefaultAgent(workspaceId);
+      }
+      const updatedWorkspace = store.requireWorkspace(workspaceId);
+      const stillNeedsAgent = activeMembers.some(m => {
+        const freshMember = updatedWorkspace.members[m.id];
+        return !effectiveAgentIdForMember(updatedWorkspace, freshMember);
+      });
+      if (stillNeedsAgent) {
+        const directResolved = await getResolvedDefaultAgentId();
+        if (!directResolved) return json(res, 400, { error: '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。' });
+        if (!updatedWorkspace.defaultAgentId) store.updateWorkspace(workspaceId, { defaultAgentId: directResolved });
+      }
+      // Final check: if any active member still has no effective agent, fail before queuing
+      const finalWorkspace = store.requireWorkspace(workspaceId);
+      const invalid = activeMembers.filter(m => !effectiveAgentIdForMember(finalWorkspace, finalWorkspace.members[m.id]));
+      if (invalid.length) {
+        return json(res, 400, { error: '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。' });
+      }
+      // Auto-recover members that were BLOCKED solely due to missing Agent (now resolvable)
+      for (const m of activeMembers) {
+        const fresh = finalWorkspace.members[m.id];
+        if (fresh.status === 'error' && fresh.lastError && (String(fresh.lastError).includes('利用可能なLibreChat Agent') || String(fresh.lastError).includes('LibreChat agentId is required'))) {
+          if (effectiveAgentIdForMember(finalWorkspace, fresh)) {
+            try { store.retryMember(workspaceId, m.id); } catch {}
+          }
+        }
+      }
+      const items = store.broadcast(workspaceId, body.prompt); scheduler.kickWorkspace(workspaceId); return json(res, 202, { items });
+    }
     if (parts[3] === 'stop' && req.method === 'POST') { scheduler.stopWorkspace(workspaceId); return json(res, 200, workspaceView(workspaceId, req)); }
     if (parts[3] === 'compile' && req.method === 'POST') {
       const workspace = store.requireWorkspace(workspaceId);

@@ -7,6 +7,27 @@ let refreshController = null;
 const openEditors = new Set();
 let lastWorkspace = null; // server snapshot for dirty checks
 
+function agentNameForId(id) {
+  if (!id) return '';
+  const found = agents.find(a => String(a.id) === String(id));
+  return found ? String(found.name || found.id) : String(id);
+}
+function agentOptionsHtml(selectedId, includeDefault) {
+  const opts = [];
+  if (includeDefault) {
+    const defLabel = 'ワークスペース既定を使用';
+    opts.push(`<option value="" ${!selectedId ? 'selected' : ''}>${esc(defLabel)}</option>`);
+  } else {
+    opts.push(`<option value="" ${!selectedId ? 'selected' : ''}>未設定 (自動)</option>`);
+  }
+  for (const a of agents) {
+    const sel = String(a.id) === String(selectedId) ? 'selected' : '';
+    const label = `${esc(a.name || a.id)}${a.provider ? ` · ${esc(a.provider)}` : ''}`;
+    opts.push(`<option value="${esc(a.id)}" ${sel}>${label}</option>`);
+  }
+  return opts.join('');
+}
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({
@@ -140,61 +161,94 @@ function renderRuntime(statuses) {
   }
 }
 
+async function fetchAgentRuntimeEntry(signal) {
+  try {
+    const data = await request('/api/agents', { signal });
+    const count = Array.isArray(data.agents) ? data.agents.length : 0;
+    if (count > 0) return { name: 'LibreChat Agent', state: 'ready', message: '利用可能', ownership: null, attempt_id: 0 };
+    return { name: 'LibreChat Agent', state: 'error', message: '未設定 — LibreChatでAgentを作成してください', ownership: null, attempt_id: 0 };
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw e;
+    // Do not treat transient fetch failure as permanent error; keep checking so next poll retries
+    // But if we have a 401/403 it would surface via /api/health; agent probe timeout is treated as checking
+    return { name: 'LibreChat Agent', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 };
+  }
+}
+
 async function pollRuntime() {
   if (runtimePolling) return;
   runtimePolling = true;
   if (runtimeAbort) runtimeAbort.abort();
   const controller = new AbortController();
   runtimeAbort = controller;
+  let pollSucceeded = false;
   try {
     const invoke = getTauriInvoke();
-    let statuses = null;
+    let base = null;
     if (invoke) {
       try {
-        statuses = await invoke('runtime_status');
-        // Basic check: must be array of 3 with no secrets
-        if (Array.isArray(statuses)) {
-          // never expose key
-          const hasSecret = JSON.stringify(statuses).toLowerCase().includes('sk-') || JSON.stringify(statuses).toLowerCase().includes('bearer');
+        base = await invoke('runtime_status');
+        if (Array.isArray(base)) {
+          const hasSecret = JSON.stringify(base).toLowerCase().includes('sk-') || JSON.stringify(base).toLowerCase().includes('bearer');
           if (hasSecret) throw new Error('secret leaked');
         }
       } catch (e) {
-        // fallback to HTTP for MultiContext health if Tauri fails
         if (controller.signal.aborted) return;
-        throw e;
+        // Tauri failure: fallback to HTTP below
+        base = null;
       }
     }
-    if (!statuses) {
-      // Browser/non-Tauri fallback: use /api/health
+    if (!base) {
+      // Browser / fallback path: derive from /api/health
       const health = await request('/api/health', { signal: controller.signal });
       const mcState = health.ok ? 'ready' : 'error';
       const mcMsg = health.ok ? '準備完了' : (health.librechat && !health.librechat.ok ? 'LibreChat 接続を確認してください' : 'MultiContext が利用できません');
-      statuses = [
-        { name: 'GPT-OSS', state: mcState, message: mcMsg, ownership: null, attempt_id: 0 },
-        { name: 'LibreChat', state: health.librechat && health.librechat.ok ? 'ready' : 'error', message: health.librechat && health.librechat.ok ? '接続済み' : '接続を確認', ownership: null, attempt_id: 0 },
+      const lcState = health.librechat && health.librechat.ok ? 'ready' : 'error';
+      const lcMsg = health.librechat && health.librechat.ok ? '接続済み' : 'LibreChat 接続を確認';
+      // GPT-OSS: if health.ok but LibreChat failure, GPT-OSS should remain ready individually — derive from librechat health only for MC
+      // For browser fallback, assume GPT-OSS ready if LibreChat reachable (cannot probe model directly)
+      const modelState = health.ok || lcState === 'ready' ? 'ready' : 'checking';
+      const modelMsg = modelState === 'ready' ? '準備完了' : '確認中...';
+      base = [
+        { name: 'モデル', state: modelState, message: modelMsg, ownership: null, attempt_id: 0 },
+        { name: 'LibreChat', state: lcState, message: lcMsg, ownership: null, attempt_id: 0 },
         { name: 'MultiContext', state: mcState, message: mcMsg, ownership: null, attempt_id: 0 },
       ];
-      // Hide model detail if not Tauri (ownership unavailable)
-      // Keep 3 entries for aggregate but degrade gracefully
     }
     if (controller.signal.aborted) return;
+    // Always attempt to resolve agent availability as 4th row — never conflated with service health
+    const agentEntry = await fetchAgentRuntimeEntry(controller.signal);
+    if (controller.signal.aborted) return;
+    const statuses = [...base, agentEntry];
     runtimeStatuses = statuses;
     try { sessionStorage.setItem('multicontext_runtime', JSON.stringify(statuses)); } catch {}
     renderRuntime(statuses);
+    pollSucceeded = true;
   } catch (e) {
-    if (e.name === 'AbortError') return;
-    // On network failure, keep last known statuses, don't crash
+    if (e && e.name === 'AbortError') return;
     console.warn('runtime poll failed', e);
+    // If we have never succeeded, synthesize a converging failure state so UI does not stay forever "確認中"
+    if (!runtimeStatuses || !runtimeStatuses.length) {
+      const fallback = [
+        { name: 'モデル', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 },
+        { name: 'LibreChat', state: 'error', message: 'LibreChat に接続できません', ownership: null, attempt_id: 0 },
+        { name: 'MultiContext', state: 'error', message: '確認できません', ownership: null, attempt_id: 0 },
+        { name: 'LibreChat Agent', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 },
+      ];
+      runtimeStatuses = fallback;
+      renderRuntime(fallback);
+    }
+    // pollSucceeded stays false → faster retry
   } finally {
     runtimePolling = false;
     if (runtimeAbort === controller) runtimeAbort = null;
-    scheduleRuntimePoll();
+    scheduleRuntimePoll(pollSucceeded ? 10000 : 3000);
   }
 }
 
-function scheduleRuntimePoll() {
+function scheduleRuntimePoll(delay = 10000) {
   clearTimeout(runtimePollTimer);
-  runtimePollTimer = setTimeout(pollRuntime, 10000);
+  runtimePollTimer = setTimeout(pollRuntime, delay);
 }
 
 function initRuntimeStatus() {
@@ -203,7 +257,7 @@ function initRuntimeStatus() {
     const raw = sessionStorage.getItem('multicontext_runtime');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length === 3) {
+      if (Array.isArray(parsed) && parsed.length >= 3) {
         runtimeStatuses = parsed;
         renderRuntime(parsed);
       }
@@ -213,7 +267,7 @@ function initRuntimeStatus() {
   const invoke = getTauriInvoke();
   if (invoke) {
     invoke('get_services').then((cached) => {
-      if (Array.isArray(cached) && cached.length === 3) {
+      if (Array.isArray(cached) && cached.length >= 3) {
         // Only use if we have no runtime yet or cached is more recent (has attempt_id)
         const hasRecent = cached.some(s => s.state === 'ready');
         if (hasRecent && !runtimeStatuses.length) {
@@ -495,7 +549,22 @@ function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, 1200); }
 
 function memberCard(workspace, member) {
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
-  const agentLabel = member.agentId || '未設定';
+  const effectiveAgentId = String(member.agentId || workspace.defaultAgentId || '').trim();
+  const agentLabel = (() => {
+    if (member.agentId) return agentNameForId(member.agentId) || member.agentId;
+    if (workspace.defaultAgentId) return `${agentNameForId(workspace.defaultAgentId) || workspace.defaultAgentId}（既定）`;
+    if (agents.length) return `${agentNameForId(agents[0].id) || agents[0].id}（自動）`;
+    return '未設定';
+  })();
+  const agentTitle = member.agentId ? `個別: ${member.agentId}` : workspace.defaultAgentId ? `ワークスペース既定: ${workspace.defaultAgentId}` : agents.length ? `自動: ${agents[0].id}` : '未設定';
+  // Japanese error normalization for display
+  const displayError = (() => {
+    if (!member.lastError) return '';
+    const m = String(member.lastError);
+    if (m.includes('LibreChat agentId is required')) return '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
+    if (m.includes('利用可能なLibreChat Agent')) return m;
+    return m;
+  })();
   return `
     <article class="member" data-mid="${member.id}">
       <div class="member-header">
@@ -511,12 +580,12 @@ function memberCard(workspace, member) {
         </div>
       </div>
       <div class="member-meta">
-        <span>エージェント: <strong>${esc(agentLabel)}</strong></span>
+        <span title="${esc(agentTitle)}">エージェント: <strong>${esc(agentLabel)}</strong></span>
         <span class="sep">·</span>
         ${queueInfo(member)}
         ${member.active === false ? '<span class="sep">·</span><span style="color:var(--text-muted)">無効</span>' : ''}
       </div>
-      ${member.lastError ? `<div class="member-error" role="alert">${esc(member.lastError)}</div>` : ''}
+      ${displayError ? `<div class="member-error" role="alert">${esc(displayError)}</div>` : ''}
       <div class="member-body">
         <div class="dev-prompt">
           <div class="dev-prompt-label">Developer Prompt <span class="scope-note">— このチャットのみ</span></div>
@@ -525,7 +594,7 @@ function memberCard(workspace, member) {
         <div class="member-editor${editorOpen}">
           <div class="editor-row">
             <label>名前 <input name="name" value="${esc(member.name)}" autocomplete="off"></label>
-            <label>エージェントID <input name="agentId" list="agentOptions" value="${esc(member.agentId)}" placeholder="agent_..."></label>
+            <label>エージェント <select name="agentId">${agentOptionsHtml(member.agentId, true)}</select></label>
           </div>
           <label>Developer Prompt<textarea name="developerPrompt" placeholder="このチャットのみに適用される developer role の指示">${esc(member.developerPrompt)}</textarea></label>
           <div class="editor-row">
@@ -596,6 +665,9 @@ async function refresh(expectedId = currentId) {
           <label for="globalPrompt" class="field-label">共有 System Prompt <span class="scope-note">— 全チャットに system role として適用</span></label>
           <textarea id="globalPrompt" placeholder="全チャット共通の system 指示を入力（例: あなたは簡潔に答えるアシスタントです）" aria-label="共有 System Prompt">${esc(workspace.globalPrompt)}</textarea>
           <div class="hint">指示階層: System Prompt（共有） → Developer Prompt（チャット固有） → user（Broadcast / Direct）。nativeはLibreChat会話を継続、compatはローカル履歴を再生。 · <span class="small">${activeMembers.length}件アクティブ / 全${members.length}件</span></div>
+          <label for="defaultAgentId" class="field-label" style="margin-top:8px">既定エージェント <span class="scope-note">— 新しいチャットや「ワークスペース既定を使用」の解決先</span></label>
+          <select id="defaultAgentId" aria-label="既定エージェント">${agentOptionsHtml(workspace.defaultAgentId, false)}</select>
+          ${agents.length ? '' : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
         </div>
       </div>
 
@@ -663,6 +735,7 @@ function wire(workspace) {
     globalPrompt: String(workspace.globalPrompt || ''),
     compileAgentId: String(workspace.compileAgentId || ''),
     compilePrompt: String(workspace.compilePrompt || ''),
+    defaultAgentId: String(workspace.defaultAgentId || ''),
   };
   function updateDirty() {
     const cur = {
@@ -670,8 +743,9 @@ function wire(workspace) {
       globalPrompt: $('#globalPrompt')?.value ?? '',
       compileAgentId: $('#compileAgentId')?.value ?? '',
       compilePrompt: $('#compilePrompt')?.value ?? '',
+      defaultAgentId: $('#defaultAgentId')?.value ?? '',
     };
-    const dirty = cur.wname !== serverVals.wname || cur.globalPrompt !== serverVals.globalPrompt || cur.compileAgentId !== serverVals.compileAgentId || cur.compilePrompt !== serverVals.compilePrompt;
+    const dirty = cur.wname !== serverVals.wname || cur.globalPrompt !== serverVals.globalPrompt || cur.compileAgentId !== serverVals.compileAgentId || cur.compilePrompt !== serverVals.compilePrompt || cur.defaultAgentId !== serverVals.defaultAgentId;
     if (saveBtn) {
       saveBtn.textContent = dirty ? 'ワークスペース設定を保存 · 未保存' : 'ワークスペース設定を保存';
       saveBtn.classList.toggle('needs-save', dirty);
@@ -679,9 +753,12 @@ function wire(workspace) {
     }
     return dirty;
   }
-  ['wname','globalPrompt','compileAgentId','compilePrompt'].forEach((id) => {
+  ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId'].forEach((id) => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener('input', updateDirty);
+    if (el) {
+      const ev = el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(ev, updateDirty);
+    }
   });
   updateDirty();
   setTimeout(updateDirty, 60);
@@ -696,6 +773,7 @@ function wire(workspace) {
           globalPrompt: $('#globalPrompt').value,
           compileAgentId: $('#compileAgentId').value,
           compilePrompt: $('#compilePrompt').value,
+          defaultAgentId: $('#defaultAgentId')?.value || '',
         }),
       });
       await refreshList();

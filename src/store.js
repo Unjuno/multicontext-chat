@@ -29,6 +29,7 @@ export class StateStore {
     this.state.version = 2;
     for (const workspace of Object.values(this.state.workspaces)) {
       workspace.compilePrompt ??= defaultCompilePrompt();
+      workspace.defaultAgentId ??= '';
       workspace.settings ??= {};
       workspace.settings.allowCrossChatInspect ??= true;
       workspace.settings.allowCrossChatSend ??= true;
@@ -84,6 +85,7 @@ export class StateStore {
     const workspace = {
       id, name: String(input.name || 'MultiContext Workspace'), globalPrompt: String(input.globalPrompt || ''),
       compileAgentId: String(input.compileAgentId || ''), compilePrompt: String(input.compilePrompt || defaultCompilePrompt()),
+      defaultAgentId: String(input.defaultAgentId || ''),
       settings: { allowCrossChatInspect: input.settings?.allowCrossChatInspect !== false, allowCrossChatSend: input.settings?.allowCrossChatSend !== false },
       members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
       stats: { broadcasts: 0, executions: 0, toolEnqueues: 0, inspections: 0 },
@@ -97,6 +99,7 @@ export class StateStore {
     if (patch.globalPrompt !== undefined) workspace.globalPrompt = String(patch.globalPrompt);
     if (patch.compileAgentId !== undefined) workspace.compileAgentId = String(patch.compileAgentId);
     if (patch.compilePrompt !== undefined) workspace.compilePrompt = String(patch.compilePrompt);
+    if (patch.defaultAgentId !== undefined) workspace.defaultAgentId = String(patch.defaultAgentId);
     if (patch.settings) {
       if (patch.settings.allowCrossChatInspect !== undefined) workspace.settings.allowCrossChatInspect = Boolean(patch.settings.allowCrossChatInspect);
       if (patch.settings.allowCrossChatSend !== undefined) workspace.settings.allowCrossChatSend = Boolean(patch.settings.allowCrossChatSend);
@@ -142,6 +145,18 @@ export class StateStore {
     if (!member) throw problem('Target member not found', 404);
     if (activeOnly && !member.active) throw problem('Target member is inactive', 409);
     return member;
+  }
+
+  effectiveAgentId(workspaceId, memberId) {
+    const workspace = this.requireWorkspace(workspaceId);
+    const member = workspace.members[memberId];
+    if (!member) throw problem('Member not found', 404);
+    return String(member.agentId || workspace.defaultAgentId || '').trim();
+  }
+
+  effectiveAgentForWorkspace(workspaceId, fallbackAgentId = '') {
+    const workspace = this.requireWorkspace(workspaceId);
+    return String(workspace.defaultAgentId || fallbackAgentId || '').trim();
   }
 
   enqueue(workspaceId, memberId, prompt, metadata = {}) {
