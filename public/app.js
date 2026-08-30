@@ -18,12 +18,16 @@ function agentOptionsHtml(selectedId, includeDefault) {
     const defLabel = 'ワークスペース既定を使用';
     opts.push(`<option value="" ${!selectedId ? 'selected' : ''}>${esc(defLabel)}</option>`);
   } else {
-    opts.push(`<option value="" ${!selectedId ? 'selected' : ''}>未設定 (自動)</option>`);
+    const label = agents.length > 1 ? '未設定 — 選択してください' : '未設定 (自動)';
+    opts.push(`<option value="" ${!selectedId ? 'selected' : ''}>${esc(label)}</option>`);
   }
   for (const a of agents) {
     const sel = String(a.id) === String(selectedId) ? 'selected' : '';
     const label = `${esc(a.name || a.id)}${a.provider ? ` · ${esc(a.provider)}` : ''}`;
     opts.push(`<option value="${esc(a.id)}" ${sel}>${label}</option>`);
+  }
+  if (selectedId && !agents.some(a => String(a.id) === String(selectedId))) {
+    opts.push(`<option value="${esc(selectedId)}" selected>利用不可: ${esc(selectedId)}</option>`);
   }
   return opts.join('');
 }
@@ -562,19 +566,33 @@ function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, 1200); }
 function memberCard(workspace, member) {
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
   const effectiveAgentId = String(member.agentId || workspace.defaultAgentId || '').trim();
+  const isStaleMember = member.agentId && !agents.some(a => String(a.id) === String(member.agentId));
+  const isStaleWorkspace = workspace.defaultAgentId && !agents.some(a => String(a.id) === String(workspace.defaultAgentId));
   const agentLabel = (() => {
-    if (member.agentId) return agentNameForId(member.agentId) || member.agentId;
-    if (workspace.defaultAgentId) return `${agentNameForId(workspace.defaultAgentId) || workspace.defaultAgentId}（既定）`;
-    if (agents.length) return `${agentNameForId(agents[0].id) || agents[0].id}（自動）`;
+    if (member.agentId) {
+      if (isStaleMember) return `利用不可: ${esc(member.agentId)}`;
+      return agentNameForId(member.agentId) || member.agentId;
+    }
+    if (workspace.defaultAgentId) {
+      if (isStaleWorkspace) return `利用不可: ${esc(workspace.defaultAgentId)}（既定）`;
+      return `${agentNameForId(workspace.defaultAgentId) || workspace.defaultAgentId}（既定）`;
+    }
+    if (agents.length === 1) return `${agentNameForId(agents[0].id) || agents[0].id}（自動）`;
+    if (agents.length > 1) return '未設定 — 選択してください';
     return '未設定';
   })();
-  const agentTitle = member.agentId ? `個別: ${member.agentId}` : workspace.defaultAgentId ? `ワークスペース既定: ${workspace.defaultAgentId}` : agents.length ? `自動: ${agents[0].id}` : '未設定';
+  const agentTitle = (() => {
+    if (member.agentId) return isStaleMember ? `利用不可: ${member.agentId}` : `個別: ${member.agentId}`;
+    if (workspace.defaultAgentId) return isStaleWorkspace ? `利用不可: ${workspace.defaultAgentId}` : `ワークスペース既定: ${workspace.defaultAgentId}`;
+    if (agents.length === 1) return `自動: ${agents[0].id}`;
+    if (agents.length > 1) return '未設定 — 選択してください';
+    return '未設定';
+  })();
   // Japanese error normalization for display
   const displayError = (() => {
     if (!member.lastError) return '';
     const m = String(member.lastError);
     if (m.includes('LibreChat agentId is required')) return '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
-    if (m.includes('利用可能なLibreChat Agent')) return m;
     return m;
   })();
   return `
@@ -691,7 +709,7 @@ async function refresh(expectedId = currentId) {
         </div>
         <button class="primary" id="broadcast" ${canBroadcast ? '' : 'disabled'} title="${canBroadcast ? '全アクティブチャットに送信' : 'アクティブなチャットがありません'}" aria-label="全アクティブチャットに送信">${canBroadcast ? '全アクティブチャットに送信' : '送信'}</button>
       </div>
-      ${canBroadcast ? '' : '<div class="composer-hint">ヒント: 「+ チャット」でチャットを追加し、エージェントIDを設定してください</div>'}
+      ${canBroadcast ? '' : '<div class="composer-hint">ヒント: 「+ チャット」でチャットを追加し、エージェントを選択してください</div>'}
 
       <div class="section-label">独立チャット <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${members.length}件</span></div>
       ${members.length
@@ -703,7 +721,7 @@ async function refresh(expectedId = currentId) {
         <div class="compile-head">
           <strong>Compile（手動）</strong>
           <div class="toolbar">
-            <label for="compileAgentId" class="small" style="display:flex; align-items:center; gap:4px">コンパイルエージェント<input id="compileAgentId" list="agentOptions" placeholder="空=最初のアクティブ" value="${esc(workspace.compileAgentId || '')}" aria-label="コンパイルエージェント"></label>
+            <label for="compileAgentId" class="small" style="display:flex; align-items:center; gap:4px">コンパイルエージェント<select id="compileAgentId" aria-label="コンパイルエージェント">${agentOptionsHtml(workspace.compileAgentId, true)}</select></label>
             <button id="compile" class="sm" ${compileDisabled ? 'disabled' : ''} title="${esc(compileHint)}">コンパイルを実行</button>
           </div>
         </div>

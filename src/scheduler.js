@@ -28,20 +28,36 @@ export class Scheduler {
         const workspace = this.store.getWorkspace(workspaceId); const current = this.store.getMember(workspaceId, memberId);
         if (!workspace || !current || controller.signal.aborted) break;
         let effectiveAgentId = String(current.agentId || workspace.defaultAgentId || '').trim();
+        let availableAgents = null;
         if (!effectiveAgentId) {
           try {
             const agents = await this.client.listAgents();
-            if (agents && agents.length) {
-              agents.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+            availableAgents = agents;
+            if (agents && agents.length === 1) {
               effectiveAgentId = String(agents[0].id || '');
               if (effectiveAgentId && !workspace.defaultAgentId) {
                 try { this.store.updateWorkspace(workspaceId, { defaultAgentId: effectiveAgentId }); } catch {}
               }
+            } else if (agents && agents.length > 1) {
+              effectiveAgentId = '';
             }
           } catch {}
         }
         if (!effectiveAgentId) {
+          const agents = availableAgents ?? await this.client.listAgents().catch(() => []);
+          if (!agents || agents.length === 0) throw new Error('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。');
+          if (agents.length > 1) throw new Error('複数のLibreChat Agentがあります。ワークスペースの既定エージェントを選択してください。');
           throw new Error('利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。');
+        }
+        if (availableAgents === null) {
+          try { availableAgents = await this.client.listAgents(); } catch { availableAgents = []; }
+        }
+        if (availableAgents && availableAgents.length && !availableAgents.some(a => String(a.id) === effectiveAgentId)) {
+          if (current.agentId && String(current.agentId) === effectiveAgentId) {
+            throw new Error('このチャットに設定されたエージェントがLibreChatに存在しません。エージェントを選び直すか、ワークスペース既定を使用してください。');
+          } else {
+            throw new Error('設定されている既定エージェントがLibreChatに存在しません。エージェントを選び直してください。');
+          }
         }
         // Map known English errors to Japanese
         const japMap = (msg) => {
@@ -68,7 +84,7 @@ export class Scheduler {
       } catch (error) {
         if (!this.store.getMember(workspaceId, memberId)) break;
         const msg = String(error?.message || String(error));
-        const isConfigError = msg.includes('利用可能なLibreChat Agent') || msg.includes('LibreChat接続キー');
+        const isConfigError = msg.includes('利用可能なLibreChat Agent') || msg.includes('複数のLibreChat') || msg.includes('存在しません') || msg.includes('LibreChat接続キー') || msg.includes('Agentが') || msg.includes('エージェント');
         if (controller.signal.aborted) this.store.failRun(workspaceId, memberId, item.id, 'Stopped by user', { requeue: false });
         else this.store.failRun(workspaceId, memberId, item.id, msg, { requeue: !isConfigError });
         break;
