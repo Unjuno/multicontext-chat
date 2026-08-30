@@ -191,11 +191,22 @@ UI: `ログを表示` -> `open_logs_dir` (Finder) or `get_logs` (in-app).
 - **Blank window:** Check logs, ensure `public/desktop-startup.html` exists and `frontendDist` is `../public`.
 - **Infinite spinner:** Startup uses bounded retries (15 × 2s = 30s) with real `reqwest` health checks, not fixed sleep.
 
+## 外部連携 — MCP Server
+
+Desktop Settings → **外部連携 — MCP Server**:
+
+- `[✓] 有効` toggles `mcp_enabled` in `config.json` (default true). When enabled, Desktop auto-generates a 64-char hex `multicontext_mcp_token` in Keychain (`com.unjuno.multicontext`) on first enable if missing.
+- `MCP Server [有効|無効|要設定]` badge, `Endpoint` label (`http://127.0.0.1:<port>/mcp`).
+- Buttons: `OpenCode設定をコピー` (calls `get_opencode_config` → clipboard `opencode.json` remote entry with `Authorization: Bearer <token>`), `接続情報をコピー`, `トークンを再生成`, `無効化`.
+- The `mcp` row in AI Stack detail (`MCP ● 有効/無効`) is optional and does **not** affect aggregate `AI Stack ● 準備完了/要確認`.
+
+The token is never shown persistently and never returned from `/api/mcp/status` or `runtime_status`; `get_opencode_config` returns it only for explicit clipboard copy. Logs redact `mcp_token` etc. See `docs/MCP.md`.
+
 ## Security
 
-- No API keys stored in `config.json` or `localStorage`. LibreChat owns provider credentials.
-- Logs redact `sk-`, `bearer`, `token`, `password`, `api_key`.
-- `MULTICONTEXT_PUBLIC_URL` origin handling unchanged (no broad Host trust).
+- No API keys stored in `config.json` or `localStorage`. LibreChat owns provider credentials. MCP token is stored in Keychain (`multicontext_mcp_token`), never in config.json.
+- Logs redact `sk-`, `bearer`, `token`, `password`, `api_key`, `mcp_token`, `multicontext_mcp`.
+- `MULTICONTEXT_PUBLIC_URL` origin handling unchanged (no broad Host trust). MCP binds to loopback by default; `Host`/`Origin` validation via `@modelcontextprotocol/node` guards.
 
 ## Window
 

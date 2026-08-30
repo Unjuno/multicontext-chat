@@ -54,6 +54,12 @@ pub struct DesktopConfig {
     #[serde(default = "default_false")]
     pub manage_model: bool,
     pub node_path: Option<String>,
+    #[serde(default = "default_true")]
+    pub mcp_enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for DesktopConfig {
@@ -69,6 +75,7 @@ impl Default for DesktopConfig {
             manage_librechat: true,
             manage_model: true,
             node_path: None,
+            mcp_enabled: true,
         }
     }
 }

@@ -304,7 +304,7 @@ fn get_logs(app: tauri::AppHandle) -> String {
                         .lines()
                         .map(|l| {
                             let low = l.to_lowercase();
-                            if low.contains("sk-") || low.contains("bearer") || low.contains("api_key") {
+                            if low.contains("sk-") || low.contains("bearer") || low.contains("api_key") || low.contains("mcp_token") || low.contains("multicontext_mcp") {
                                 "[REDACTED LINE]".to_string()
                             } else {
                                 l.to_string()
@@ -463,6 +463,24 @@ fn start_multicontext(
             }
         }
     }
+    // MCP control token: generate on first enable, inject into child
+    if cfg.mcp_enabled {
+        let token = keychain::get_mcp_token();
+        let token = match token {
+            Some(t) if !t.is_empty() => Some(t),
+            _ => {
+                let gen = keychain::generate_mcp_token();
+                let _ = keychain::set_mcp_token(&gen);
+                Some(gen)
+            }
+        };
+        if let Some(t) = token {
+            envs.insert("MULTICONTEXT_MCP_TOKEN".into(), t);
+        }
+        envs.insert("MULTICONTEXT_MCP_ENABLED".into(), "true".into());
+    } else {
+        envs.insert("MULTICONTEXT_MCP_ENABLED".into(), "false".into());
+    }
     if let Some(parent) = PathBuf::from(node).parent() {
         let existing = std::env::var("PATH").unwrap_or_default();
         envs.insert("PATH".into(), format!("{}:{}", parent.display(), existing));
@@ -510,6 +528,84 @@ async fn connection_status(state: tauri::State<'_, AppState>) -> Result<Connecti
         }
     };
     Ok(status)
+}
+
+#[derive(serde::Serialize)]
+pub struct McpStatus {
+    pub enabled: bool,
+    pub has_token: bool,
+    pub endpoint: String,
+}
+
+#[tauri::command]
+fn get_mcp_status(state: tauri::State<AppState>) -> McpStatus {
+    let cfg = state.config.lock().unwrap().clone();
+    let endpoint = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
+    McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint }
+}
+
+#[tauri::command]
+fn set_mcp_enabled(state: tauri::State<AppState>, app: tauri::AppHandle, enabled: bool) -> Result<McpStatus, String> {
+    let mut cfg = state.config.lock().unwrap().clone();
+    cfg.mcp_enabled = enabled;
+    // Persist
+    let path = config_path(&app);
+    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    *state.config.lock().unwrap() = cfg.clone();
+    // If enabling and no token, generate one
+    if enabled && !keychain::has_mcp_token() {
+        let tok = keychain::generate_mcp_token();
+        let _ = keychain::set_mcp_token(&tok);
+    }
+    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port) })
+}
+
+#[tauri::command]
+fn generate_mcp_token() -> Result<String, String> {
+    let tok = keychain::generate_mcp_token();
+    keychain::set_mcp_token(&tok)?;
+    Ok(tok)
+}
+
+#[tauri::command]
+fn get_mcp_token() -> Result<String, String> {
+    keychain::get_mcp_token().ok_or_else(|| "MCPトークンが設定されていません".to_string())
+}
+
+#[tauri::command]
+fn delete_mcp_token() -> Result<(), String> {
+    keychain::delete_mcp_token()
+}
+
+#[tauri::command]
+fn get_opencode_config(state: tauri::State<AppState>) -> Result<String, String> {
+    let cfg = state.config.lock().unwrap().clone();
+    let token = keychain::get_mcp_token().unwrap_or_default();
+    if token.is_empty() { return Err("MCPトークンが未設定です。先に有効化してトークンを生成してください。".to_string()); }
+    let endpoint = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
+    // OpenCode remote MCP format as per 2025-12 docs
+    let json = serde_json::json!({
+        "$schema": "https://opencode.ai/config.json",
+        "mcp": {
+            "multicontext": {
+                "type": "remote",
+                "url": endpoint,
+                "enabled": true,
+                "headers": {
+                    "Authorization": format!("Bearer {}", token)
+                }
+            }
+        }
+    });
+    Ok(serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?)
+}
+
+#[tauri::command]
+fn get_mcp_endpoint(state: tauri::State<AppState>) -> String {
+    let cfg = state.config.lock().unwrap().clone();
+    format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port)
 }
 
 /// Build a concise, user-facing error message for the not-ready MultiContext
@@ -770,6 +866,13 @@ fn main() {
             frontend_ready,
             startup,
             connection_status,
+            get_mcp_status,
+            set_mcp_enabled,
+            generate_mcp_token,
+            get_mcp_token,
+            delete_mcp_token,
+            get_opencode_config,
+            get_mcp_endpoint,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

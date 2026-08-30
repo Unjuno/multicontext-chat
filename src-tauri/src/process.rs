@@ -17,7 +17,7 @@ impl Managed {
 /// Redact secrets from a command string for logging.
 pub fn redact(cmd: &str) -> String {
     let lowered = cmd.to_lowercase();
-    for key in ["sk-", "bearer ", "token=", "password", "api_key", "authorization"] {
+    for key in ["sk-", "bearer ", "token=", "password", "api_key", "authorization", "mcp_token", "multicontext_mcp"] {
         if lowered.contains(key) {
             return "[REDACTED COMMAND]".to_string();
         }

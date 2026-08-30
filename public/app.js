@@ -169,9 +169,18 @@ async function fetchAgentRuntimeEntry(signal) {
     return { name: 'LibreChat Agent', state: 'error', message: '未設定 — LibreChatでAgentを作成してください', ownership: null, attempt_id: 0 };
   } catch (e) {
     if (e && e.name === 'AbortError') throw e;
-    // Do not treat transient fetch failure as permanent error; keep checking so next poll retries
-    // But if we have a 401/403 it would surface via /api/health; agent probe timeout is treated as checking
     return { name: 'LibreChat Agent', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 };
+  }
+}
+async function fetchMcpRuntimeEntry(signal) {
+  try {
+    const data = await request('/api/mcp/status', { signal });
+    if (!data.enabled) return { name: 'MCP', state: 'needs_setup', message: '無効', ownership: null, attempt_id: 0 };
+    if (data.tokenConfigured) return { name: 'MCP', state: 'ready', message: '有効', ownership: null, attempt_id: 0 };
+    return { name: 'MCP', state: 'checking', message: '要設定', ownership: null, attempt_id: 0 };
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw e;
+    return { name: 'MCP', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 };
   }
 }
 
@@ -219,7 +228,9 @@ async function pollRuntime() {
     // Always attempt to resolve agent availability as 4th row — never conflated with service health
     const agentEntry = await fetchAgentRuntimeEntry(controller.signal);
     if (controller.signal.aborted) return;
-    const statuses = [...base, agentEntry];
+    const mcpEntry = await fetchMcpRuntimeEntry(controller.signal);
+    if (controller.signal.aborted) return;
+    const statuses = [...base, agentEntry, mcpEntry];
     runtimeStatuses = statuses;
     try { sessionStorage.setItem('multicontext_runtime', JSON.stringify(statuses)); } catch {}
     renderRuntime(statuses);
@@ -234,6 +245,7 @@ async function pollRuntime() {
         { name: 'LibreChat', state: 'error', message: 'LibreChat に接続できません', ownership: null, attempt_id: 0 },
         { name: 'MultiContext', state: 'error', message: '確認できません', ownership: null, attempt_id: 0 },
         { name: 'LibreChat Agent', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 },
+        { name: 'MCP', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 },
       ];
       runtimeStatuses = fallback;
       renderRuntime(fallback);

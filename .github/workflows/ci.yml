@@ -13,3 +13,19 @@ jobs:
         with:
           node-version: '22'
       - run: npm run check
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+  # Optional macOS build check (Tauri desktop compilation) — runs cargo check on macOS to catch Apple-specific issues
+  desktop-check-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --manifest-path src-tauri/Cargo.toml

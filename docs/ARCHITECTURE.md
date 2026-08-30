@@ -12,6 +12,21 @@ MultiContext Chat is a thin orchestration layer over LibreChat Agents.
 - `SETTLED` means no active or blocked work remains. It does not assert semantic agreement.
 - Compile is manual and never writes its output into member histories.
 
+## External Control MCP (B)
+
+MultiContext itself is an MCP server for external clients (OpenCode etc.):
+
+```
+External MCP client → Streamable HTTP /mcp → src/mcp/handler.js → src/application.js → StateStore/Scheduler/LibreChatClient → LibreChat → GPT-OSS
+```
+
+`src/application.js` is the single source of truth for workspace state, agent resolution, broadcast/direct validation, compile gating, and cross-chat semantics. Both `src/server.js` (REST) and `src/mcp/*` (MCP) are thin adapters that call it. This avoids duplicated orchestration logic and guarantees REST and MCP behave consistently.
+
+- Agent resolution: `member.agentId ?? workspace.defaultAgentId ?? (single available ? that : AGENT_SELECTION_REQUIRED)`, validated against live discovery; stale IDs surface `AGENT_NOT_AVAILABLE`.
+- Compile: `compileAgentId ?? workspace.defaultAgentId ?? singleAgent ?? error`.
+- Cross-chat `send-to-chat` validates all targets before any enqueue.
+- `wait_until_settled` polls mechanical `runtimeState`, bounded 1-300s, no mutation.
+
 ## Runtime states
 
 `RUNNING` means at least one active generation. `PENDING` means queued work is ready to run. `BLOCKED` means a member failed and has a queued turn waiting for explicit Retry. `SETTLED` means active members have no current work, queue, or error.

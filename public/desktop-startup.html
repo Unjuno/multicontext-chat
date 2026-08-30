@@ -182,6 +182,26 @@
           <div class="hint" id="apiKeyHint"></div>
         </div>
 
+        <div class="field" id="mcpField">
+          <label>外部連携 — MCP Server</label>
+          <div class="toggle">
+            <input type="checkbox" id="mcpEnabled" />
+            <label style="margin:0">MCP Serverを有効にする（外部からMultiContextを操作）</label>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <span id="mcpStatus" class="conn-badge">確認中...</span>
+            <span id="mcpEndpoint" class="small" style="font-family:monospace; overflow:hidden; text-overflow:ellipsis"></span>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="copyMcpConfig">OpenCode設定をコピー</button>
+            <button id="copyMcpEndpoint">接続情報をコピー</button>
+            <button id="regenMcpToken" class="destructive">トークンを再生成</button>
+            <button id="disableMcp">無効化</button>
+          </div>
+          <div class="hint">外部の OpenCode / Cursor / Claude Code から MultiContext を操作するエンドポイントです。トークンは macOS Keychain に保存され、設定ファイルには保存されません。</div>
+          <div class="hint" id="mcpHint"></div>
+        </div>
+
         <details class="adv">
           <summary>詳細設定</summary>
           <div class="field">
@@ -369,6 +389,31 @@
         }
       }
 
+      async function refreshMcpState() {
+        const badge = document.getElementById("mcpStatus");
+        const endpointEl = document.getElementById("mcpEndpoint");
+        const hint = document.getElementById("mcpHint");
+        const chk = document.getElementById("mcpEnabled");
+        if (!badge) return;
+        if (!invoke) {
+          badge.textContent = "無効";
+          badge.className = "conn-badge";
+          if (endpointEl) endpointEl.textContent = "";
+          return;
+        }
+        try {
+          const st = await invoke("get_mcp_status");
+          badge.textContent = st.enabled ? (st.has_token ? "利用可能" : "要設定") : "無効";
+          badge.className = "conn-badge" + (st.enabled && st.has_token ? " ok" : st.enabled ? " err" : "");
+          if (endpointEl) endpointEl.textContent = st.endpoint;
+          if (hint) hint.textContent = st.enabled ? (st.has_token ? "トークンはKeychainに保存済みです。" : "トークンを生成してください。") : "外部連携は無効です。";
+          if (chk) chk.checked = !!st.enabled;
+        } catch (_) {
+          badge.textContent = "確認中...";
+          badge.className = "conn-badge";
+        }
+      }
+
       async function openSettings() {
         const c = state.config || {};
         document.getElementById("manageLibrechat").checked = !!c.manage_librechat;
@@ -392,6 +437,7 @@
           document.getElementById("apiKeyHint").textContent = "";
         }
         await refreshConnState();
+        await refreshMcpState();
         document.getElementById("modal").className = "modal open";
       }
       function closeSettings() {
@@ -409,6 +455,7 @@
           template_path: document.getElementById("templatePath").value.trim() || null,
           multicontext_port: parseInt(document.getElementById("port").value, 10) || 4317,
           node_path: document.getElementById("nodePath").value.trim() || null,
+          mcp_enabled: document.getElementById("mcpEnabled") ? document.getElementById("mcpEnabled").checked : true,
         };
       }
       async function saveAndMaybeStart(start) {
@@ -484,6 +531,32 @@
             "削除できません: " + (typeof e === "string" ? e : JSON.stringify(e));
         }
       };
+      // MCP external連携
+      document.getElementById("mcpEnabled")?.addEventListener("change", async (e) => {
+        try { await invoke("set_mcp_enabled", { enabled: e.target.checked }); await refreshMcpState(); } catch (err) { document.getElementById("mcpHint").textContent = String(err); }
+      });
+      document.getElementById("copyMcpConfig")?.addEventListener("click", async () => {
+        try {
+          const cfg = await invoke("get_opencode_config");
+          await navigator.clipboard.writeText(cfg);
+          document.getElementById("mcpHint").textContent = "OpenCode設定をコピーしました（opencode.json の mcp セクション）";
+          setTimeout(refreshMcpState, 1500);
+        } catch (e) { document.getElementById("mcpHint").textContent = "コピー失敗: " + (typeof e === "string" ? e : e.message || JSON.stringify(e)); }
+      });
+      document.getElementById("copyMcpEndpoint")?.addEventListener("click", async () => {
+        try {
+          const ep = await invoke("get_mcp_endpoint");
+          await navigator.clipboard.writeText(ep);
+          document.getElementById("mcpHint").textContent = "エンドポイントをコピーしました: " + ep;
+        } catch (e) { document.getElementById("mcpHint").textContent = String(e); }
+      });
+      document.getElementById("regenMcpToken")?.addEventListener("click", async () => {
+        if (!confirm("MCPトークンを再生成しますか？ 既存の外部連携は再設定が必要です。")) return;
+        try { await invoke("generate_mcp_token"); await refreshMcpState(); document.getElementById("mcpHint").textContent = "トークンを再生成しました。OpenCode設定を再コピーしてください。"; } catch (e) { document.getElementById("mcpHint").textContent = String(e); }
+      });
+      document.getElementById("disableMcp")?.addEventListener("click", async () => {
+        try { await invoke("set_mcp_enabled", { enabled: false }); await refreshMcpState(); document.getElementById("mcpHint").textContent = "MCPを無効化しました。"; } catch (e) { document.getElementById("mcpHint").textContent = String(e); }
+      });
 
       (async () => {
         if (!invoke) {

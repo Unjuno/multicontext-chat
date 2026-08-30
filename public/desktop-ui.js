@@ -97,6 +97,8 @@
     "MultiContext": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
     "LibreChat Agent": { ready: "利用可能", starting: "確認中", checking: "確認中", needs_setup: "未設定", error: "未設定" },
     "GPT-OSS": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
+    "MCP": { ready: "有効", starting: "確認中", checking: "確認中", needs_setup: "無効", error: "無効" },
+    "外部連携": { ready: "有効", starting: "確認中", checking: "確認中", needs_setup: "無効", error: "無効" },
   };
 
   function normalizeState(state) {
@@ -125,7 +127,8 @@
   }
 
   function aggregateStatus(statuses) {
-    const list = statuses || [];
+    // MCP external control is optional and must not affect aggregate readiness
+    const list = (statuses || []).filter(s => !String(s.name || '').toLowerCase().includes('mcp') && !String(s.name || '').includes('外部'));
     if (!list.length) return { label: "確認中", cls: "checking", text: "AI Stack ● 確認中" };
     const states = list.map((s) => normalizeState(s.state));
     if (states.every((s) => s === "ready")) return { label: "準備完了", cls: "ready", text: "AI Stack ● 準備完了" };

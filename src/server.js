@@ -7,6 +7,7 @@ import { StateStore, searchMemberMessages, publicMember } from './store.js';
 import { LibreChatClient } from './librechat.js';
 import { Scheduler } from './scheduler.js';
 import { buildActionSpec } from './openapi.js';
+import { createApplication } from './application.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = path.resolve(__dirname, '../public');
@@ -23,41 +24,19 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   client ??= new LibreChatClient({ baseUrl: config.librechatBaseUrl, apiKey: config.librechatApiKey, mode: config.librechatMode, timeoutMs: config.agentTimeoutMs });
   scheduler ??= new Scheduler({ store, client, maxHistoryMessages: config.maxHistoryMessages });
 
+  const app = createApplication({ config, store, client, scheduler });
   const authorized = (req) => !config.appToken || req.headers.authorization === `Bearer ${config.appToken}`;
   const toolAuthorized = (req) => !config.toolSecret || req.headers['x-multicontext-key'] === config.toolSecret;
-  const compilingWorkspaces = new Set();
-  let cachedDefaultAgentId = null;
-  let cachedDefaultAgentFetchedAt = 0;
-  async function getResolvedDefaultAgentId() {
-    const now = Date.now();
-    if (cachedDefaultAgentId && now - cachedDefaultAgentFetchedAt < 30000) return cachedDefaultAgentId;
-    try {
-      const agents = await client.listAgents();
-      if (agents && agents.length) {
-        agents.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
-        const chosen = String(agents[0].id || '');
-        if (chosen) {
-          cachedDefaultAgentId = chosen;
-          cachedDefaultAgentFetchedAt = now;
-          return chosen;
-        }
-      }
-    } catch {}
-    return '';
-  }
-  async function ensureWorkspaceDefaultAgent(workspaceId) {
-    const workspace = store.requireWorkspace(workspaceId);
-    if (workspace.defaultAgentId) return workspace.defaultAgentId;
-    const resolved = await getResolvedDefaultAgentId();
-    if (resolved) {
-      store.updateWorkspace(workspaceId, { defaultAgentId: resolved });
-      return resolved;
-    }
-    return '';
-  }
-  function effectiveAgentIdForMember(workspace, member) {
-    return String(member.agentId || workspace.defaultAgentId || '').trim();
-  }
+  const mcpAuthorized = (req) => {
+    if (!config.mcpEnabled) return false;
+    if (!config.mcpToken) return true; // if no token configured, allow (dev mode) but still check enabled
+    const auth = req.headers.authorization || '';
+    // Support Bearer token
+    if (auth === `Bearer ${config.mcpToken}`) return true;
+    // Also support X-MCP-Token header
+    if (req.headers['x-mcp-token'] === config.mcpToken) return true;
+    return false;
+  };
   const requestOrigin = (req) => {
     const proto = String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
     if (proto !== 'http' && proto !== 'https') return null;
@@ -67,138 +46,226 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   };
   const publicOrigin = (req) => config.publicUrl || requestOrigin(req) || `http://${config.host}:${config.port}`;
 
+  const enrichView = (view, req) => {
+    const origin = publicOrigin(req);
+    for (const [mid, m] of Object.entries(view.members || {})) {
+      if (!m.actionSpecUrl) m.actionSpecUrl = `${origin}/tools/${view.id}/${mid}/openapi.json`;
+    }
+    return view;
+  };
+  const getEnrichedWorkspace = async (id, req) => enrichView(await app.getWorkspace(id), req);
   const workspaceView = (id, req) => {
     const workspace = store.requireWorkspace(id); const runtimeState = store.runtimeState(id, scheduler.runningMemberIds(id));
     return { ...store.publicWorkspace(workspace, true), runtimeState, settled: runtimeState === 'SETTLED', runningMemberIds: [...scheduler.runningMemberIds(id)],
       members: Object.fromEntries(Object.entries(workspace.members).map(([mid, m]) => [mid, { ...publicMember(m), actionSpecUrl: `${publicOrigin(req)}/tools/${id}/${mid}/openapi.json` }])) };
   };
 
+  // MCP handler lazy import to avoid circular deps during tests
+  let mcpHandler = null;
+  let mcpFetch = null;
+  async function getMcpHandler() {
+    if (mcpHandler) return mcpHandler;
+    try {
+      const mod = await import('./mcp/handler.js');
+      const handler = mod.createMcpHandler({ config, store, client, scheduler, app });
+      mcpHandler = handler;
+      mcpFetch = handler.fetch;
+      return handler;
+    } catch (e) {
+      console.error('Failed to create MCP handler', e);
+      return null;
+    }
+  }
+
+  async function handleMcp(req, res, url) {
+    if (url.pathname !== '/mcp' && !url.pathname.startsWith('/mcp/')) return false;
+    // Bind locally by default - check host is loopback if config.host is loopback
+    // Do not expose externally by default; if config.host is 127.0.0.1, we still serve but origin validation will be done via handler
+    if (!config.mcpEnabled) {
+      json(res, 404, { error: 'MCP disabled', code: 'MCP_DISABLED' });
+      return true;
+    }
+    // Auth check
+    if (config.mcpToken && !mcpAuthorized(req)) {
+      json(res, 401, { error: 'MCP authentication required', code: 'AUTH_REQUIRED' });
+      return true;
+    }
+    const handler = await getMcpHandler();
+    if (!handler) { json(res, 500, { error: 'MCP handler not available' }); return true; }
+    // For Streamable HTTP, we need to handle POST /mcp
+    // The SDK handler expects a web Request; we convert Node req to Request
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = chunks.length ? Buffer.concat(chunks) : null;
+    const headers = new Headers();
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (Array.isArray(v)) headers.set(k, v.join(', '));
+      else if (v) headers.set(k, v);
+    }
+    // Ensure content-type
+    const reqUrl = `http://${req.headers.host || 'localhost'}${req.url}`;
+    const webReq = new Request(reqUrl, {
+      method: req.method,
+      headers,
+      body: req.method !== 'GET' && req.method !== 'HEAD' && body ? body : undefined,
+    });
+    try {
+      const resp = await handler.fetch(webReq, { authInfo: mcpAuthorized(req) ? { clientId: 'mcp-client', token: config.mcpToken } : undefined });
+      // Copy response to Node res
+      res.writeHead(resp.status, Object.fromEntries(resp.headers.entries()));
+      if (resp.body) {
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        res.end(buffer);
+      } else {
+        res.end();
+      }
+      return true;
+    } catch (e) {
+      console.error('MCP handler error', e);
+      if (!res.headersSent) json(res, 500, { error: e.message || 'MCP error' });
+      else res.end();
+      return true;
+    }
+  }
+
   async function api(req, res, url) {
     if (!authorized(req)) return json(res, 401, { error: 'Unauthorized' });
     const parts = url.pathname.split('/').filter(Boolean);
     if (url.pathname === '/api/health' && req.method === 'GET') { const librechat = await client.health(); return json(res, librechat.ok ? 200 : 503, { ok: librechat.ok, librechat, publicUrl: config.publicUrl || null }); }
-    if (url.pathname === '/api/agents' && req.method === 'GET') return json(res, 200, { agents: await client.listAgents() });
+    if (url.pathname === '/api/agents' && req.method === 'GET') {
+      try {
+        const agents = await app.listAgents();
+        return json(res, 200, { agents });
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+    }
     if (url.pathname === '/api/workspaces' && req.method === 'GET') {
-      const workspaces = store.listWorkspaces().map((w) => {
-        const runtimeState = store.runtimeState(w.id, scheduler.runningMemberIds(w.id));
-        return { ...w, runtimeState, settled: runtimeState === 'SETTLED' };
-      });
-      return json(res, 200, { workspaces });
+      try {
+        const workspaces = await app.listWorkspaces();
+        return json(res, 200, { workspaces });
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (url.pathname === '/api/workspaces' && req.method === 'POST') {
-      const body = await readBody(req);
-      const workspace = store.createWorkspace(body);
-      if (!workspace.defaultAgentId) {
-        const resolved = await getResolvedDefaultAgentId();
-        if (resolved) store.updateWorkspace(workspace.id, { defaultAgentId: resolved });
-      }
-      return json(res, 201, workspaceView(workspace.id, req));
+      try {
+        const body = await readBody(req);
+        const view = await app.createWorkspace(body);
+        return json(res, 201, enrichView(view, req));
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+    }
+    // MCP runtime status also exposed via REST for convenience
+    if (url.pathname === '/api/mcp/status' && req.method === 'GET') {
+      return json(res, 200, { enabled: Boolean(config.mcpEnabled), tokenConfigured: Boolean(config.mcpToken), endpoint: `http://${config.host}:${config.port}/mcp` });
+    }
+    if (url.pathname === '/api/mcp/token' && req.method === 'GET') {
+      // Never return token; just indicate presence
+      if (!authorized(req)) return json(res, 401, { error: 'Unauthorized' });
+      return json(res, 200, { configured: Boolean(config.mcpToken) });
     }
 
     const workspaceId = parts[2]; if (parts[0] !== 'api' || parts[1] !== 'workspaces' || !workspaceId) return false;
-    if (parts.length === 3 && req.method === 'GET') return json(res, 200, workspaceView(workspaceId, req));
-    if (parts.length === 3 && req.method === 'PATCH') { store.updateWorkspace(workspaceId, await readBody(req)); return json(res, 200, workspaceView(workspaceId, req)); }
-    if (parts.length === 3 && req.method === 'DELETE') { scheduler.stopWorkspace(workspaceId); store.deleteWorkspace(workspaceId); return json(res, 204, null); }
+    if (parts.length === 3 && req.method === 'GET') {
+      try { return json(res, 200, await getEnrichedWorkspace(workspaceId, req)); }
+      catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+    }
+    if (parts.length === 3 && req.method === 'PATCH') {
+      try {
+        const body = await readBody(req);
+        // Map legacy names
+        const patch = {};
+        if (body.name !== undefined) patch.name = body.name;
+        if (body.globalPrompt !== undefined) patch.globalPrompt = body.globalPrompt;
+        if (body.system_prompt !== undefined) patch.globalPrompt = body.system_prompt;
+        if (body.defaultAgentId !== undefined) patch.defaultAgentId = body.defaultAgentId;
+        if (body.default_agent_id !== undefined) patch.defaultAgentId = body.default_agent_id;
+        if (body.compileAgentId !== undefined) patch.compileAgentId = body.compileAgentId;
+        if (body.compile_agent_id !== undefined) patch.compileAgentId = body.compile_agent_id;
+        if (body.compilePrompt !== undefined) patch.compilePrompt = body.compilePrompt;
+        if (body.compile_prompt !== undefined) patch.compilePrompt = body.compile_prompt;
+        if (body.settings !== undefined) patch.settings = body.settings;
+        const view = await app.updateWorkspace(workspaceId, patch);
+        return json(res, 200, enrichView(view, req));
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+    }
+    if (parts.length === 3 && req.method === 'DELETE') {
+      try { await app.deleteWorkspace(workspaceId); return json(res, 204, null); }
+      catch (e) { return json(res, e.status || 500, { error: e.message }); }
+    }
 
     if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') {
-      const body = await readBody(req);
-      // If member has no explicit agent and workspace has no default, try to ensure workspace default
-      const workspace = store.requireWorkspace(workspaceId);
-      if (!body.agentId && !workspace.defaultAgentId) {
-        await ensureWorkspaceDefaultAgent(workspaceId);
-      }
-      const member = store.addMember(workspaceId, body);
-      return json(res, 201, { member: publicMember(member), workspace: workspaceView(workspaceId, req) });
+      try {
+        const body = await readBody(req);
+        const result = await app.addChat(workspaceId, body);
+        result.workspace = enrichView(result.workspace, req);
+        if (result.member) {
+          const origin = publicOrigin(req);
+          result.member.actionSpecUrl = `${origin}/tools/${workspaceId}/${result.member.id}/openapi.json`;
+        }
+        return json(res, 201, result);
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (parts[3] === 'members' && parts[4]) {
       const memberId = parts[4];
       if (parts.length === 5 && req.method === 'PATCH') {
-        const body = await readBody(req); const existing = store.requireMember(workspaceId, memberId).member;
-        if (body.active === false && existing.active) scheduler.stopMember(workspaceId, memberId);
-        store.updateMember(workspaceId, memberId, body); scheduler.kickMember(workspaceId, memberId); return json(res, 200, workspaceView(workspaceId, req));
+        try {
+          const body = await readBody(req);
+          const view = await app.updateChat(workspaceId, memberId, body);
+          return json(res, 200, enrichView(view, req));
+        } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
       }
-      if (parts.length === 5 && req.method === 'DELETE') { scheduler.stopMember(workspaceId, memberId); store.deleteMember(workspaceId, memberId); return json(res, 204, null); }
+      if (parts.length === 5 && req.method === 'DELETE') {
+        try { await app.deleteChat(workspaceId, memberId); return json(res, 204, null); }
+        catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      }
       if (parts[5] === 'enqueue' && req.method === 'POST') {
-        const body = await readBody(req);
-        const workspace = store.requireWorkspace(workspaceId);
-        const member = workspace.members[memberId];
-        if (!member) return json(res, 404, { error: 'Member not found' });
-        let effective = effectiveAgentIdForMember(workspace, member);
-        if (!effective) {
-          const resolved = await ensureWorkspaceDefaultAgent(workspaceId);
-          const updatedWorkspace = store.requireWorkspace(workspaceId);
-          const updatedMember = updatedWorkspace.members[memberId];
-          effective = effectiveAgentIdForMember(updatedWorkspace, updatedMember);
-          if (!effective && !resolved) {
-            // Try one more direct resolve for immediate feedback
-            const directResolved = await getResolvedDefaultAgentId();
-            if (!directResolved) return json(res, 400, { error: '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。' });
-            // If we got a resolved id but workspace still empty (list may have been empty earlier), set it
-            if (!updatedWorkspace.defaultAgentId) store.updateWorkspace(workspaceId, { defaultAgentId: directResolved });
-            effective = String(directResolved);
-          }
-          if (!effective) return json(res, 400, { error: '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。' });
-        }
-        // Auto-recover BLOCKED config error if now resolvable
-        const freshAfter = store.requireWorkspace(workspaceId).members[memberId];
-        if (freshAfter.status === 'error' && freshAfter.lastError && (String(freshAfter.lastError).includes('利用可能なLibreChat Agent') || String(freshAfter.lastError).includes('LibreChat agentId is required'))) {
-          if (effective) try { store.retryMember(workspaceId, memberId); } catch {}
-        }
-        const item = store.enqueue(workspaceId, memberId, body.prompt, { source: 'user' }); scheduler.kickMember(workspaceId, memberId); return json(res, 202, { item });
+        try {
+          const body = await readBody(req);
+          const result = await app.send(workspaceId, memberId, body.prompt);
+          return json(res, 202, { item: result.item });
+        } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
       }
-      if (parts[5] === 'retry' && req.method === 'POST') { scheduler.retryMember(workspaceId, memberId); return json(res, 202, workspaceView(workspaceId, req)); }
-      if (parts[5] === 'stop' && req.method === 'POST') { scheduler.stopMember(workspaceId, memberId); return json(res, 200, workspaceView(workspaceId, req)); }
+      if (parts[5] === 'retry' && req.method === 'POST') {
+        try { const view = await app.retryChat(workspaceId, memberId); return json(res, 202, enrichView(view, req)); }
+        catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      }
+      if (parts[5] === 'stop' && req.method === 'POST') {
+        try { const view = await app.stopChat(workspaceId, memberId); return json(res, 200, enrichView(view, req)); }
+        catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      }
     }
     if (parts[3] === 'broadcast' && req.method === 'POST') {
-      const body = await readBody(req);
-      const workspace = store.requireWorkspace(workspaceId);
-      const activeMembers = Object.values(workspace.members).filter(m => m.active);
-      if (!activeMembers.length) return json(res, 409, { error: 'No active members' });
-      // Ensure workspace has a default agent if needed
-      const needsDefault = activeMembers.some(m => !effectiveAgentIdForMember(workspace, m));
-      if (needsDefault && !workspace.defaultAgentId) {
-        await ensureWorkspaceDefaultAgent(workspaceId);
-      }
-      const updatedWorkspace = store.requireWorkspace(workspaceId);
-      const stillNeedsAgent = activeMembers.some(m => {
-        const freshMember = updatedWorkspace.members[m.id];
-        return !effectiveAgentIdForMember(updatedWorkspace, freshMember);
-      });
-      if (stillNeedsAgent) {
-        const directResolved = await getResolvedDefaultAgentId();
-        if (!directResolved) return json(res, 400, { error: '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。' });
-        if (!updatedWorkspace.defaultAgentId) store.updateWorkspace(workspaceId, { defaultAgentId: directResolved });
-      }
-      // Final check: if any active member still has no effective agent, fail before queuing
-      const finalWorkspace = store.requireWorkspace(workspaceId);
-      const invalid = activeMembers.filter(m => !effectiveAgentIdForMember(finalWorkspace, finalWorkspace.members[m.id]));
-      if (invalid.length) {
-        return json(res, 400, { error: '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。' });
-      }
-      // Auto-recover members that were BLOCKED solely due to missing Agent (now resolvable)
-      for (const m of activeMembers) {
-        const fresh = finalWorkspace.members[m.id];
-        if (fresh.status === 'error' && fresh.lastError && (String(fresh.lastError).includes('利用可能なLibreChat Agent') || String(fresh.lastError).includes('LibreChat agentId is required'))) {
-          if (effectiveAgentIdForMember(finalWorkspace, fresh)) {
-            try { store.retryMember(workspaceId, m.id); } catch {}
-          }
-        }
-      }
-      const items = store.broadcast(workspaceId, body.prompt); scheduler.kickWorkspace(workspaceId); return json(res, 202, { items });
-    }
-    if (parts[3] === 'stop' && req.method === 'POST') { scheduler.stopWorkspace(workspaceId); return json(res, 200, workspaceView(workspaceId, req)); }
-    if (parts[3] === 'compile' && req.method === 'POST') {
-      const workspace = store.requireWorkspace(workspaceId);
-      if (!store.isSettled(workspaceId, scheduler.runningMemberIds(workspaceId))) return json(res, 409, { error: 'Workspace is not SETTLED' });
-      if (compilingWorkspaces.has(workspaceId)) return json(res, 409, { error: 'Compile already in progress' });
-      const agentId = workspace.compileAgentId || Object.values(workspace.members).find((m) => m.active)?.agentId;
-      if (!agentId) return json(res, 400, { error: 'No compile agent is configured' });
-      compilingWorkspaces.add(workspaceId);
       try {
-        const snapshots = Object.values(workspace.members).filter((m) => m.active).map((m) => ({ member: { id: m.id, name: m.name }, messages: m.messages.filter((x) => !x.pending).slice(-12).map(({ role, content, at }) => ({ role, content, at })) }));
-        const result = await client.runAgent({ agentId, globalPrompt: workspace.compilePrompt, developerPrompt: '', history: [], prompt: `Compress these independent chat records into a response for the user.\n\n${JSON.stringify(snapshots, null, 2)}`, metadata: { workspace_id: workspaceId, purpose: 'compile' } });
-        store.setCompile(workspaceId, { text: result.text, responseId: result.id, usage: result.usage }); return json(res, 200, workspaceView(workspaceId, req));
-      } finally { compilingWorkspaces.delete(workspaceId); }
+        const body = await readBody(req);
+        const result = await app.broadcast(workspaceId, body.prompt);
+        return json(res, 202, { items: result.items, workspace: enrichView(result.workspace, req) });
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+    }
+    if (parts[3] === 'stop' && req.method === 'POST') {
+      try { const view = await app.stopWorkspace(workspaceId); return json(res, 200, enrichView(view, req)); }
+      catch (e) { return json(res, e.status || 500, { error: e.message }); }
+    }
+    if (parts[3] === 'compile' && req.method === 'POST') {
+      try {
+        const view = await app.compile(workspaceId);
+        return json(res, 200, enrichView(view, req));
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+    }
+    if (parts[3] === 'wait' && req.method === 'POST') {
+      try {
+        const body = await readBody(req);
+        const timeout = body.timeout_seconds ?? body.timeout ?? 60;
+        const interval = body.poll_interval_ms ?? body.interval ?? 500;
+        const result = await app.waitUntilSettled(workspaceId, timeout, interval);
+        return json(res, 200, result);
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+    }
+    if (parts[3] === 'messages' && req.method === 'GET') {
+      const chatId = url.searchParams.get('chat_id') || parts[4];
+      if (!chatId) return json(res, 400, { error: 'chat_id required' });
+      try {
+        const limit = url.searchParams.get('limit');
+        const since = url.searchParams.get('since');
+        const msgs = await app.getChatMessages(workspaceId, chatId, { limit, since });
+        return json(res, 200, { messages: msgs });
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     return false;
   }
@@ -223,6 +290,18 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       const targets = refs.map((ref) => store.resolveMember(workspaceId, ref, { activeOnly: true }));
       if (new Set(targets.map((m) => m.id)).size !== targets.length) return json(res, 400, { error: 'Targets must be unique' });
       if (targets.some((m) => m.id === source.id)) return json(res, 400, { error: 'Target must be another chat' });
+      // Validate all targets' effective agents before mutating
+      const agents = await app._internal.getAvailableAgents();
+      for (const t of targets) {
+        const eff = String(t.agentId || workspace.defaultAgentId || '').trim();
+        if (!eff) {
+          if (agents.length > 1) return json(res, 400, { error: `Target "${t.name}" Agent未設定 — ワークスペース既定を設定してください`, code: 'AGENT_SELECTION_REQUIRED' });
+          if (agents.length === 0) return json(res, 400, { error: '利用可能なAgentがありません', code: 'AGENT_SELECTION_REQUIRED' });
+        }
+        if (agents.length && eff && !agents.some(a => String(a.id) === eff)) {
+          return json(res, 400, { error: `Target "${t.name}" Agentが利用不可: ${eff}`, code: 'AGENT_NOT_AVAILABLE' });
+        }
+      }
       const items = targets.map((target) => ({ target: { id: target.id, name: target.name }, item: store.enqueue(workspaceId, target.id, body.prompt, { source: 'tool', sourceMemberId }) }));
       for (const target of targets) scheduler.kickMember(workspaceId, target.id);
       return json(res, 202, { accepted: true, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) });
@@ -244,15 +323,21 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      // MCP first (authenticated)
+      if (url.pathname.startsWith('/mcp')) {
+        const handled = await handleMcp(req, res, url);
+        if (handled) return;
+      }
       if (url.pathname.startsWith('/api/')) { const handled = await api(req, res, url); if (handled !== false) return; }
       if (url.pathname.startsWith('/tools/')) { const handled = await tools(req, res, url); if (handled !== false) return; }
       if (staticFile(req, res, url)) return; json(res, 404, { error: 'Not found' });
-    } catch (error) { console.error(error); if (!res.headersSent) json(res, error.status || 500, { error: error.message || 'Internal error' }); else res.end(); }
+    } catch (error) { console.error(error); if (!res.headersSent) json(res, error.status || 500, { error: error.message || 'Internal error', code: error.code }); else res.end(); }
   });
-  return { server, store, client, scheduler, workspaceView };
+  // Expose for testing
+  return { server, store, client, scheduler, workspaceView, app, config };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = createApp();
-  app.server.listen(defaultConfig.port, defaultConfig.host, () => { app.scheduler.resumeAll(); console.log(`MultiContext Chat: http://${defaultConfig.host}:${defaultConfig.port}`); });
+  app.server.listen(defaultConfig.port, defaultConfig.host, () => { app.scheduler.resumeAll(); console.log(`MultiContext Chat: http://${defaultConfig.host}:${defaultConfig.port}`); if (defaultConfig.mcpEnabled) console.log(`MCP endpoint: http://${defaultConfig.host}:${defaultConfig.port}/mcp`); });
 }

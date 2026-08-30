@@ -69,6 +69,21 @@ npm run desktop:build # production MultiContext.app
 open src-tauri/target/release/bundle/macos/MultiContext.app
 ```
 
+## External Control MCP
+
+MultiContext exposes itself as an MCP server so external clients (OpenCode, Cursor, Claude Code) can operate workspaces programmatically. This is **not** LibreChat Agent MCP.
+
+- Endpoint: `http://127.0.0.1:4317/mcp` (Streamable HTTP, loopback by default)
+- Auth: `MULTICONTEXT_MCP_TOKEN` (distinct from LibreChat key, stored in macOS Keychain when using Desktop)
+- OpenCode config: Desktop Settings → `外部連携 — MCP Server` → `OpenCode設定をコピー` generates a ready `opencode.json` remote entry (see `docs/MCP.md`).
+
+```bash
+# enable and copy config via Desktop UI, or manually:
+MULTICONTEXT_MCP_TOKEN=$(openssl rand -hex 32) npm start
+```
+
+See `docs/MCP.md` for tool list, agent selection, SETTLED/Compile semantics, and security.
+
 After the first launch, just open `MultiContext.app` — it detects healthy
 external GPT-OSS/LibreChat or starts managed ones (new installs default to
 managed) and opens the existing UI automatically once everything is ready. On
