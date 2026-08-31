@@ -98,6 +98,8 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     for await (const chunk of req) {
       mcpBytes += chunk.length;
       if (mcpBytes > 1_000_000) {
+        // Drain remaining request body to avoid hanging keep-alive socket
+        req.resume();
         json(res, 413, { error: 'MCP request body too large', code: 'PAYLOAD_TOO_LARGE' });
         return true;
       }

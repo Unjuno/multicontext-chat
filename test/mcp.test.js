@@ -703,30 +703,42 @@ test('MCP private fields stripped', async () => {
 // 37 MCP request body size limit
 test('MCP request body size limit', async () => {
   const client = { listAgents: async () => singleAgent, health: async () => ({ ok: true, agents: 1, mode: 'compat' }), runAgent: async () => ({ id: 'r', text: 'ok' }) };
-  await withMcpServer(client, async ({ base, config }) => {
+  const store = makeStore();
+  const scheduler = new Scheduler({ store, client, maxHistoryMessages: 50 });
+  const cfg = makeConfig({});
+  const app = createApp({ config: cfg, store, client, scheduler });
+  await new Promise(r => app.server.listen(0, '127.0.0.1', r));
+  const addr = app.server.address();
+  const base = `http://127.0.0.1:${addr.port}`;
+  try {
     // Normal initialize succeeds
     const ok = await fetch(`${base}/mcp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', Authorization: `Bearer ${config.mcpToken}` },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', Authorization: `Bearer ${cfg.mcpToken}` },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1.0' } } }),
     });
     assert.equal(ok.status, 200);
+    await ok.arrayBuffer().catch(() => {});
     // Oversized body >1MB should be rejected with 413
     const big = 'x'.repeat(1_100_000);
     const over = await fetch(`${base}/mcp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', Authorization: `Bearer ${config.mcpToken}` },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', Authorization: `Bearer ${cfg.mcpToken}` },
       body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'multicontext_list_workspaces', arguments: { big } } }),
     });
     assert.equal(over.status, 413);
     const j = await over.json().catch(() => ({}));
     assert.ok(String(j.error || '').includes('too large') || j.code === 'PAYLOAD_TOO_LARGE');
-    // Process remains usable: normal tool call after oversized should still succeed
+    await over.arrayBuffer().catch(() => {});
+    // Process remains usable: normal request after oversized should still succeed
     const stillOk = await fetch(`${base}/mcp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', Authorization: `Bearer ${config.mcpToken}` },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', Authorization: `Bearer ${cfg.mcpToken}` },
       body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1.0' } } }),
     });
     assert.equal(stillOk.status, 200);
-  });
+    await stillOk.arrayBuffer().catch(() => {});
+  } finally {
+    await new Promise(r => app.server.close(r));
+  }
 });
