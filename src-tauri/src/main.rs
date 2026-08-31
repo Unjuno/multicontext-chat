@@ -544,23 +544,37 @@ fn get_mcp_status(state: tauri::State<AppState>) -> McpStatus {
     McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint }
 }
 
-fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State<AppState>) -> Result<bool, String> {
+async fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State<'_, AppState>) -> Result<bool, String> {
     let is_owned = state.children.children.lock().unwrap().contains_key("MultiContext");
     if !is_owned {
         return Ok(false);
     }
     process::terminate(&state.children, "MultiContext");
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     let cfg = state.config.lock().unwrap().clone();
     let node = resolve_node(state).ok_or("Node.js が見つかりません")?;
     start_multicontext(app, state, &cfg, &node)?;
-    // Brief wait for port to become listening; health polling will confirm readiness separately
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // Wait for strict /api/health (bounded 10s)
+    let client = health::client();
+    let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
+    let mut ok = false;
+    for _ in 0..20 {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        match health::multicontext_health(&client, &mc_url).await {
+            crate::health::McHealth::Ready => { ok = true; break; }
+            crate::health::McHealth::Unhealthy { .. } => { ok = false; break; } // running but misconfigured -> surface immediately
+            crate::health::McHealth::Unreachable => continue,
+        }
+    }
+    if !ok {
+        // Health not ready - still consider restarted but warn caller
+        // Don't treat as fatal; UI will show status via runtime_status poll
+    }
     Ok(true)
 }
 
 #[tauri::command]
-fn set_mcp_enabled(state: tauri::State<AppState>, app: tauri::AppHandle, enabled: bool) -> Result<McpStatus, String> {
+async fn set_mcp_enabled(state: tauri::State<'_, AppState>, app: tauri::AppHandle, enabled: bool) -> Result<McpStatus, String> {
     let mut cfg = state.config.lock().unwrap().clone();
     cfg.mcp_enabled = enabled;
     // Persist
@@ -574,20 +588,19 @@ fn set_mcp_enabled(state: tauri::State<AppState>, app: tauri::AppHandle, enabled
         let tok = keychain::generate_mcp_token();
         let _ = keychain::set_mcp_token(&tok);
     }
-    // Restart owned MultiContext to pick up new enabled/token
-    let restarted = restart_owned_multicontext(&app, &state)?;
-    if !restarted && state.children.children.lock().unwrap().contains_key("MultiContext") == false {
-        // External service - inform caller via log, UI will show external notice
-        trace(&app, &format!("set_mcp_enabled external: restart required for token/config change"));
+    // Restart owned MultiContext to pick up new enabled/token, wait for health
+    let restarted = restart_owned_multicontext(&app, &state).await?;
+    if !restarted {
+        trace(&app, "set_mcp_enabled external: restart required");
     }
     Ok(McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port) })
 }
 
 #[tauri::command]
-fn generate_mcp_token(state: tauri::State<AppState>, app: tauri::AppHandle) -> Result<String, String> {
+async fn generate_mcp_token(state: tauri::State<'_, AppState>, app: tauri::AppHandle) -> Result<String, String> {
     let tok = keychain::generate_mcp_token();
     keychain::set_mcp_token(&tok)?;
-    let restarted = restart_owned_multicontext(&app, &state)?;
+    let restarted = restart_owned_multicontext(&app, &state).await?;
     if !restarted {
         trace(&app, "generate_mcp_token external: restart required");
     }

@@ -182,3 +182,60 @@ test('createWorkspace blank ID remains allowed even when discovery fails later',
   await app.addChat(ws.id, { name: 'M' });
   await assert.rejects(() => app.broadcast(ws.id, 'hi'), (e) => e.code === 'DISCOVERY_FAILED');
 });
+
+test('scheduler preserves queued prompt on discovery outage and Retry resumes FIFO', async () => {
+  const singleAgent = [{ id: 'solo', name: 'Solo' }];
+  let failDiscovery = false;
+  let runCount = 0;
+  const seen = [];
+  const client = {
+    listAgents: async () => {
+      if (failDiscovery) throw new Error('LibreChat unreachable');
+      return singleAgent;
+    },
+    health: async () => ({ ok: !failDiscovery }),
+    runAgent: async ({ prompt }) => {
+      runCount++;
+      seen.push(prompt);
+      return { id: `r${runCount}`, text: `ok:${prompt}` };
+    },
+  };
+  const store = makeStore();
+  const scheduler = new Scheduler({ store, client, maxHistoryMessages: 20 });
+  const app = createApplication({ config: makeConfig(), store, client, scheduler });
+  const ws = await app.createWorkspace({ name: 'QueuePreserve' });
+  const { member } = await app.addChat(ws.id, { name: 'M' });
+  // Enqueue directly via store to avoid app validation racing with discovery toggle
+  store.enqueue(ws.id, member.id, 'first');
+  store.enqueue(ws.id, member.id, 'second');
+  const before = store.requireMember(ws.id, member.id).member;
+  assert.equal(before.queue.length, 2);
+  const firstId = before.queue[0].id;
+  // Make discovery fail before scheduler executes
+  failDiscovery = true;
+  // Scheduler will attempt to drain; it should fail with DISCOVERY_FAILED and requeue at front BLOCKED
+  scheduler.kickMember(ws.id, member.id);
+  // Wait for BLOCKED
+  let attempts = 0;
+  while (attempts++ < 100) {
+    const cur = store.requireMember(ws.id, member.id).member;
+    if (cur.status === 'error') break;
+    await new Promise(r => setTimeout(r, 10));
+  }
+  const blocked = store.requireMember(ws.id, member.id).member;
+  assert.equal(blocked.status, 'error');
+  assert.equal(blocked.queue[0].id, firstId, 'item ID retained');
+  assert.deepEqual(blocked.queue.map(i => i.prompt), ['first', 'second']);
+  assert.equal(seen.length, 0, 'no run should have succeeded during outage');
+  // Restore and Retry should resume FIFO without duplicate
+  failDiscovery = false;
+  scheduler.retryMember(ws.id, member.id);
+  attempts = 0;
+  while (store.requireMember(ws.id, member.id).member.queue.length > 0 || store.requireMember(ws.id, member.id).member.status === 'running') {
+    await new Promise(r => setTimeout(r, 10));
+    if (++attempts > 200) break;
+  }
+  assert.deepEqual(seen, ['first', 'second']);
+  const msgs = store.requireMember(ws.id, member.id).member.messages.filter(m => m.role === 'assistant').map(m => m.content);
+  assert.deepEqual(msgs, ['ok:first', 'ok:second']);
+});

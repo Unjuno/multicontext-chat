@@ -27,6 +27,7 @@ export class Scheduler {
       try {
         const workspace = this.store.getWorkspace(workspaceId); const current = this.store.getMember(workspaceId, memberId);
         if (!workspace || !current || controller.signal.aborted) break;
+        const mkErr = (msg, code, status=400) => Object.assign(new Error(msg), { code, status });
         let effectiveAgentId = String(current.agentId || workspace.defaultAgentId || '').trim();
         let availableAgents = null;
         let discoveryError = null;
@@ -48,15 +49,21 @@ export class Scheduler {
                 effectiveAgentId = '';
               }
             } catch (e) {
-              discoveryError = e?.message || String(e);
+              discoveryError = e;
             }
             if (discoveryError) {
-              throw new Error(`LibreChat Agentの取得に失敗しました: ${discoveryError}`);
+              const err = mkErr(`LibreChat Agentの取得に失敗しました: ${discoveryError?.message || String(discoveryError)}`, 'DISCOVERY_FAILED', 503);
+              err.cause = discoveryError;
+              throw err;
             }
           }
         }
         if (!effectiveAgentId) {
-          if (discoveryError) throw new Error(`LibreChat Agentの取得に失敗しました: ${discoveryError}`);
+          if (discoveryError) {
+            const err = mkErr(`LibreChat Agentの取得に失敗しました: ${discoveryError?.message || String(discoveryError)}`, 'DISCOVERY_FAILED', 503);
+            err.cause = discoveryError;
+            throw err;
+          }
           let agents = availableAgents;
           if (agents === null) {
             if (!canList) {
@@ -65,28 +72,28 @@ export class Scheduler {
               try {
                 agents = await this.client.listAgents();
               } catch (e) {
-                throw new Error(`LibreChat Agentの取得に失敗しました: ${e?.message || String(e)}`);
+                throw mkErr(`LibreChat Agentの取得に失敗しました: ${e?.message || String(e)}`, 'DISCOVERY_FAILED', 503);
               }
             }
           }
-          if (!agents || agents.length === 0) throw new Error('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。');
-          if (agents.length > 1) throw new Error('複数のLibreChat Agentがあります。ワークスペースの既定エージェントを選択してください。');
-          throw new Error('利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。');
+          if (!agents || agents.length === 0) throw mkErr('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 'AGENT_SELECTION_REQUIRED', 400);
+          if (agents.length > 1) throw mkErr('複数のLibreChat Agentがあります。ワークスペースの既定エージェントを選択してください。', 'AGENT_SELECTION_REQUIRED', 400);
+          throw mkErr('利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。', 'AGENT_SELECTION_REQUIRED', 400);
         }
         if (availableAgents === null) {
           if (!canList) {
             availableAgents = [];
           } else {
             try { availableAgents = await this.client.listAgents(); } catch (e) {
-              throw new Error(`LibreChat Agentの取得に失敗しました: ${e?.message || String(e)}`);
+              throw mkErr(`LibreChat Agentの取得に失敗しました: ${e?.message || String(e)}`, 'DISCOVERY_FAILED', 503);
             }
           }
         }
         if (availableAgents && availableAgents.length && !availableAgents.some(a => String(a.id) === effectiveAgentId)) {
           if (current.agentId && String(current.agentId) === effectiveAgentId) {
-            throw new Error('このチャットに設定されたエージェントがLibreChatに存在しません。エージェントを選び直すか、ワークスペース既定を使用してください。');
+            throw mkErr('このチャットに設定されたエージェントがLibreChatに存在しません。エージェントを選び直すか、ワークスペース既定を使用してください。', 'AGENT_NOT_AVAILABLE', 400);
           } else {
-            throw new Error('設定されている既定エージェントがLibreChatに存在しません。エージェントを選び直してください。');
+            throw mkErr('設定されている既定エージェントがLibreChatに存在しません。エージェントを選び直してください。', 'AGENT_NOT_AVAILABLE', 400);
           }
         }
         // Map known English errors to Japanese
@@ -114,8 +121,12 @@ export class Scheduler {
       } catch (error) {
         if (!this.store.getMember(workspaceId, memberId)) break;
         const msg = String(error?.message || String(error));
-        const isConfigError = msg.includes('利用可能なLibreChat Agent') || msg.includes('複数のLibreChat') || msg.includes('存在しません') || msg.includes('LibreChat接続キー') || msg.includes('Agentが') || msg.includes('エージェント');
+        const code = error?.code || '';
+        // Typed classification: DISCOVERY_FAILED and network/auth are retriable; config errors are not
+        const isConfigError = code === 'AGENT_SELECTION_REQUIRED' || code === 'AGENT_NOT_AVAILABLE' || msg.includes('存在しません') || msg.includes('Agentが') || msg.includes('エージェント');
+        const isDiscovery = code === 'DISCOVERY_FAILED' || msg.includes('取得に失敗');
         if (controller.signal.aborted) this.store.failRun(workspaceId, memberId, item.id, 'Stopped by user', { requeue: false });
+        else if (isDiscovery) this.store.failRun(workspaceId, memberId, item.id, msg, { requeue: true });
         else this.store.failRun(workspaceId, memberId, item.id, msg, { requeue: !isConfigError });
         break;
       }
