@@ -173,6 +173,10 @@ async function fetchAgentRuntimeEntry(signal) {
     return { name: 'LibreChat Agent', state: 'error', message: '未設定 — LibreChatでAgentを作成してください', ownership: null, attempt_id: 0 };
   } catch (e) {
     if (e && e.name === 'AbortError') throw e;
+    const msg = String(e.message || '');
+    if (msg.includes('DISCOVERY_FAILED') || msg.includes('取得に失敗') || msg.includes('503') || msg.includes('Failed to fetch')) {
+      return { name: 'LibreChat Agent', state: 'error', message: 'Agent取得に失敗 — LibreChat接続を確認してください', ownership: null, attempt_id: 0 };
+    }
     return { name: 'LibreChat Agent', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 };
   }
 }
@@ -212,16 +216,15 @@ async function pollRuntime() {
       }
     }
     if (!base) {
-      // Browser / fallback path: derive from /api/health
+      // Browser / fallback path: derive from /api/health. GPT-OSS health cannot be verified from browser layer.
       const health = await request('/api/health', { signal: controller.signal });
       const mcState = health.ok ? 'ready' : 'error';
       const mcMsg = health.ok ? '準備完了' : (health.librechat && !health.librechat.ok ? 'LibreChat 接続を確認してください' : 'MultiContext が利用できません');
       const lcState = health.librechat && health.librechat.ok ? 'ready' : 'error';
       const lcMsg = health.librechat && health.librechat.ok ? '接続済み' : 'LibreChat 接続を確認';
-      // GPT-OSS: if health.ok but LibreChat failure, GPT-OSS should remain ready individually — derive from librechat health only for MC
-      // For browser fallback, assume GPT-OSS ready if LibreChat reachable (cannot probe model directly)
-      const modelState = health.ok || lcState === 'ready' ? 'ready' : 'checking';
-      const modelMsg = modelState === 'ready' ? '準備完了' : '確認中...';
+      // GPT-OSS: browser cannot verify directly; Desktop runtime provides actual model health.
+      const modelState = 'checking';
+      const modelMsg = 'Desktop runtimeでのみ確認可能';
       base = [
         { name: 'モデル', state: modelState, message: modelMsg, ownership: null, attempt_id: 0 },
         { name: 'LibreChat', state: lcState, message: lcMsg, ownership: null, attempt_id: 0 },

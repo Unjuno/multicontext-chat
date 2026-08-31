@@ -250,8 +250,11 @@ test('compile stale -> fail', async () => {
   const two = [{ id: 'a1' }, { id: 'a2' }];
   const store = makeStore();
   const app = createApplication({ config: makeConfig(), store, client: mock(two), scheduler: new Scheduler({ store, client: mock(two) }) });
-  const ws = await app.createWorkspace({ name: 'CompStale', compileAgentId: 'stale' });
-  await assert.rejects(() => app.compile(ws.id), (e) => e.code === 'AGENT_NOT_AVAILABLE');
+  const ws = await app.createWorkspace({ name: 'CompStale', compileAgentId: 'a1' });
+  await app.addChat(ws.id, { name: 'M' });
+  // Make compile agent stale by switching discovery to only a2
+  const app2 = createApplication({ config: makeConfig(), store, client: mock([{ id: 'a2' }]), scheduler: new Scheduler({ store, client: mock([{ id: 'a2' }]) }) });
+  await assert.rejects(() => app2.compile(ws.id), (e) => e.code === 'AGENT_NOT_AVAILABLE');
 });
 
 test('compile workspace default fallback works', async () => {

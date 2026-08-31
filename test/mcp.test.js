@@ -252,58 +252,177 @@ test('MCP broadcast', async () => {
   });
 });
 
-// 16 broadcast preserves independent queue (allow race: queue may be 0-1 after quick scheduler)
+// 16 broadcast preserves independent queue
 test('MCP broadcast preserves independent queue', async () => {
-  const client = { listAgents: async () => singleAgent, health: async () => ({ ok: true, agents: 1, mode: 'compat' }), runAgent: async ({ prompt }) => ({ id: 'r', text: `echo:${prompt}` }) };
+  let release;
+  const client = {
+    listAgents: async () => singleAgent,
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    runAgent: async ({ prompt }) => {
+      // Block until released to keep queue observable
+      await new Promise(r => { release = r; });
+      return { id: 'r', text: `echo:${prompt}` };
+    },
+  };
   await withMcpServer(client, async ({ client: mcp }) => {
     const c = await mcp.callTool({ name: 'multicontext_create_workspace', arguments: { name: 'Qtest', initial_chat_count: 2 } });
     const ws = JSON.parse(c.content[0].text);
-    const bc = await mcp.callTool({ name: 'multicontext_broadcast', arguments: { workspace_id: ws.id, prompt: 'msg1' } });
+    const bcPromise = mcp.callTool({ name: 'multicontext_broadcast', arguments: { workspace_id: ws.id, prompt: 'msg1' } });
+    // Give scheduler a moment to enqueue but not yet drain (blocked on release)
+    await new Promise(r => setTimeout(r, 50));
+    const bc = await bcPromise;
     const j = JSON.parse(bc.content[0].text);
-    // Should have created 2 items total
     assert.equal(j.items.length, 2);
-    // Members should have at least been queued (queue may be drained quickly, so check >=0)
     const ws2 = JSON.parse((await mcp.callTool({ name: 'multicontext_get_workspace', arguments: { workspace_id: ws.id } })).content[0].text);
-    const totalQueued = Object.values(ws2.members).reduce((s, m) => s + m.queue.length, 0);
-    // Scheduler may have already started, so total may be 0-2, but at least broadcast succeeded
-    assert.ok(totalQueued >= 0 && totalQueued <= 2);
+    // Each active member should have exactly 1 queued item, and one may be inFlight
+    let total = 0;
+    for (const m of Object.values(ws2.members)) total += m.queue.length + (m.inFlight ? 1 : 0);
+    assert.equal(total, 2);
+    release();
+    await mcp.callTool({ name: 'multicontext_wait_until_settled', arguments: { workspace_id: ws.id, timeout_seconds: 5 } });
   });
 });
 
-// 17 parallel members / serial per member
+// 17 parallel members / serial per member with deterministic barrier
 test('MCP parallel members serial per member unchanged', async () => {
-  const client = { listAgents: async () => singleAgent, health: async () => ({ ok: true, agents: 1, mode: 'compat' }), runAgent: async ({ prompt }) => { await new Promise(r => setTimeout(r, 20)); return { id: 'r', text: `echo:${prompt}` }; } };
+  let releaseA;
+  let runOrder = [];
+  const client = {
+    listAgents: async () => singleAgent,
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    runAgent: async ({ prompt, metadata }) => {
+      if (metadata.member_id && runOrder.length === 0) {
+        // First run blocks
+        await new Promise(r => { releaseA = r; });
+      } else {
+        await new Promise(r => setTimeout(r, 10));
+      }
+      runOrder.push(prompt);
+      return { id: 'r', text: `echo:${prompt}` };
+    },
+  };
   await withMcpServer(client, async ({ client: mcp }) => {
     const c = await mcp.callTool({ name: 'multicontext_create_workspace', arguments: { name: 'Par', initial_chat_count: 2 } });
     const ws = JSON.parse(c.content[0].text);
     const mids = Object.keys(ws.members);
+    // Send two prompts serially to same member while first is blocked
     await mcp.callTool({ name: 'multicontext_send', arguments: { workspace_id: ws.id, chat_id: mids[0], prompt: 'a1' } });
+    await new Promise(r => setTimeout(r, 30));
     await mcp.callTool({ name: 'multicontext_send', arguments: { workspace_id: ws.id, chat_id: mids[0], prompt: 'a2' } });
+    await new Promise(r => setTimeout(r, 20));
     const ws2 = JSON.parse((await mcp.callTool({ name: 'multicontext_get_workspace', arguments: { workspace_id: ws.id } })).content[0].text);
-    // Queue may be 1 or 2 depending on scheduler race (first item may already be running)
-    assert.ok(ws2.members[mids[0]].queue.length >= 1);
+    // First item is inFlight, second is queued => total 2 including inFlight
+    const total = ws2.members[mids[0]].queue.length + (ws2.members[mids[0]].inFlight ? 1 : 0);
+    assert.equal(total, 2, `expected 2 items total for serial member, got queue ${ws2.members[mids[0]].queue.length} inFlight ${ws2.members[mids[0]].inFlight}`);
     assert.equal(ws2.members[mids[1]].queue.length, 0);
+    assert.equal(ws2.members[mids[1]].inFlight, false);
+    // Release and verify serial order
+    releaseA();
+    await mcp.callTool({ name: 'multicontext_wait_until_settled', arguments: { workspace_id: ws.id, timeout_seconds: 5 } });
+    assert.deepEqual(runOrder.slice(0, 2), ['a1', 'a2']);
   });
 });
 
-// 18 stop via MCP
-test('MCP stop workspace', async () => {
-  const client = { listAgents: async () => singleAgent, health: async () => ({ ok: true, agents: 1, mode: 'compat' }), runAgent: async ({ prompt }) => { await new Promise(r => setTimeout(r, 500)); return { id: 'r', text: 'ok' }; } };
-  await withMcpServer(client, async ({ client: mcp }) => {
-    const c = await mcp.callTool({ name: 'multicontext_create_workspace', arguments: { name: 'StopTest', initial_chat_count: 1 } });
+// 18 stop workspace clears all and late completion does not reappear
+test('MCP stop workspace clears queues and ignores late completion', async () => {
+  let release;
+  let completed = false;
+  const client = {
+    listAgents: async () => singleAgent,
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    runAgent: async ({ prompt, signal }) => {
+      // Wait for controllable release, respect abort
+      await new Promise((resolve, reject) => {
+        release = resolve;
+        if (signal) signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      });
+      completed = true;
+      return { id: 'r', text: `echo:${prompt}` };
+    },
+  };
+  await withMcpServer(client, async ({ client: mcp, store }) => {
+    const c = await mcp.callTool({ name: 'multicontext_create_workspace', arguments: { name: 'StopWS', initial_chat_count: 2 } });
     const ws = JSON.parse(c.content[0].text);
-    const mid = Object.keys(ws.members)[0];
-    await mcp.callTool({ name: 'multicontext_send', arguments: { workspace_id: ws.id, chat_id: mid, prompt: 'long' } });
+    const mids = Object.keys(ws.members);
+    // Broadcast to both; both will be running (blocked on release)
+    const bc = await mcp.callTool({ name: 'multicontext_broadcast', arguments: { workspace_id: ws.id, prompt: 'long' } });
+    assert.equal(bc.isError, undefined);
+    await new Promise(r => setTimeout(r, 50));
+    // Now stop workspace
     const stop = await mcp.callTool({ name: 'multicontext_stop_workspace', arguments: { workspace_id: ws.id } });
-    // Stop should not throw; allow either success or graceful error
-    assert.ok(stop.content[0].text.length > 0);
+    assert.equal(stop.isError, undefined);
+    const afterStop = JSON.parse(stop.content[0].text);
+    // All targeted chats must have empty queue and no current
+    for (const mid of mids) {
+      const m = afterStop.members[mid];
+      assert.equal(m.queue.length, 0, `queue not cleared for ${mid}`);
+      assert.equal(m.inFlight, false, `inFlight not cleared for ${mid}`);
+      assert.equal(m.status, 'idle');
+    }
+    // Late completion must not reappear
+    completed = false;
+    if (release) release();
+    await new Promise(r => setTimeout(r, 100));
+    const afterLate = JSON.parse((await mcp.callTool({ name: 'multicontext_get_workspace', arguments: { workspace_id: ws.id } })).content[0].text);
+    for (const mid of mids) {
+      assert.equal(afterLate.members[mid].queue.length, 0);
+      // Messages should not contain late completion because aborted
+      const msgs = afterLate.members[mid].messages;
+      assert.ok(!msgs.some(msg => msg.content && msg.content.includes('echo:long')), 'late completion leaked');
+    }
+    assert.equal(completed, false, 'runAgent should have been aborted, not completed');
   });
 });
 
-// 19 retry via MCP
-test('MCP retry chat', async () => {
+// 19 stop chat only affects that chat
+test('MCP stop chat only affects that chat', async () => {
+  let releases = {};
+  const client = {
+    listAgents: async () => singleAgent,
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    runAgent: async ({ prompt, metadata }) => {
+      const mid = metadata.member_id;
+      await new Promise(r => { releases[mid] = r; });
+      return { id: 'r', text: `echo:${prompt}` };
+    },
+  };
+  await withMcpServer(client, async ({ client: mcp }) => {
+    const c = await mcp.callTool({ name: 'multicontext_create_workspace', arguments: { name: 'StopOne', initial_chat_count: 2 } });
+    const ws = JSON.parse(c.content[0].text);
+    const mids = Object.keys(ws.members);
+    const target = mids[0];
+    const other = mids[1];
+    await mcp.callTool({ name: 'multicontext_broadcast', arguments: { workspace_id: ws.id, prompt: 'bc' } });
+    await new Promise(r => setTimeout(r, 50));
+    const stop = await mcp.callTool({ name: 'multicontext_stop_chat', arguments: { workspace_id: ws.id, chat_id: target } });
+    assert.equal(stop.isError, undefined);
+    const after = JSON.parse(stop.content[0].text);
+    assert.equal(after.members[target].queue.length, 0);
+    assert.equal(after.members[target].inFlight, false);
+    // Other chat must remain running/queued
+    assert.equal(after.members[other].inFlight, true);
+    // Release other
+    releases[other]();
+    await mcp.callTool({ name: 'multicontext_wait_until_settled', arguments: { workspace_id: ws.id, timeout_seconds: 5 } });
+    const final = JSON.parse((await mcp.callTool({ name: 'multicontext_get_workspace', arguments: { workspace_id: ws.id } })).content[0].text);
+    assert.equal(final.members[target].queue.length, 0);
+    // Other should have completed
+    assert.ok(final.members[other].messages.some(m => m.content.includes('echo:bc')));
+  });
+});
+
+// 20 retry transitions BLOCKED and actually consumes failed item
+test('MCP retry chat consumes failed front item and succeeds', async () => {
   let callCount = 0;
-  const client = { listAgents: async () => singleAgent, health: async () => ({ ok: true, agents: 1, mode: 'compat' }), runAgent: async () => { callCount++; if (callCount === 1) throw new Error('fail'); return { id: 'r', text: 'recovered' }; } };
+  const client = {
+    listAgents: async () => singleAgent,
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    runAgent: async () => {
+      callCount++;
+      if (callCount === 1) throw new Error('fail first');
+      return { id: 'r2', text: 'recovered' };
+    },
+  };
   const store = makeStore();
   const scheduler = new Scheduler({ store, client, maxHistoryMessages: 50 });
   const config = makeConfig({ mcpToken: 't', mcpEnabled: true });
@@ -318,18 +437,26 @@ test('MCP retry chat', async () => {
     const c = await mcp.callTool({ name: 'multicontext_create_workspace', arguments: { name: 'RetryTest', initial_chat_count: 1 } });
     const ws = JSON.parse(c.content[0].text);
     const mid = Object.keys(ws.members)[0];
-    await mcp.callTool({ name: 'multicontext_send', arguments: { workspace_id: ws.id, chat_id: mid, prompt: 'will fail' } });
-    await new Promise(r => setTimeout(r, 150));
+    const send = await mcp.callTool({ name: 'multicontext_send', arguments: { workspace_id: ws.id, chat_id: mid, prompt: 'will fail' } });
+    assert.equal(send.isError, undefined);
+    // Wait for BLOCKED
+    const blocked = await mcp.callTool({ name: 'multicontext_wait_until_settled', arguments: { workspace_id: ws.id, timeout_seconds: 5 } });
+    const blockedState = JSON.parse(blocked.content[0].text);
+    assert.equal(blockedState.state, 'BLOCKED');
     const before = JSON.parse((await mcp.callTool({ name: 'multicontext_get_workspace', arguments: { workspace_id: ws.id } })).content[0].text);
     assert.equal(before.members[mid].status, 'error');
-    await mcp.callTool({ name: 'multicontext_retry_chat', arguments: { workspace_id: ws.id, chat_id: mid } });
-    // After retry, the failed item is requeued and should run again (now succeeds) after wait
-    await new Promise(r => setTimeout(r, 300));
-    const afterRes = await mcp.callTool({ name: 'multicontext_get_workspace', arguments: { workspace_id: ws.id } });
-    assert.equal(afterRes.isError, undefined);
-    const after = JSON.parse(afterRes.content[0].text);
-    // Should be either idle, running, or settled after recovery, not permanently error (allow pending)
-    assert.ok(['idle','running','pending','settled'].includes(after.members[mid].status) || after.members[mid].status === 'error');
+    // Retry should not be error envelope
+    const retry = await mcp.callTool({ name: 'multicontext_retry_chat', arguments: { workspace_id: ws.id, chat_id: mid } });
+    assert.equal(retry.isError, undefined, `retry returned error envelope: ${retry.content[0].text}`);
+    // Wait until settled after retry - must become SETTLED, not remain error
+    const afterWait = await mcp.callTool({ name: 'multicontext_wait_until_settled', arguments: { workspace_id: ws.id, timeout_seconds: 5 } });
+    const afterState = JSON.parse(afterWait.content[0].text);
+    assert.equal(afterState.state, 'SETTLED', `expected SETTLED after retry, got ${afterState.state}`);
+    const after = JSON.parse((await mcp.callTool({ name: 'multicontext_get_workspace', arguments: { workspace_id: ws.id } })).content[0].text);
+    assert.notEqual(after.members[mid].status, 'error', 'retry should not leave member in error after successful re-run');
+    assert.equal(after.members[mid].queue.length, 0);
+    assert.ok(after.members[mid].messages.some(m => m.content === 'recovered'), 'recovered message not found');
+    assert.equal(callCount, 2, 'runAgent should have been called twice (fail then success)');
   } finally { try { await mcp.close(); } catch {} await new Promise(r => app.server.close(r)); }
 });
 
@@ -439,18 +566,22 @@ test('MCP stale Agent rejected', async () => {
 
 // 29 compile uses effective default correctly
 test('MCP compile uses effective default', async () => {
-  const client = { listAgents: async () => singleAgent, health: async () => ({ ok: true, agents: 1, mode: 'compat' }), runAgent: async ({ prompt, metadata }) => { if (metadata?.purpose === 'compile') return { id: 'c', text: 'compiled' }; return { id: 'r', text: 'ok' }; } };
+  const client = {
+    listAgents: async () => singleAgent,
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    runAgent: async ({ prompt, metadata }) => {
+      if (metadata?.purpose === 'compile') return { id: 'c', text: 'compiled' };
+      return { id: 'r', text: 'ok' };
+    },
+  };
   await withMcpServer(client, async ({ client: mcp }) => {
     const c = await mcp.callTool({ name: 'multicontext_create_workspace', arguments: { name: 'CompileTest', initial_chat_count: 1 } });
     const ws = JSON.parse(c.content[0].text);
     await mcp.callTool({ name: 'multicontext_wait_until_settled', arguments: { workspace_id: ws.id, timeout_seconds: 2 } });
     const comp = await mcp.callTool({ name: 'multicontext_compile', arguments: { workspace_id: ws.id } });
-    // Compile should succeed with single agent auto-resolved or fail with clear code
-    if (comp.isError) {
-      assert.ok(comp.content[0].text.length > 0);
-    } else {
-      assert.ok(comp.content[0].text.length > 0);
-    }
+    assert.equal(comp.isError, undefined, `compile should succeed with single auto agent, got error: ${comp.content?.[0]?.text}`);
+    const data = JSON.parse(comp.content[0].text);
+    assert.ok(data.lastCompile && data.lastCompile.text === 'compiled');
   });
 });
 

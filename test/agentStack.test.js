@@ -168,15 +168,16 @@ test('Agent discovery failure produces actionable state', async () => {
   await withServer(client, async ({ base }) => {
     const health = await jfetch(base, '/api/health');
     assert.equal(health.res.status, 503);
-    // Broadcast with no agents and failing discovery should be 400 with Japanese message
+    // Broadcast with failing discovery should be 503 DISCOVERY_FAILED
     const { data: ws } = await jfetch(base, '/api/workspaces', { method:'POST', body: JSON.stringify({ name:'W2' }) });
-    // workspace default will be empty because discovery failed
+    // workspace default will be empty because discovery failed without validation (blank allowed)
     assert.equal(ws.defaultAgentId, '');
     const add = await jfetch(base, `/api/workspaces/${ws.id}/members`, { method:'POST', body: JSON.stringify({ name:'M' }) });
     const mid = add.data.member.id;
     const bc = await jfetch(base, `/api/workspaces/${ws.id}/broadcast`, { method:'POST', body: JSON.stringify({ prompt:'hi' }) });
-    assert.equal(bc.res.status, 400);
-    assert.match(bc.data.error, /利用可能なLibreChat Agent/);
+    assert.equal(bc.res.status, 503);
+    assert.match(bc.data.error, /取得に失敗/);
+    assert.equal(bc.data.code, 'DISCOVERY_FAILED');
   });
 });
 // 10

@@ -153,7 +153,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       description: 'Stop all chats in a workspace',
       inputSchema: z.object({ workspace_id: z.string().min(1) }),
     }, async ({ workspace_id }) => {
-      const ws = await app.stopWorkspace(workspaceId);
+      const ws = await app.stopWorkspace(workspace_id);
       return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }], structuredContent: ws };
     });
 
@@ -161,7 +161,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       description: 'Stop a single chat',
       inputSchema: z.object({ workspace_id: z.string().min(1), chat_id: z.string().min(1) }),
     }, async ({ workspace_id, chat_id }) => {
-      const ws = await app.stopChat(workspaceId, chatId);
+      const ws = await app.stopChat(workspace_id, chat_id);
       return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }], structuredContent: ws };
     });
 
@@ -169,7 +169,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       description: 'Retry a blocked chat',
       inputSchema: z.object({ workspace_id: z.string().min(1), chat_id: z.string().min(1) }),
     }, async ({ workspace_id, chat_id }) => {
-      const ws = await app.retryChat(workspaceId, chatId);
+      const ws = await app.retryChat(workspace_id, chat_id);
       return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }], structuredContent: ws };
     });
 

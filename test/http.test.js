@@ -96,9 +96,10 @@ test('Compile is rejected while running and succeeds only after SETTLED', async 
 });
 
 test('cross-chat Action lists peers and queues the same prompt to one or two peers', async () => {
+  const agents = [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }];
   const client = {
     health: async () => ({ ok: true, agents: 3, mode: 'compat' }),
-    listAgents: async () => [],
+    listAgents: async () => agents,
     runAgent: async ({ agentId, prompt }) => ({ id: `r-${agentId}`, text: `${agentId}:${prompt}` }),
   };
   await withServer(client, async ({ base }) => {
@@ -126,8 +127,8 @@ test('cross-chat Action lists peers and queues the same prompt to one or two pee
 
 test('Action public URL uses configured externally reachable origin', async () => {
   const client = {
-    health: async () => ({ ok: true, agents: 0, mode: 'compat' }),
-    listAgents: async () => [],
+    health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
+    listAgents: async () => [{ id: 'a', name: 'A' }],
     runAgent: async () => ({ id: 'r', text: 'ok' }),
   };
   await withServer(client, async ({ base }) => {
@@ -273,7 +274,7 @@ test('OpenAPI spec includes error responses for all operations', async () => {
 test('publicOrigin rejects non-http/https forwarded proto', async () => {
   const client = {
     health: async () => ({ ok: true, agents: 1, mode: 'compat' }),
-    listAgents: async () => [],
+    listAgents: async () => [{ id: 'a', name: 'A' }],
     runAgent: async () => ({ id: 'r', text: '' }),
   };
   await withServer(client, async ({ base }) => {

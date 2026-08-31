@@ -61,11 +61,39 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       cachedAgents = list;
       cachedAgentsAt = now;
       return list;
-    } catch {
-      // On failure, return cached if any, else empty
+    } catch (e) {
+      // Preserve distinction: if cached, return it for display but caller should know it's stale
       if (cachedAgents) return cachedAgents;
-      return [];
+      throw e;
     }
+  }
+
+  async function getAvailableAgentsWithStatus(force = false) {
+    const now = Date.now();
+    if (!force && cachedAgents && now - cachedAgentsAt < 5000) {
+      return { ok: true, agents: cachedAgents, error: null, fromCache: true, fetchedAt: cachedAgentsAt };
+    }
+    try {
+      const agents = await client.listAgents();
+      const list = Array.isArray(agents) ? agents : [];
+      cachedAgents = list;
+      cachedAgentsAt = Date.now();
+      return { ok: true, agents: list, error: null, fromCache: false, fetchedAt: cachedAgentsAt };
+    } catch (e) {
+      const err = e.message || String(e);
+      if (cachedAgents) {
+        return { ok: false, agents: cachedAgents, error: err, fromCache: true, fetchedAt: cachedAgentsAt };
+      }
+      return { ok: false, agents: [], error: err, fromCache: false, fetchedAt: null };
+    }
+  }
+
+  async function requireFreshAgents() {
+    const status = await getAvailableAgentsWithStatus(true);
+    if (!status.ok) {
+      throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+    }
+    return status.agents;
   }
 
   async function getResolvedSingleAgentId() {
@@ -224,6 +252,21 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   async function createWorkspace(input = {}) {
+    // Validate supplied Agent IDs before persisting
+    const suppliedDefault = String(input.defaultAgentId || input.default_agent_id || '').trim();
+    if (suppliedDefault) {
+      const agents = await requireFreshAgents();
+      if (!agents.some(a => String(a.id) === suppliedDefault)) {
+        throw problem(`Agentが利用不可です: ${suppliedDefault}`, 400, AGENT_NOT_AVAILABLE);
+      }
+    }
+    const suppliedCompile = String(input.compileAgentId || input.compile_agent_id || '').trim();
+    if (suppliedCompile) {
+      const agents = await requireFreshAgents();
+      if (!agents.some(a => String(a.id) === suppliedCompile)) {
+        throw problem(`Compile Agentが利用不可です: ${suppliedCompile}`, 400, AGENT_NOT_AVAILABLE);
+      }
+    }
     const workspace = store.createWorkspace(input);
     // Auto-resolve default only if exactly one agent
     if (!workspace.defaultAgentId) {
@@ -243,16 +286,16 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (patch.default_agent_id !== undefined) patch.defaultAgentId = patch.default_agent_id;
     if (patch.system_prompt !== undefined) patch.globalPrompt = patch.system_prompt;
     if (patch.defaultAgentId !== undefined && patch.defaultAgentId !== '') {
-      const agents = await getAvailableAgents();
-      if (agents.length && !(await validateAgentId(patch.defaultAgentId, agents))) {
+      const agents = await requireFreshAgents();
+      if (!agents.some(a => String(a.id) === String(patch.defaultAgentId))) {
         throw problem(`Agentが利用不可です: ${patch.defaultAgentId}`, 400, AGENT_NOT_AVAILABLE);
       }
     }
     if (patch.compile_agent_id !== undefined) patch.compileAgentId = patch.compile_agent_id;
     if (patch.compile_prompt !== undefined) patch.compilePrompt = patch.compile_prompt;
     if (patch.compileAgentId !== undefined && patch.compileAgentId !== '') {
-      const agents = await getAvailableAgents();
-      if (agents.length && !(await validateAgentId(patch.compileAgentId, agents))) {
+      const agents = await requireFreshAgents();
+      if (!agents.some(a => String(a.id) === String(patch.compileAgentId))) {
         throw problem(`Compile Agentが利用不可です: ${patch.compileAgentId}`, 400, AGENT_NOT_AVAILABLE);
       }
     }
@@ -293,8 +336,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       canSendOthers: input.canSendOthers,
     };
     if (memberInput.agentId) {
-      const agents = await getAvailableAgents();
-      if (agents.length && !(await validateAgentId(memberInput.agentId, agents))) {
+      const agents = await requireFreshAgents();
+      if (!agents.some(a => String(a.id) === String(memberInput.agentId))) {
         throw problem(`Agentが利用不可です: ${memberInput.agentId}`, 400, AGENT_NOT_AVAILABLE);
       }
     }
@@ -315,8 +358,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (patch.canInspectOthers !== undefined) update.canInspectOthers = patch.canInspectOthers;
     if (patch.canSendOthers !== undefined) update.canSendOthers = patch.canSendOthers;
     if (update.agentId !== undefined && update.agentId !== '') {
-      const agents = await getAvailableAgents();
-      if (agents.length && !(await validateAgentId(update.agentId, agents))) {
+      const agents = await requireFreshAgents();
+      if (!agents.some(a => String(a.id) === String(update.agentId))) {
         throw problem(`Agentが利用不可です: ${update.agentId}`, 400, AGENT_NOT_AVAILABLE);
       }
     }
@@ -338,8 +381,12 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const workspace = store.requireWorkspace(workspaceId);
     const activeMembers = Object.values(workspace.members).filter(m => m.active);
     if (!activeMembers.length) throw problem('No active members', 409, NO_ACTIVE_CHATS);
-    // Validate all before mutation
-    const agents = await getAvailableAgents();
+    // Validate discovery before any mutation
+    const agentsStatus = await getAvailableAgentsWithStatus(true);
+    if (!agentsStatus.ok) {
+      throw problem(`LibreChat Agentの取得に失敗しました: ${agentsStatus.error}`, 503, 'DISCOVERY_FAILED');
+    }
+    const agents = agentsStatus.agents;
     // Ensure workspace default if needed and single agent case
     const needsDefault = activeMembers.some(m => !effectiveAgentIdForMember(workspace, m));
     if (needsDefault && !workspace.defaultAgentId) {
@@ -349,7 +396,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       } else if (agents.length > 1) {
         throw problem('複数のAgentが存在します。ワークスペースまたはチャットで使用するAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
       } else if (agents.length === 0) {
-        throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
+        throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 400, AGENT_SELECTION_REQUIRED);
       }
     }
     const updatedWs = store.requireWorkspace(workspaceId);
@@ -358,7 +405,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       const fresh = updatedWs.members[m.id];
       const eff = effectiveAgentIdForMember(updatedWs, fresh);
       if (!eff) throw problem(`チャット "${fresh.name}" のAgentが未設定です。`, 400, AGENT_SELECTION_REQUIRED);
-      if (agents.length && !(await validateAgentId(eff, agents))) throw problem(`チャット "${fresh.name}" のAgentが利用不可です: ${eff}`, 400, AGENT_NOT_AVAILABLE);
+      if (!agents.some(a => String(a.id) === String(eff))) throw problem(`チャット "${fresh.name}" のAgentが利用不可です: ${eff}`, 400, AGENT_NOT_AVAILABLE);
     }
     // Auto-recover BLOCKED config errors
     for (const m of activeMembers) {
@@ -381,6 +428,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const member = workspace.members[chatId];
     if (!member) throw problem('Member not found', 404, CHAT_NOT_FOUND);
     if (!member.active) throw problem('Target member is inactive', 409);
+    const agentsStatus = await getAvailableAgentsWithStatus(true);
+    if (!agentsStatus.ok) {
+      throw problem(`LibreChat Agentの取得に失敗しました: ${agentsStatus.error}`, 503, 'DISCOVERY_FAILED');
+    }
+    const agents = agentsStatus.agents;
     let effective = effectiveAgentIdForMember(workspace, member);
     if (!effective) {
       const single = await getResolvedSingleAgentId();
@@ -390,13 +442,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       }
     }
     if (!effective) {
-      const agents = await getAvailableAgents();
-      if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
+      if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 400, AGENT_SELECTION_REQUIRED);
       if (agents.length > 1) throw problem('複数のAgentが存在します。ワークスペースまたはチャットで使用するAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
       throw problem('Agentが未設定です。', 400, AGENT_SELECTION_REQUIRED);
     }
-    const agents = await getAvailableAgents();
-    if (agents.length && !(await validateAgentId(effective, agents))) throw problem(`Agentが利用不可です: ${effective}`, 400, AGENT_NOT_AVAILABLE);
+    if (!agents.some(a => String(a.id) === String(effective))) throw problem(`Agentが利用不可です: ${effective}`, 400, AGENT_NOT_AVAILABLE);
     // auto-recover if blocked due to config
     const fresh = store.requireWorkspace(workspaceId).members[chatId];
     if (fresh.status === 'error' && fresh.lastError && (String(fresh.lastError).includes('利用可能なLibreChat Agent') || String(fresh.lastError).includes('LibreChat agentId is required') || String(fresh.lastError).includes('Agentが利用不可'))) {
@@ -405,6 +455,40 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const item = store.enqueue(workspaceId, chatId, text, { source: 'user' });
     scheduler.kickMember(workspaceId, chatId);
     return { item, workspace: await getWorkspace(workspaceId) };
+  }
+
+  async function sendToChats(workspaceId, sourceMemberId, targetRefs, prompt) {
+    const text = String(prompt || '').trim();
+    if (!text) throw problem('Prompt is required', 400);
+    const workspace = store.requireWorkspace(workspaceId);
+    const source = workspace.members[sourceMemberId];
+    if (!source) throw problem('Source member not found', 404, CHAT_NOT_FOUND);
+    const refs = Array.isArray(targetRefs) ? targetRefs : [targetRefs];
+    if (refs.length < 1 || refs.length > 2) throw problem('targets must contain one or two chats', 400);
+    const targets = refs.map(ref => store.resolveMember(workspaceId, ref, { activeOnly: true }));
+    if (new Set(targets.map(m => m.id)).size !== targets.length) throw problem('Targets must be unique', 400);
+    if (targets.some(m => m.id === sourceMemberId)) throw problem('Target must be another chat', 400);
+    // Centralized Agent validation for all targets before any mutation
+    const status = await getAvailableAgentsWithStatus(true);
+    if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+    const agents = status.agents;
+    for (const t of targets) {
+      const eff = String(t.agentId || workspace.defaultAgentId || '').trim();
+      let effective = eff;
+      if (!effective && agents.length === 1) effective = String(agents[0].id);
+      if (!effective) {
+        if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 400, AGENT_SELECTION_REQUIRED);
+        throw problem(`チャット "${t.name}" のAgentが未設定です。ワークスペースの既定エージェントを選択してください。`, 400, AGENT_SELECTION_REQUIRED);
+      }
+      if (!agents.some(a => String(a.id) === String(effective))) {
+        throw problem(`チャット "${t.name}" のAgentが利用不可です: ${effective}`, 400, AGENT_NOT_AVAILABLE);
+      }
+    }
+    // All validated, now enqueue atomically
+    const items = targets.map(target => ({ target: { id: target.id, name: target.name }, item: store.enqueue(workspaceId, target.id, text, { source: 'tool', sourceMemberId }) }));
+    for (const t of targets) scheduler.kickMember(workspaceId, t.id);
+    workspace.stats.toolEnqueues += 0; // already counted via enqueue
+    return { accepted: true, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) };
   }
 
   function stopWorkspace(workspaceId) {
@@ -424,18 +508,21 @@ export function createApplication({ config, store, client, scheduler } = {}) {
 
   async function getRuntimeStatus(workspaceId = null) {
     const health = await client.health();
-    const agents = await getAvailableAgents().catch(() => []);
+    const agentsStatusFull = await getAvailableAgentsWithStatus();
+    const agents = agentsStatusFull.agents;
+    const agentsStatus = { ok: agentsStatusFull.ok, error: agentsStatusFull.error, fromCache: agentsStatusFull.fromCache };
     const infrastructure = {
       librechat: { ok: Boolean(health.ok), latencyMs: health.latencyMs || 0, mode: health.mode || 'unknown', error: health.error || null },
-      multicontext: { ok: Boolean(health.ok), error: health.error || null },
-      gptoss: { ok: true, message: '準備完了' }, // derived from librechat health for now; real model health is via Tauri runtime_status
+      multicontext: { ok: true, status: 'ok', message: 'Node API running' },
+      gptoss: { status: 'unknown', ok: null, source: 'desktop-runtime', message: 'Desktop runtimeでのみ確認可能' },
     };
-    // For MCP, we don't have direct model health without Tauri; use librechat ok as proxy but keep separate
-    // Application readiness
     const application = {
       remoteAgentsAuthOk: Boolean(health.ok),
       availableAgents: agents.length,
       agents: agents.map(a => ({ id: String(a.id), name: String(a.name || a.id), provider: a.provider || null })),
+      agentsOk: agentsStatus.ok,
+      agentsError: agentsStatus.error,
+      agentsFromCache: agentsStatus.fromCache,
     };
     let workspaceInfo = null;
     if (workspaceId) {
@@ -460,13 +547,16 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       if (single) agentId = single;
     }
     if (!agentId) {
-      const agents = await getAvailableAgents();
+      const status = await getAvailableAgentsWithStatus(true);
+      if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+      const agents = status.agents;
       if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。', 400, AGENT_SELECTION_REQUIRED);
       if (agents.length > 1) throw problem('Compileに使用するAgentが未設定です。compile_agent_id またはワークスペース既定Agentを設定してください。', 400, AGENT_SELECTION_REQUIRED);
     }
     // Validate stale
-    const agents = await getAvailableAgents();
-    if (agents.length && !(await validateAgentId(agentId, agents))) throw problem(`Compile Agentが利用不可です: ${agentId}`, 400, AGENT_NOT_AVAILABLE);
+    const status = await getAvailableAgentsWithStatus(true);
+    if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+    if (!status.agents.some(a => String(a.id) === String(agentId))) throw problem(`Compile Agentが利用不可です: ${agentId}`, 400, AGENT_NOT_AVAILABLE);
     compilingWorkspaces.add(workspaceId);
     try {
       const snapshots = Object.values(workspace.members).filter(m => m.active).map(m => ({ member: { id: m.id, name: m.name }, messages: m.messages.filter(x => !x.pending).slice(-12).map(({ role, content, at }) => ({ role, content, at })) }));
@@ -530,6 +620,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     deleteChat,
     broadcast,
     send,
+    sendToChats,
     stopWorkspace,
     stopChat,
     retryChat,

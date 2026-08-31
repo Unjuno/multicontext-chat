@@ -287,24 +287,12 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       if (!workspace.settings.allowCrossChatSend || !source.canSendOthers) return json(res, 403, { error: 'Cross-chat sending is disabled' });
       const body = await readBody(req); const refs = Array.isArray(body.targets) ? body.targets : body.target_member_id ? [body.target_member_id] : [];
       if (refs.length < 1 || refs.length > 2) return json(res, 400, { error: 'targets must contain one or two chats' });
-      const targets = refs.map((ref) => store.resolveMember(workspaceId, ref, { activeOnly: true }));
-      if (new Set(targets.map((m) => m.id)).size !== targets.length) return json(res, 400, { error: 'Targets must be unique' });
-      if (targets.some((m) => m.id === source.id)) return json(res, 400, { error: 'Target must be another chat' });
-      // Validate all targets' effective agents before mutating
-      const agents = await app._internal.getAvailableAgents();
-      for (const t of targets) {
-        const eff = String(t.agentId || workspace.defaultAgentId || '').trim();
-        if (!eff) {
-          if (agents.length > 1) return json(res, 400, { error: `Target "${t.name}" Agent未設定 — ワークスペース既定を設定してください`, code: 'AGENT_SELECTION_REQUIRED' });
-          if (agents.length === 0) return json(res, 400, { error: '利用可能なAgentがありません', code: 'AGENT_SELECTION_REQUIRED' });
-        }
-        if (agents.length && eff && !agents.some(a => String(a.id) === eff)) {
-          return json(res, 400, { error: `Target "${t.name}" Agentが利用不可: ${eff}`, code: 'AGENT_NOT_AVAILABLE' });
-        }
+      try {
+        const result = await app.sendToChats(workspaceId, sourceMemberId, refs, body.prompt);
+        return json(res, 202, result);
+      } catch (e) {
+        return json(res, e.status || 400, { error: e.message, code: e.code });
       }
-      const items = targets.map((target) => ({ target: { id: target.id, name: target.name }, item: store.enqueue(workspaceId, target.id, body.prompt, { source: 'tool', sourceMemberId }) }));
-      for (const target of targets) scheduler.kickMember(workspaceId, target.id);
-      return json(res, 202, { accepted: true, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) });
     }
     return false;
   }
