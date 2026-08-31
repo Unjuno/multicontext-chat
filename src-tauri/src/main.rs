@@ -414,7 +414,7 @@ fn start_multicontext(
     node: &str,
 ) -> Result<(), String> {
     let cwd = runtime::server_root(app, &state.dev_cwd);
-    let entry = cwd.join("src").join("server.js");
+    let entry = runtime::server_entry(&cwd, &state.dev_cwd);
     if !entry.exists() {
         return Err(format!(
             "MultiContext サーバーが見つかりません: {} (リソースが正しくバンドルされていません)",
@@ -544,6 +544,21 @@ fn get_mcp_status(state: tauri::State<AppState>) -> McpStatus {
     McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint }
 }
 
+fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State<AppState>) -> Result<bool, String> {
+    let is_owned = state.children.children.lock().unwrap().contains_key("MultiContext");
+    if !is_owned {
+        return Ok(false);
+    }
+    process::terminate(&state.children, "MultiContext");
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let cfg = state.config.lock().unwrap().clone();
+    let node = resolve_node(state).ok_or("Node.js が見つかりません")?;
+    start_multicontext(app, state, &cfg, &node)?;
+    // Brief wait for port to become listening; health polling will confirm readiness separately
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    Ok(true)
+}
+
 #[tauri::command]
 fn set_mcp_enabled(state: tauri::State<AppState>, app: tauri::AppHandle, enabled: bool) -> Result<McpStatus, String> {
     let mut cfg = state.config.lock().unwrap().clone();
@@ -559,13 +574,23 @@ fn set_mcp_enabled(state: tauri::State<AppState>, app: tauri::AppHandle, enabled
         let tok = keychain::generate_mcp_token();
         let _ = keychain::set_mcp_token(&tok);
     }
+    // Restart owned MultiContext to pick up new enabled/token
+    let restarted = restart_owned_multicontext(&app, &state)?;
+    if !restarted && state.children.children.lock().unwrap().contains_key("MultiContext") == false {
+        // External service - inform caller via log, UI will show external notice
+        trace(&app, &format!("set_mcp_enabled external: restart required for token/config change"));
+    }
     Ok(McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port) })
 }
 
 #[tauri::command]
-fn generate_mcp_token() -> Result<String, String> {
+fn generate_mcp_token(state: tauri::State<AppState>, app: tauri::AppHandle) -> Result<String, String> {
     let tok = keychain::generate_mcp_token();
     keychain::set_mcp_token(&tok)?;
+    let restarted = restart_owned_multicontext(&app, &state)?;
+    if !restarted {
+        trace(&app, "generate_mcp_token external: restart required");
+    }
     Ok(tok)
 }
 

@@ -552,10 +552,18 @@
       });
       document.getElementById("regenMcpToken")?.addEventListener("click", async () => {
         if (!confirm("MCPトークンを再生成しますか？ 既存の外部連携は再設定が必要です。")) return;
-        try { await invoke("generate_mcp_token"); await refreshMcpState(); document.getElementById("mcpHint").textContent = "トークンを再生成しました。OpenCode設定を再コピーしてください。"; } catch (e) { document.getElementById("mcpHint").textContent = String(e); }
+        try {
+          await invoke("generate_mcp_token");
+          await refreshMcpState();
+          document.getElementById("mcpHint").textContent = "トークンを再生成しました。Desktop管理のMultiContextは自動再起動しました（外部の場合は手動再起動後に有効）。OpenCode設定を再コピーしてください。";
+        } catch (e) { document.getElementById("mcpHint").textContent = String(e); }
       });
       document.getElementById("disableMcp")?.addEventListener("click", async () => {
-        try { await invoke("set_mcp_enabled", { enabled: false }); await refreshMcpState(); document.getElementById("mcpHint").textContent = "MCPを無効化しました。"; } catch (e) { document.getElementById("mcpHint").textContent = String(e); }
+        try {
+          await invoke("set_mcp_enabled", { enabled: false });
+          await refreshMcpState();
+          document.getElementById("mcpHint").textContent = "MCPを無効化しました。Desktop管理の場合は即時反映、外部の場合は再起動後に有効です。";
+        } catch (e) { document.getElementById("mcpHint").textContent = String(e); }
       });
 
       (async () => {

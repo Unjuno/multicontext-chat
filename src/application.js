@@ -317,8 +317,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   async function listAgents() {
-    const agents = await getAvailableAgents(true);
-    return agents.map(a => ({ id: String(a.id), name: String(a.name || a.id), provider: a.provider || null, model: a.model || null }));
+    const status = await getAvailableAgentsWithStatus(true);
+    if (!status.ok) {
+      throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+    }
+    return status.agents.map(a => ({ id: String(a.id), name: String(a.name || a.id), provider: a.provider || null, model: a.model || null }));
   }
 
   async function addChat(workspaceId, input = {}) {
@@ -472,10 +475,22 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const status = await getAvailableAgentsWithStatus(true);
     if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
     const agents = status.agents;
+    // If exactly one agent exists and workspace default is empty, persist it atomically before validation
+    if (!workspace.defaultAgentId && agents.length === 1) {
+      const singleId = String(agents[0].id || '');
+      if (singleId) {
+        try { store.updateWorkspace(workspaceId, { defaultAgentId: singleId }); } catch {}
+        // Refresh workspace view for subsequent validation
+        workspace.defaultAgentId = singleId;
+      }
+    }
     for (const t of targets) {
       const eff = String(t.agentId || workspace.defaultAgentId || '').trim();
       let effective = eff;
-      if (!effective && agents.length === 1) effective = String(agents[0].id);
+      if (!effective && agents.length === 1) {
+        effective = String(agents[0].id);
+        // Persist fallback as above already handled, but ensure effective resolved
+      }
       if (!effective) {
         if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 400, AGENT_SELECTION_REQUIRED);
         throw problem(`チャット "${t.name}" のAgentが未設定です。ワークスペースの既定エージェントを選択してください。`, 400, AGENT_SELECTION_REQUIRED);

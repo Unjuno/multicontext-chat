@@ -11,19 +11,47 @@ use tauri::Manager;
 pub fn server_root(app: &tauri::AppHandle, dev_cwd: &PathBuf) -> PathBuf {
     if let Ok(res) = app.path().resource_dir() {
         let bundled = res.join("multicontext");
+        // Prefer bundled dist/server.bundle.mjs (self-contained with MCP SDK)
+        if bundled.join("dist").join("server.bundle.mjs").exists() {
+            return bundled;
+        }
         if bundled.join("src").join("server.js").exists() {
             return bundled;
         }
+    }
+    // dev fallback: prefer dist bundle if built
+    if dev_cwd.join("dist").join("server.bundle.mjs").exists() {
+        return dev_cwd.clone();
     }
     if dev_cwd.join("src").join("server.js").exists() {
         return dev_cwd.clone();
     }
     if let Some(parent) = dev_cwd.parent() {
+        if parent.join("dist").join("server.bundle.mjs").exists() {
+            return parent.to_path_buf();
+        }
         if parent.join("src").join("server.js").exists() {
             return parent.to_path_buf();
         }
     }
     dev_cwd.clone()
+}
+
+pub fn server_entry(bundled_root: &PathBuf, dev_cwd: &PathBuf) -> PathBuf {
+    // Production bundled entry has priority
+    let candidates = [
+        bundled_root.join("dist").join("server.bundle.mjs"),
+        dev_cwd.join("dist").join("server.bundle.mjs"),
+        bundled_root.join("src").join("server.js"),
+        dev_cwd.join("src").join("server.js"),
+    ];
+    for p in candidates {
+        if p.exists() {
+            return p;
+        }
+    }
+    // Fallback to src/server.js under bundled root
+    bundled_root.join("src").join("server.js")
 }
 
 /// Locate a Node.js executable reliably (Finder-launched apps lack a shell PATH).

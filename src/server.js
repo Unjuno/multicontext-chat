@@ -92,10 +92,17 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     }
     const handler = await getMcpHandler();
     if (!handler) { json(res, 500, { error: 'MCP handler not available' }); return true; }
-    // For Streamable HTTP, we need to handle POST /mcp
-    // The SDK handler expects a web Request; we convert Node req to Request
+    // For Streamable HTTP, we need to handle POST /mcp (bounded body)
     const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
+    let mcpBytes = 0;
+    for await (const chunk of req) {
+      mcpBytes += chunk.length;
+      if (mcpBytes > 1_000_000) {
+        json(res, 413, { error: 'MCP request body too large', code: 'PAYLOAD_TOO_LARGE' });
+        return true;
+      }
+      chunks.push(chunk);
+    }
     const body = chunks.length ? Buffer.concat(chunks) : null;
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) {

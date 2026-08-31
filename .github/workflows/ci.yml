@@ -13,7 +13,15 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
+      - run: npm run build:server
+      - run: node --check dist/server.bundle.mjs
       - run: npm run check
+      - name: verify production bundle is self-contained (no bare MCP import)
+        run: |
+          test -f dist/server.bundle.mjs
+          ! grep -q "from '@modelcontextprotocol/server'" dist/server.bundle.mjs || (echo "bundle still has bare MCP import" && exit 1)
+          ! grep -q "from 'zod'" dist/server.bundle.mjs || (echo "bundle still has bare zod import" && exit 1)
+          echo "bundle verification passed"
   rust:
     runs-on: macos-latest
     steps:

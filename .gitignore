@@ -10,3 +10,4 @@ src-tauri/Cargo.lock
 *.log
 src-tauri/gen/
 src-tauri/icons/icon.iconset/
+dist/
