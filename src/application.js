@@ -97,11 +97,15 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   async function getResolvedSingleAgentId() {
-    // Only auto-resolve when exactly one usable agent exists
+    // Only auto-resolve when exactly one freshly discovered agent exists (stale cache never persisted)
     const now = Date.now();
     if (cachedDefaultAgentId && now - cachedDefaultFetchedAt < 30000) {
-      // Need to verify still single? re-fetch if multiple case could have changed
-      const agents = await getAvailableAgents();
+      const status = await getAvailableAgentsWithStatus(true);
+      if (!status.ok) {
+        cachedDefaultAgentId = null;
+        return '';
+      }
+      const agents = status.agents;
       if (agents.length === 1 && String(agents[0].id) === cachedDefaultAgentId) return cachedDefaultAgentId;
       if (agents.length !== 1) {
         cachedDefaultAgentId = null;
@@ -110,7 +114,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       return cachedDefaultAgentId;
     }
     try {
-      const agents = await getAvailableAgents(true);
+      const status = await getAvailableAgentsWithStatus(true);
+      if (!status.ok) return '';
+      const agents = status.agents;
       if (agents.length === 1) {
         const chosen = String(agents[0].id || '');
         if (chosen) {
@@ -136,9 +142,16 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   async function ensureWorkspaceDefaultAgent(workspaceId, availableAgents = null) {
     const workspace = store.requireWorkspace(workspaceId);
     if (workspace.defaultAgentId) {
-      // Validate stale
-      const agents = availableAgents ?? await getAvailableAgents();
-      if (agents.length && !(await validateAgentId(workspace.defaultAgentId, agents))) {
+      // Validate stale only against fresh discovery; if discovery fails, keep existing (display-only)
+      let agents;
+      if (availableAgents) {
+        agents = availableAgents;
+      } else {
+        const status = await getAvailableAgentsWithStatus(true);
+        if (!status.ok) return workspace.defaultAgentId;
+        agents = status.agents;
+      }
+      if (agents.length && !agents.some(a => String(a.id) === String(workspace.defaultAgentId))) {
         // stale but keep it; caller should surface error
         return workspace.defaultAgentId;
       }
@@ -146,7 +159,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     }
     const resolved = await getResolvedSingleAgentId();
     if (resolved) {
-      store.updateWorkspace(workspaceId, { defaultAgentId: resolved });
+      try { store.updateWorkspace(workspaceId, { defaultAgentId: resolved }); } catch {}
       return resolved;
     }
     return '';
@@ -471,25 +484,15 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const targets = refs.map(ref => store.resolveMember(workspaceId, ref, { activeOnly: true }));
     if (new Set(targets.map(m => m.id)).size !== targets.length) throw problem('Targets must be unique', 400);
     if (targets.some(m => m.id === sourceMemberId)) throw problem('Target must be another chat', 400);
-    // Centralized Agent validation for all targets before any mutation
+    // Centralized Agent validation for all targets before any mutation (no state change yet)
     const status = await getAvailableAgentsWithStatus(true);
     if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
     const agents = status.agents;
-    // If exactly one agent exists and workspace default is empty, persist it atomically before validation
-    if (!workspace.defaultAgentId && agents.length === 1) {
-      const singleId = String(agents[0].id || '');
-      if (singleId) {
-        try { store.updateWorkspace(workspaceId, { defaultAgentId: singleId }); } catch {}
-        // Refresh workspace view for subsequent validation
-        workspace.defaultAgentId = singleId;
-      }
-    }
     for (const t of targets) {
       const eff = String(t.agentId || workspace.defaultAgentId || '').trim();
       let effective = eff;
       if (!effective && agents.length === 1) {
         effective = String(agents[0].id);
-        // Persist fallback as above already handled, but ensure effective resolved
       }
       if (!effective) {
         if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 400, AGENT_SELECTION_REQUIRED);
@@ -497,6 +500,13 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       }
       if (!agents.some(a => String(a.id) === String(effective))) {
         throw problem(`チャット "${t.name}" のAgentが利用不可です: ${effective}`, 400, AGENT_NOT_AVAILABLE);
+      }
+    }
+    // All targets validated — now persist single-Agent workspace default if needed (after validation, before mutation)
+    if (!workspace.defaultAgentId && agents.length === 1) {
+      const singleId = String(agents[0].id || '');
+      if (singleId) {
+        store.updateWorkspace(workspaceId, { defaultAgentId: singleId });
       }
     }
     // All validated, now enqueue atomically

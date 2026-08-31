@@ -535,13 +535,24 @@ pub struct McpStatus {
     pub enabled: bool,
     pub has_token: bool,
     pub endpoint: String,
+    pub is_external: bool,
+    pub applied: bool,
 }
 
 #[tauri::command]
-fn get_mcp_status(state: tauri::State<AppState>) -> McpStatus {
+async fn get_mcp_status(state: tauri::State<'_, AppState>) -> Result<McpStatus, String> {
     let cfg = state.config.lock().unwrap().clone();
     let endpoint = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
-    McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint }
+    let is_owned = state.children.children.lock().unwrap().contains_key("MultiContext");
+    let is_external = if is_owned {
+        false
+    } else {
+        let client = health::client();
+        let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
+        health::is_listening(&client, &mc_url).await
+    };
+    let applied = !is_external;
+    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint, is_external, applied })
 }
 
 async fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State<'_, AppState>) -> Result<bool, String> {
@@ -554,21 +565,48 @@ async fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State
     let cfg = state.config.lock().unwrap().clone();
     let node = resolve_node(state).ok_or("Node.js が見つかりません")?;
     start_multicontext(app, state, &cfg, &node)?;
-    // Wait for strict /api/health (bounded 10s)
+    // Wait for strict /api/health (bounded 10s) — fail if not Ready
     let client = health::client();
     let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
-    let mut ok = false;
+    let mut health_ok = false;
+    let mut last_detail = String::new();
     for _ in 0..20 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         match health::multicontext_health(&client, &mc_url).await {
-            crate::health::McHealth::Ready => { ok = true; break; }
-            crate::health::McHealth::Unhealthy { .. } => { ok = false; break; } // running but misconfigured -> surface immediately
+            crate::health::McHealth::Ready => { health_ok = true; break; }
+            crate::health::McHealth::Unhealthy { detail, .. } => { last_detail = detail; health_ok = false; break; }
             crate::health::McHealth::Unreachable => continue,
         }
     }
-    if !ok {
-        // Health not ready - still consider restarted but warn caller
-        // Don't treat as fatal; UI will show status via runtime_status poll
+    if !health_ok {
+        return Err(format!("MultiContext再起動後に /api/health が Ready になりませんでした: {}", if last_detail.is_empty() { "応答なし".to_string() } else { last_detail }));
+    }
+    // Verify MCP endpoint matches expected enabled/token state
+    let mcp_url = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
+    if cfg.mcp_enabled {
+        let token = keychain::get_mcp_token().unwrap_or_default();
+        if token.is_empty() {
+            return Err("MCPが有効ですがトークンが空です".to_string());
+        }
+        // POST initialize with new token should succeed (200)
+        let payload = serde_json::json!({ "jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"health-check","version":"1.0"}}});
+        let resp = client.post(&mcp_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type","application/json")
+            .header("Accept","application/json, text/event-stream")
+            .json(&payload).send().await.map_err(|e| format!("MCP verify failed: {}", e))?;
+        if resp.status() != 200 {
+            return Err(format!("MCP再起動後に new token での initialize が失敗しました: HTTP {}", resp.status()));
+        }
+        // Old token no longer valid is expected, but we don't have it to test; new token success is sufficient
+    } else {
+        // When disabled, /mcp should return 404 MCP_DISABLED
+        let resp = client.post(&mcp_url)
+            .header("Content-Type","application/json")
+            .body("{}").send().await.map_err(|e| format!("MCP verify failed: {}", e))?;
+        if resp.status() != 404 {
+            return Err(format!("MCP無効化後に /mcp が 404 を返しませんでした: HTTP {}", resp.status()));
+        }
     }
     Ok(true)
 }
@@ -588,12 +626,19 @@ async fn set_mcp_enabled(state: tauri::State<'_, AppState>, app: tauri::AppHandl
         let tok = keychain::generate_mcp_token();
         let _ = keychain::set_mcp_token(&tok);
     }
-    // Restart owned MultiContext to pick up new enabled/token, wait for health
+    // Restart owned MultiContext to pick up new enabled/token, wait for health+MCP verification
     let restarted = restart_owned_multicontext(&app, &state).await?;
-    if !restarted {
-        trace(&app, "set_mcp_enabled external: restart required");
+    let is_external = !restarted && {
+        let client = health::client();
+        let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
+        health::is_listening(&client, &mc_url).await
+    };
+    if is_external {
+        trace(&app, "set_mcp_enabled external: manual MULTICONTEXT_MCP_TOKEN env and restart required");
+    } else if !restarted {
+        trace(&app, "set_mcp_enabled: no owned MultiContext to restart (will apply on next start)");
     }
-    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port) })
+    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port), is_external, applied: !is_external })
 }
 
 #[tauri::command]

@@ -403,10 +403,19 @@
         }
         try {
           const st = await invoke("get_mcp_status");
-          badge.textContent = st.enabled ? (st.has_token ? "利用可能" : "要設定") : "無効";
-          badge.className = "conn-badge" + (st.enabled && st.has_token ? " ok" : st.enabled ? " err" : "");
+          const isExt = !!st.is_external;
+          badge.textContent = st.enabled ? (st.has_token ? (isExt ? "外部要手動" : "利用可能") : "要設定") : "無効";
+          badge.className = "conn-badge" + (st.enabled && st.has_token && !isExt ? " ok" : st.enabled ? " err" : "");
           if (endpointEl) endpointEl.textContent = st.endpoint;
-          if (hint) hint.textContent = st.enabled ? (st.has_token ? "トークンはKeychainに保存済みです。" : "トークンを生成してください。") : "外部連携は無効です。";
+          if (hint) {
+            if (isExt) {
+              hint.textContent = st.enabled
+                ? "外部MultiContextが検出されました。DesktopのKeychainトークンは外部processの環境変数 MULTICONTEXT_MCP_TOKEN へ手動設定して再起動してください。Desktopからは認証設定を変更できません。"
+                : "外部MultiContextが検出されました。無効化は外部processの再起動後に有効です。";
+            } else {
+              hint.textContent = st.enabled ? (st.has_token ? "トークンはKeychainに保存済みです。" : "トークンを生成してください。") : "外部連携は無効です。";
+            }
+          }
           if (chk) chk.checked = !!st.enabled;
         } catch (_) {
           badge.textContent = "確認中...";
@@ -555,7 +564,12 @@
         try {
           await invoke("generate_mcp_token");
           await refreshMcpState();
-          document.getElementById("mcpHint").textContent = "トークンを再生成しました。Desktop管理のMultiContextは自動再起動しました（外部の場合は手動再起動後に有効）。OpenCode設定を再コピーしてください。";
+          const st = await invoke("get_mcp_status").catch(()=>null);
+          if (st && st.is_external) {
+            document.getElementById("mcpHint").textContent = "トークンをKeychainに再生成しましたが、外部MultiContextではDesktopから認証設定を変更できません。外部processの環境変数 MULTICONTEXT_MCP_TOKEN を新しいトークンに更新して再起動し、OpenCode設定を再コピーしてください。";
+          } else {
+            document.getElementById("mcpHint").textContent = "トークンを再生成し、Desktop管理のMultiContextを自動再起動しました。OpenCode設定を再コピーしてください。";
+          }
         } catch (e) { document.getElementById("mcpHint").textContent = String(e); }
       });
       document.getElementById("disableMcp")?.addEventListener("click", async () => {

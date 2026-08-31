@@ -15,6 +15,7 @@ jobs:
       - run: npm ci
       - run: npm run build:server
       - run: node --check dist/server.bundle.mjs
+      - run: node scripts/verify-bundle.mjs
       - run: npm run check
       - name: verify production bundle is self-contained (no bare MCP import)
         run: |

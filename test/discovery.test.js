@@ -183,6 +183,21 @@ test('createWorkspace blank ID remains allowed even when discovery fails later',
   await assert.rejects(() => app.broadcast(ws.id, 'hi'), (e) => e.code === 'DISCOVERY_FAILED');
 });
 
+test('cacheあり＋discovery failure＋blank create does not persist stale single', async () => {
+  const single = [{ id: 'solo' }];
+  const clientGood = { listAgents: async () => single, health: async () => ({ ok: true }), runAgent: async () => ({ id: 'r', text: 'ok' }) };
+  const store = makeStore();
+  const appGood = createApplication({ config: makeConfig(), store, client: clientGood, scheduler: new Scheduler({ store, client: clientGood }) });
+  // Prime cache with single agent via successful create
+  await appGood.createWorkspace({ name: 'Prime' });
+  // Now make discovery fail
+  const clientFail = { listAgents: async () => { throw new Error('LibreChat unreachable'); }, health: async () => ({ ok: false }), runAgent: async () => ({ id: 'r', text: 'ok' }) };
+  const appFail = createApplication({ config: makeConfig(), store, client: clientFail, scheduler: new Scheduler({ store, client: clientFail }) });
+  const ws = await appFail.createWorkspace({ name: 'BlankStale' });
+  assert.equal(ws.defaultAgentId, '', 'stale single must not be auto-persisted on discovery failure');
+  assert.equal(store.requireWorkspace(ws.id).defaultAgentId, '');
+});
+
 test('scheduler preserves queued prompt on discovery outage and Retry resumes FIFO', async () => {
   const singleAgent = [{ id: 'solo', name: 'Solo' }];
   let failDiscovery = false;
