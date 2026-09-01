@@ -10,6 +10,8 @@ const WORKSPACE_BLOCKED = 'WORKSPACE_BLOCKED';
 const TIMEOUT = 'TIMEOUT';
 const MCP_DISABLED = 'MCP_DISABLED';
 const AUTH_REQUIRED = 'AUTH_REQUIRED';
+const CROSS_CHAT_INSPECT_DISABLED = 'CROSS_CHAT_INSPECT_DISABLED';
+const CROSS_CHAT_SEND_DISABLED = 'CROSS_CHAT_SEND_DISABLED';
 
 function problem(message, status = 400, code = null) {
   const err = Object.assign(new Error(message), { status });
@@ -470,12 +472,40 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return { item, workspace: await getWorkspace(workspaceId) };
   }
 
+  async function listPeerChats(workspaceId, sourceMemberId) {
+    const workspace = store.requireWorkspace(workspaceId);
+    const source = workspace.members[sourceMemberId];
+    if (!source) throw problem('Source member not found', 404, CHAT_NOT_FOUND);
+    if (!source.active) throw problem('Source member is inactive', 409);
+    return Object.values(workspace.members)
+      .filter(m => m.active && m.id !== sourceMemberId)
+      .map(m => ({ id: m.id, name: m.name }));
+  }
+
+  async function inspectPeerChat(workspaceId, sourceMemberId, targetRef, query = null, limit = 8) {
+    const workspace = store.requireWorkspace(workspaceId);
+    const source = workspace.members[sourceMemberId];
+    if (!source) throw problem('Source member not found', 404, CHAT_NOT_FOUND);
+    if (!source.active) throw problem('Source member is inactive', 409);
+    if (!workspace.settings.allowCrossChatInspect) throw problem('Cross-chat inspection is disabled', 403, CROSS_CHAT_INSPECT_DISABLED);
+    if (!source.canInspectOthers) throw problem('Cross-chat inspection is disabled', 403, CROSS_CHAT_INSPECT_DISABLED);
+    const target = store.resolveMember(workspaceId, targetRef, { activeOnly: true });
+    if (target.id === sourceMemberId) throw problem('Target must be another chat', 400);
+    const results = searchMemberMessages(target, query, limit);
+    workspace.stats.inspections += 1;
+    store.save();
+    return { target: { id: target.id, name: target.name }, results };
+  }
+
   async function sendToChats(workspaceId, sourceMemberId, targetRefs, prompt) {
     const text = String(prompt || '').trim();
     if (!text) throw problem('Prompt is required', 400);
     const workspace = store.requireWorkspace(workspaceId);
     const source = workspace.members[sourceMemberId];
     if (!source) throw problem('Source member not found', 404, CHAT_NOT_FOUND);
+    if (!source.active) throw problem('Source member is inactive', 409);
+    if (!workspace.settings.allowCrossChatSend) throw problem('Cross-chat sending is disabled', 403, CROSS_CHAT_SEND_DISABLED);
+    if (!source.canSendOthers) throw problem('Cross-chat sending is disabled', 403, CROSS_CHAT_SEND_DISABLED);
     const refs = Array.isArray(targetRefs) ? targetRefs : [targetRefs];
     if (refs.length < 1 || refs.length > 2) throw problem('targets must contain one or two chats', 400);
     const targets = refs.map(ref => store.resolveMember(workspaceId, ref, { activeOnly: true }));
@@ -643,6 +673,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     broadcast,
     send,
     sendToChats,
+    listPeerChats,
+    inspectPeerChat,
     stopWorkspace,
     stopChat,
     retryChat,
