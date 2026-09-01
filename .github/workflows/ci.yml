@@ -38,3 +38,27 @@ jobs:
           workspaces: src-tauri
       - run: cargo check --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path src-tauri/Cargo.toml
+  # Optional full .app build for release verification (runs on main to keep PR CI fast)
+  app:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run build:server
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Build Tauri .app (debug, unsigned)
+        run: npx tauri build --debug
+      - name: Verify .app bundle contains self-contained runtime
+        run: |
+          APP=$(find src-tauri/target -name "MultiContext.app" -type d | head -n 1)
+          test -n "$APP" || { echo "MultiContext.app not found"; exit 1; }
+          test -f "$APP/Contents/Resources/multicontext/dist/server.bundle.mjs" || { echo "dist/server.bundle.mjs missing in resources"; ls -R "$APP/Contents/Resources/multicontext" || true; exit 1; }
+          ! grep -q "from '@modelcontextprotocol/server'" "$APP/Contents/Resources/multicontext/dist/server.bundle.mjs" || { echo "bare import still present in bundled resources"; exit 1; }
+          echo "verified $APP contains self-contained runtime"

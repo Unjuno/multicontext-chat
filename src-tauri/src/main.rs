@@ -537,6 +537,7 @@ pub struct McpStatus {
     pub endpoint: String,
     pub is_external: bool,
     pub applied: bool,
+    pub token_valid: bool,
 }
 
 #[tauri::command]
@@ -552,7 +553,34 @@ async fn get_mcp_status(state: tauri::State<'_, AppState>) -> Result<McpStatus, 
         health::is_listening(&client, &mc_url).await
     };
     let applied = !is_external;
-    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint, is_external, applied })
+    let has_token = keychain::has_mcp_token();
+    let mut token_valid = false;
+    if cfg.mcp_enabled && has_token {
+        if is_owned {
+            // For owned, token is valid if we just restarted successfully; assume true if has_token and enabled
+            // A stricter check would probe /mcp, but avoid extra latency on every status poll
+            token_valid = true;
+        } else if is_external {
+            // For external, probe actual server with Keychain token
+            let client = health::client();
+            let mcp_url = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
+            let token = keychain::get_mcp_token().unwrap_or_default();
+            if !token.is_empty() {
+                let payload = serde_json::json!({ "jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"health-check","version":"1.0"}}});
+                if let Ok(resp) = client.post(&mcp_url)
+                    .header("Authorization", format!("Bearer {}", token))
+                    .header("Content-Type","application/json")
+                    .header("Accept","application/json, text/event-stream")
+                    .json(&payload).send().await {
+                    token_valid = resp.status() == 200;
+                }
+            }
+        } else {
+            // No server running, token presence implies valid for next owned start
+            token_valid = true;
+        }
+    }
+    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token, endpoint, is_external, applied, token_valid })
 }
 
 async fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State<'_, AppState>) -> Result<bool, String> {
@@ -638,7 +666,20 @@ async fn set_mcp_enabled(state: tauri::State<'_, AppState>, app: tauri::AppHandl
     } else if !restarted {
         trace(&app, "set_mcp_enabled: no owned MultiContext to restart (will apply on next start)");
     }
-    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token: keychain::has_mcp_token(), endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port), is_external, applied: !is_external })
+    let has_token = keychain::has_mcp_token();
+    let token_valid = if !cfg.mcp_enabled { false } else if has_token && !is_external { true } else if has_token && is_external {
+        let client = health::client();
+        let mcp_url = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
+        let token = keychain::get_mcp_token().unwrap_or_default();
+        if token.is_empty() { false } else {
+            let payload = serde_json::json!({ "jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"health-check","version":"1.0"}}});
+            match client.post(&mcp_url).header("Authorization", format!("Bearer {}", token)).header("Content-Type","application/json").header("Accept","application/json, text/event-stream").json(&payload).send().await {
+                Ok(resp) => resp.status() == 200,
+                Err(_) => false,
+            }
+        }
+    } else { false };
+    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token, endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port), is_external, applied: !is_external, token_valid })
 }
 
 #[tauri::command]

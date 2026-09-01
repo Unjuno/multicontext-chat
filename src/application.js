@@ -18,9 +18,7 @@ function problem(message, status = 400, code = null) {
 }
 
 function sanitizeWorkspace(workspace, runtimeState, runningMemberIds, includeMessages = true) {
-  const pub = new StateStore('').publicWorkspace ? null : null;
-  // Use store's publicWorkspace via direct construction to avoid private fields
-  // Instead manually strip
+  // Manually strip private fields (conversationId/current/lastRun) — never expose via REST/MCP
   const members = Object.fromEntries(Object.entries(workspace.members).map(([id, m]) => {
     const { conversationId: _c, current: _cur, lastRun: _lr, ...rest } = m;
     return [id, { ...rest, inFlight: Boolean(m.current), messages: includeMessages ? m.messages : [] }];
@@ -52,7 +50,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   let cachedAgentsAt = 0;
   const compilingWorkspaces = new Set();
 
-  async function getAvailableAgents(force = false) {
+  // Display-only helper: may return stale cached agents when fresh discovery fails.
+  // Never use for execution validation — use requireFreshAgents() / getAvailableAgentsWithStatus(true).
+  async function getAgentsForDisplay(force = false) {
     const now = Date.now();
     if (!force && cachedAgents && now - cachedAgentsAt < 5000) return cachedAgents;
     try {
@@ -62,11 +62,12 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       cachedAgentsAt = now;
       return list;
     } catch (e) {
-      // Preserve distinction: if cached, return it for display but caller should know it's stale
       if (cachedAgents) return cachedAgents;
       throw e;
     }
   }
+  // Backward-compat alias for tests that still call getAvailableAgents
+  const getAvailableAgents = getAgentsForDisplay;
 
   async function getAvailableAgentsWithStatus(force = false) {
     const now = Date.now();
@@ -133,9 +134,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return String(member.agentId || workspace.defaultAgentId || '').trim();
   }
 
-  async function validateAgentId(agentId, availableAgents = null) {
-    if (!agentId) return false;
-    const agents = availableAgents ?? await getAvailableAgents();
+  // Pure validation: caller must supply fresh agents (never falls back to stale cache)
+  function validateAgentId(agentId, agents) {
+    if (!agentId || !Array.isArray(agents)) return false;
     return agents.some(a => String(a.id) === String(agentId));
   }
 
@@ -159,7 +160,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     }
     const resolved = await getResolvedSingleAgentId();
     if (resolved) {
-      try { store.updateWorkspace(workspaceId, { defaultAgentId: resolved }); } catch {}
+      store.updateWorkspace(workspaceId, { defaultAgentId: resolved });
       return resolved;
     }
     return '';
@@ -168,20 +169,17 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   async function resolveEffectiveAgent(workspace, member, availableAgents = null) {
     const effective = effectiveAgentIdForMember(workspace, member);
     if (!effective) {
-      // Try workspace default via single-agent auto
       const wsDefault = await ensureWorkspaceDefaultAgent(workspace.id, availableAgents);
       const updated = store.requireWorkspace(workspace.id);
       const freshMember = updated.members[member.id];
       const eff2 = effectiveAgentIdForMember(updated, freshMember);
       if (eff2) {
-        // validate stale
-        const agents = availableAgents ?? await getAvailableAgents();
-        if (agents.length && !(await validateAgentId(eff2, agents))) {
+        const agents = availableAgents ?? await requireFreshAgents();
+        if (agents.length && !validateAgentId(eff2, agents)) {
           throw problem(`Agentが利用不可です: ${eff2}`, 400, AGENT_NOT_AVAILABLE);
         }
         return eff2;
       }
-      // If still no effective, check if exactly one agent could satisfy
       const single = await getResolvedSingleAgentId();
       if (single) {
         if (!updated.defaultAgentId) store.updateWorkspace(workspace.id, { defaultAgentId: single });
@@ -189,9 +187,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       }
       throw problem('利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
     }
-    // Validate stale
-    const agents = availableAgents ?? await getAvailableAgents();
-    if (agents.length && !(await validateAgentId(effective, agents))) {
+    const agents = availableAgents ?? await requireFreshAgents();
+    if (agents.length && !validateAgentId(effective, agents)) {
       throw problem(`Agentが利用不可です: ${effective}`, 400, AGENT_NOT_AVAILABLE);
     }
     return effective;
@@ -199,9 +196,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
 
   async function validateWorkspaceForExecution(workspaceId) {
     const workspace = store.requireWorkspace(workspaceId);
-    const agents = await getAvailableAgents();
+    const agents = await requireFreshAgents();
     // Validate workspace default if set
-    if (workspace.defaultAgentId && agents.length && !(await validateAgentId(workspace.defaultAgentId, agents))) {
+    if (workspace.defaultAgentId && agents.length && !validateAgentId(workspace.defaultAgentId, agents)) {
       throw problem(`ワークスペースの既定Agentが利用不可です: ${workspace.defaultAgentId}`, 400, AGENT_NOT_AVAILABLE);
     }
     // Check each active member's effective agent validity
@@ -249,9 +246,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
         // Try to resolve display name if agents available (non-blocking)
         m.effectiveAgentName = effective;
       }
-      // Enrich effective names if agents available
+      // Enrich effective names if agents available (display-only, stale allowed)
       try {
-        const agents = await getAvailableAgents();
+        const agents = await getAgentsForDisplay();
         const map = new Map(agents.map(a => [String(a.id), String(a.name || a.id)]));
         for (const m of Object.values(view.members)) {
           if (m.effectiveAgentId && map.has(m.effectiveAgentId)) m.effectiveAgentName = map.get(m.effectiveAgentId);

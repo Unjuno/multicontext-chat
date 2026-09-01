@@ -404,16 +404,26 @@
         try {
           const st = await invoke("get_mcp_status");
           const isExt = !!st.is_external;
-          badge.textContent = st.enabled ? (st.has_token ? (isExt ? "外部要手動" : "利用可能") : "要設定") : "無効";
-          badge.className = "conn-badge" + (st.enabled && st.has_token && !isExt ? " ok" : st.enabled ? " err" : "");
+          const tokenValid = !!st.token_valid;
+          const hasToken = !!st.has_token;
+          // Badge: only "利用可能" when actually verified (token_valid for external, has_token for owned)
+          const badgeText = !st.enabled ? "無効" : !hasToken ? "要設定" : isExt ? (tokenValid ? "外部利用可能" : "外部要手動") : "利用可能";
+          badge.textContent = badgeText;
+          badge.className = "conn-badge" + (st.enabled && hasToken && (isExt ? tokenValid : true) ? " ok" : st.enabled ? " err" : "");
           if (endpointEl) endpointEl.textContent = st.endpoint;
           if (hint) {
             if (isExt) {
-              hint.textContent = st.enabled
-                ? "外部MultiContextが検出されました。DesktopのKeychainトークンは外部processの環境変数 MULTICONTEXT_MCP_TOKEN へ手動設定して再起動してください。Desktopからは認証設定を変更できません。"
-                : "外部MultiContextが検出されました。無効化は外部processの再起動後に有効です。";
+              if (!st.enabled) {
+                hint.textContent = "外部MultiContextが検出されました。無効化は外部processの再起動後に有効です。";
+              } else if (!hasToken) {
+                hint.textContent = "外部MultiContextが検出されました。Keychainにトークンがありません。生成後に外部processの環境変数 MULTICONTEXT_MCP_TOKEN へ設定してください。";
+              } else if (!tokenValid) {
+                hint.textContent = "外部MultiContextが検出されましたが、Keychainトークンが外部processで認証されません。外部processの環境変数 MULTICONTEXT_MCP_TOKEN を現在のトークンに更新して再起動してください。";
+              } else {
+                hint.textContent = "外部MultiContextが検出され、Keychainトークンが実際に認証されています。";
+              }
             } else {
-              hint.textContent = st.enabled ? (st.has_token ? "トークンはKeychainに保存済みです。" : "トークンを生成してください。") : "外部連携は無効です。";
+              hint.textContent = st.enabled ? (hasToken ? "トークンはKeychainに保存済みです。" : "トークンを生成してください。") : "外部連携は無効です。";
             }
           }
           if (chk) chk.checked = !!st.enabled;
