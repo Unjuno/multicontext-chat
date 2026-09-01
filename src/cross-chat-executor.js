@@ -1,35 +1,61 @@
+import { CROSS_CHAT_TOOLS } from './cross-chat-tools.js';
+
 export function extractToolCalls(raw) {
   if (!raw || !raw.output) return [];
   return raw.output.filter(x => x.type === 'tool_call' || x.type === 'function_call');
 }
+
+export { CROSS_CHAT_TOOLS };
+
+export class StructuredToolError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+    this.name = 'StructuredToolError';
+  }
+}
+
 export class CrossChatToolExecutor {
-  constructor({ store, app }) { this.store = store; this.app = app; }
-  async execute(workspaceId, sourceMemberId, toolCalls) {
+  constructor({ app }) { this.app = app; }
+
+  async execute(workspaceId, sourceMemberId, queueItemId, toolCallId, toolCalls) {
     const results = [];
     for (const tc of toolCalls) {
       const name = tc.name || tc.function?.name || '';
+      const callId = tc.call_id;
+      if (!callId) throw new StructuredToolError('MISSING_CALL_ID', `Tool call missing call_id: ${name}`);
       const args = tc.args || tc.arguments || tc.function?.arguments || {};
-      const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+      const parsed = typeof args === 'string' ? this._parseArgs(args, name, callId) : args;
       if (name === 'list_chats') {
-        results.push({ call_id: tc.call_id, output: JSON.stringify({ chats: await this._listChats(workspaceId) }) });
+        const chats = await this.app.listPeerChats(workspaceId, sourceMemberId);
+        results.push({ call_id: callId, output: JSON.stringify({ chats }) });
       } else if (name === 'inspect_chat') {
-        results.push({ call_id: tc.call_id, output: JSON.stringify({ messages: await this._inspectChat(workspaceId, parsed.target ?? parsed.chat_id, parsed.query, parsed.limit) }) });
+        const target = parsed.target ?? parsed.chat_id;
+        const query = parsed.query ?? null;
+        const limit = this._clampLimit(parsed.limit);
+        const result = await this.app.inspectPeerChat(workspaceId, sourceMemberId, target, query, limit);
+        results.push({ call_id: callId, output: JSON.stringify(result) });
       } else if (name === 'send_to_chat') {
-        await this.app.sendToChats(workspaceId, sourceMemberId, parsed.targets, parsed.prompt);
-        results.push({ call_id: tc.call_id, output: JSON.stringify({ accepted: true }) });
+        const result = await this.app.sendToChats(
+          workspaceId, sourceMemberId, parsed.targets, parsed.prompt,
+          { sourceQueueItemId: queueItemId, toolCallId: callId }
+        );
+        results.push({ call_id: callId, output: JSON.stringify(result) });
       } else {
-        throw new Error(`Unknown cross-chat tool: ${name}`);
+        throw new StructuredToolError('UNKNOWN_TOOL', `Unknown cross-chat tool: ${name}`);
       }
     }
     return results;
   }
-  async _listChats(workspaceId) {
-    const ws = this.store.requireWorkspace(workspaceId);
-    return Object.values(ws.members).map(m => ({ id: m.id, name: m.name }));
+
+  _parseArgs(argsStr, name, callId) {
+    try { return JSON.parse(argsStr); }
+    catch { throw new StructuredToolError('INVALID_TOOL_ARGUMENTS', `Invalid JSON arguments for ${name} (call_id: ${callId})`); }
   }
-  async _inspectChat(workspaceId, chatId, query, limit) {
-    if (!chatId) throw new Error('target is required for inspect_chat');
-    const msgs = await this.app.getChatMessages(workspaceId, chatId, { limit: Math.min(limit || 50, 200) });
-    return query ? msgs.filter(m => String(m.content).includes(String(query))) : msgs;
+
+  _clampLimit(limit) {
+    const n = Number(limit);
+    if (!Number.isFinite(n) || n < 1) return 8;
+    return Math.min(20, Math.ceil(n));
   }
 }
