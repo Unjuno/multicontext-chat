@@ -27,7 +27,7 @@ export class LibreChatClient {
     catch (error) { return { ok: false, latencyMs: Date.now() - startedAt, error: error.message, mode: this.mode }; }
   }
 
-  async runAgent({ agentId, globalPrompt, developerPrompt, history = [], prompt, conversationId, signal, metadata = {} }) {
+  async runAgent({ agentId, globalPrompt, developerPrompt, history = [], prompt, conversationId, signal, metadata = {}, toolResults = [] }) {
     if (!agentId) throw new Error('LibreChat agentId is required'); this.assertConfigured();
     const input = [];
     if (globalPrompt?.trim()) input.push({ type: 'message', role: 'system', content: globalPrompt.trim() });
@@ -36,6 +36,7 @@ export class LibreChatClient {
       for (const message of history) if (message.role === 'user' || message.role === 'assistant') input.push({ type: 'message', role: message.role, content: String(message.content || '') });
     }
     input.push({ type: 'message', role: 'user', content: String(prompt || '') });
+    for (const tr of toolResults) input.push({ type: 'function_call_output', call_id: tr.call_id, output: tr.output });
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('LibreChat request timed out')), this.timeoutMs);
@@ -46,8 +47,8 @@ export class LibreChatClient {
       if (metadata.workspace_id && metadata.member_id) {
         body.tools = [
           { type: 'function', function: { name: 'list_chats', description: 'List peer chat ids and names in the workspace.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
-          { type: 'function', function: { name: 'inspect_chat', description: 'Read the message history of a specific peer chat.', parameters: { type: 'object', properties: { chat_id: { type: 'string', description: 'Id of the peer chat to read' } }, required: ['chat_id'], additionalProperties: false } } },
-          { type: 'function', function: { name: 'send_to_chat', description: 'Queue a prompt to one or two peer chats.', parameters: { type: 'object', properties: { targets: { type: 'array', items: { type: 'string' }, description: 'Target chat ids (max 2)' }, prompt: { type: 'string', description: 'Prompt to enqueue' } }, required: ['targets', 'prompt'], additionalProperties: false } } },
+          { type: 'function', function: { name: 'inspect_chat', description: 'Search selected messages from one peer chat.', parameters: { type: 'object', properties: { target: { type: 'string', description: 'Peer chat UUID or exact name.' }, query: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 20, default: 8 } }, required: ['target'], additionalProperties: false } } },
+          { type: 'function', function: { name: 'send_to_chat', description: 'Queue the same prompt into one or two peer chats.', parameters: { type: 'object', properties: { targets: { type: 'array', minItems: 1, maxItems: 2, uniqueItems: true, items: { type: 'string', description: 'Peer chat UUID or exact name.' } }, prompt: { type: 'string', minLength: 1 } }, required: ['targets', 'prompt'], additionalProperties: false } } },
         ];
       }
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });

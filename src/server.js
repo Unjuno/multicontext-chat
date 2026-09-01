@@ -25,6 +25,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   scheduler ??= new Scheduler({ store, client, maxHistoryMessages: config.maxHistoryMessages });
 
   const app = createApplication({ config, store, client, scheduler });
+  scheduler.setApp?.(app);
   const authorized = (req) => !config.appToken || req.headers.authorization === `Bearer ${config.appToken}`;
   const toolAuthorized = (req) => !config.toolSecret || req.headers['x-multicontext-key'] === config.toolSecret;
   const mcpAuthorized = (req) => {

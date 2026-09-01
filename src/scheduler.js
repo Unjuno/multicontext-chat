@@ -1,7 +1,9 @@
+import { CrossChatToolExecutor, extractToolCalls } from './cross-chat-executor.js';
 export class Scheduler {
-  constructor({ store, client, maxHistoryMessages = 120 }) {
-    this.store = store; this.client = client; this.maxHistoryMessages = maxHistoryMessages; this.running = new Map();
+  constructor({ store, client, app, maxHistoryMessages = 120 }) {
+    this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.running = new Map(); this.executor = null;
   }
+  setApp(app) { this.app = app; this.executor = new CrossChatToolExecutor({ store: this.store, app }); }
   key(workspaceId, memberId) { return `${workspaceId}:${memberId}`; }
   runningMemberIds(workspaceId) {
     const prefix = `${workspaceId}:`;
@@ -112,49 +114,28 @@ export class Scheduler {
             signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id },
           });
           if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId)) continue;
-          // Handle explicit marker-based autonomous send-to-chat as fallback when LLM tool calling is not configured
-          // e.g. "[[SEND_TO_CHAT:targetId:prompt]]" or "[[SEND_TO:target:prompt]]" — tolerate one or two trailing ]]
-          const markerMatch = String(result.text || '').match(/\[\[SEND_TO(?:_CHAT)?:([^:\]]+):([\s\S]*?)\]\]?/);
-          if (markerMatch) {
-            const targetRaw = markerMatch[1].trim();
-            const promptRaw = markerMatch[2].trim();
-            if (targetRaw && promptRaw) {
-              try {
-                const target = this.store.resolveMember(workspaceId, targetRaw, { activeOnly: true });
-                const cleanText = String(result.text).replace(markerMatch[0], '').trim();
-                const cleanedResult = { ...result, text: cleanText || '(autonomous send)' };
-                this.store.completeRun(workspaceId, memberId, item.id, cleanedResult);
-                this.store.trimMessages(workspaceId, memberId, this.maxHistoryMessages);
-                this.store.enqueue(workspaceId, target.id, promptRaw, { source: 'tool', sourceMemberId: memberId });
-                this.kickMember(workspaceId, target.id);
-                continue;
-              } catch (e) {
-                console.error('[scheduler marker] resolve/enqueue failed', e?.message || String(e));
-              }
+          let currentResult = result;
+          let currentConversationId = result.conversationId;
+          let toolCalls = extractToolCalls(currentResult.raw);
+          if (toolCalls.length > 0) {
+            if (!this.executor) throw new Error('CrossChatToolExecutor not initialized — call setApp(app)');
+            for (;;) {
+              const toolResults = await this.executor.execute(workspaceId, memberId, toolCalls);
+              const functionCallOutput = toolResults.map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
+              currentResult = await this.client.runAgent({
+                agentId: effectiveAgentId, globalPrompt: workspace.globalPrompt, developerPrompt: current.developerPrompt,
+                history: history.slice(-(this.maxHistoryMessages - 1)), prompt: item.prompt, conversationId: currentConversationId,
+                signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id },
+                toolResults: functionCallOutput,
+              });
+              if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId)) break;
+              currentConversationId = currentResult.conversationId;
+              const nextToolCalls = extractToolCalls(currentResult.raw);
+              if (nextToolCalls.length === 0) break;
+              toolCalls = nextToolCalls;
             }
           }
-          // Also handle raw tool_calls if present in LibreChat response
-          const rawToolCalls = result.raw?.output?.filter?.(x => x.type === 'tool_call' || x.type === 'function_call') || result.raw?.tool_calls || [];
-          if (Array.isArray(rawToolCalls) && rawToolCalls.length) {
-            for (const tc of rawToolCalls) {
-              const name = tc.name || tc.function?.name || '';
-              const args = tc.args || tc.arguments || tc.function?.arguments || {};
-              let parsed = args;
-              if (typeof args === 'string') { try { parsed = JSON.parse(args); } catch { parsed = {}; } }
-              if (name === 'send_to_chat' || name === 'send-to-chat') {
-                const targets = parsed.targets || (parsed.target ? [parsed.target] : []);
-                const promptArg = parsed.prompt || '';
-                for (const t of targets.slice(0,2)) {
-                  try {
-                    const target = this.store.resolveMember(workspaceId, String(t), { activeOnly: true });
-                    this.store.enqueue(workspaceId, target.id, String(promptArg), { source: 'tool', sourceMemberId: memberId });
-                    this.kickMember(workspaceId, target.id);
-                  } catch {}
-                }
-              }
-            }
-          }
-          this.store.completeRun(workspaceId, memberId, item.id, result);
+          this.store.completeRun(workspaceId, memberId, item.id, currentResult);
           this.store.trimMessages(workspaceId, memberId, this.maxHistoryMessages);
         } catch (inner) {
           const msg = japMap(inner?.message || String(inner));
