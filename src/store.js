@@ -87,7 +87,7 @@ export class StateStore {
       compileAgentId: String(input.compileAgentId || ''), compilePrompt: String(input.compilePrompt || defaultCompilePrompt()),
       defaultAgentId: String(input.defaultAgentId || ''),
       settings: { allowCrossChatInspect: input.settings?.allowCrossChatInspect !== false, allowCrossChatSend: input.settings?.allowCrossChatSend !== false },
-      members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
+      crossChatReceipts: {}, members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
       stats: { broadcasts: 0, executions: 0, toolEnqueues: 0, inspections: 0 },
     };
     this.state.workspaces[id] = workspace; this.save(); return workspace;
@@ -169,6 +169,41 @@ export class StateStore {
     this.save(); return item;
   }
 
+  enqueueCrossChatAtomic(workspaceId, sourceMemberId, queueItemId, toolCallId, targetRefs, prompt) {
+    const workspace = this.requireWorkspace(workspaceId);
+    const source = workspace.members[sourceMemberId];
+    if (!source) throw problem('Source member not found', 404);
+    const receiptKey = `${sourceMemberId}:${queueItemId}:${toolCallId}`;
+    if (workspace.crossChatReceipts?.[receiptKey]) {
+      return workspace.crossChatReceipts[receiptKey].result;
+    }
+    const refs = Array.isArray(targetRefs) ? targetRefs : [targetRefs];
+    if (refs.length < 1 || refs.length > 2) throw problem('targets must contain one or two chats', 400);
+    const targets = refs.map(ref => this.resolveMember(workspaceId, ref, { activeOnly: true }));
+    if (targets.some(m => m.id === sourceMemberId)) throw problem('Target must be another chat', 400);
+    if (new Set(targets.map(m => m.id)).size !== targets.length) throw problem('Targets must be unique', 400);
+    const items = targets.map(target => {
+      const item = { id: randomUUID(), prompt: String(prompt || '').trim(), attempts: 0, source: 'tool', sourceMemberId, createdAt: now() };
+      target.queue.push(item); target.updatedAt = now(); workspace.updatedAt = now();
+      if (item.source === 'tool') workspace.stats.toolEnqueues += 1;
+      return { target: { id: target.id, name: target.name }, item };
+    });
+    if (!workspace.crossChatReceipts) workspace.crossChatReceipts = {};
+    workspace.crossChatReceipts[receiptKey] = {
+      sourceMemberId, targetIds: targets.map(m => m.id),
+      deliveries: items.map(({ target, item }) => ({ targetId: target.id, queueItemId: item.id })),
+      result: { accepted: true, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) },
+      committedAt: now(),
+    };
+    this.save();
+    return workspace.crossChatReceipts[receiptKey].result;
+  }
+
+  getCrossChatReceipt(workspaceId, sourceMemberId, queueItemId, toolCallId) {
+    const workspace = this.getWorkspace(workspaceId);
+    return workspace?.crossChatReceipts?.[`${sourceMemberId}:${queueItemId}:${toolCallId}`] ?? null;
+  }
+
   broadcast(workspaceId, prompt) {
     const workspace = this.requireWorkspace(workspaceId); const text = String(prompt || '').trim(); if (!text) throw problem('Prompt is required');
     const items = [];
@@ -234,7 +269,10 @@ export class StateStore {
     return 'SETTLED';
   }
   isSettled(workspaceId, runningMemberIds = new Set()) { return this.runtimeState(workspaceId, runningMemberIds) === 'SETTLED'; }
-  publicWorkspace(workspace, includeMessages = true) { return { ...workspace, members: Object.fromEntries(Object.entries(workspace.members).map(([id, m]) => [id, publicMember(m, includeMessages)])) }; }
+  publicWorkspace(workspace, includeMessages = true) {
+    const { crossChatReceipts: _r, ...rest } = workspace;
+    return { ...rest, members: Object.fromEntries(Object.entries(workspace.members).map(([id, m]) => [id, publicMember(m, includeMessages)])) };
+  }
 }
 
 export function publicMember(member, includeMessages = true) {
