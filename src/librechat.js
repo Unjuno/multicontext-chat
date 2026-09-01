@@ -43,6 +43,12 @@ export class LibreChatClient {
     try {
       const body = { model: agentId, input, stream: false, store: this.mode === 'native', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       if (this.mode === 'native' && conversationId) body.previous_response_id = conversationId;
+      // No-op: MultiContext peer tools are exposed via the agent's stored OpenAPI actions
+      // (updated to generic {workspaceId}/{memberId} in DB). Supplying request.tools as
+      // function tools here would duplicate the prompt but not the execution path, so we
+      // rely on the stored actions. The scheduler also handles explicit marker fallback
+      // [[SEND_TO_CHAT:target:prompt]] for deterministic tests without LLM tool calling.
+      void metadata;
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
