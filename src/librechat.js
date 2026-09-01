@@ -43,12 +43,13 @@ export class LibreChatClient {
     try {
       const body = { model: agentId, input, stream: false, store: this.mode === 'native', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       if (this.mode === 'native' && conversationId) body.previous_response_id = conversationId;
-      // No-op: MultiContext peer tools are exposed via the agent's stored OpenAPI actions
-      // (updated to generic {workspaceId}/{memberId} in DB). Supplying request.tools as
-      // function tools here would duplicate the prompt but not the execution path, so we
-      // rely on the stored actions. The scheduler also handles explicit marker fallback
-      // [[SEND_TO_CHAT:target:prompt]] for deterministic tests without LLM tool calling.
-      void metadata;
+      if (metadata.workspace_id && metadata.member_id) {
+        body.tools = [
+          { type: 'function', function: { name: 'list_chats', description: 'List peer chat ids and names in the workspace.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
+          { type: 'function', function: { name: 'inspect_chat', description: 'Read the message history of a specific peer chat.', parameters: { type: 'object', properties: { chat_id: { type: 'string', description: 'Id of the peer chat to read' } }, required: ['chat_id'], additionalProperties: false } } },
+          { type: 'function', function: { name: 'send_to_chat', description: 'Queue a prompt to one or two peer chats.', parameters: { type: 'object', properties: { targets: { type: 'array', items: { type: 'string' }, description: 'Target chat ids (max 2)' }, prompt: { type: 'string', description: 'Prompt to enqueue' } }, required: ['targets', 'prompt'], additionalProperties: false } } },
+        ];
+      }
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
