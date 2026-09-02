@@ -30,7 +30,6 @@ test('restart reconciliation never replays work owned by a recovered failed run'
   const recovered = store2.getOrchestratorRun(ws.id, run.id);
   assert.equal(recovered.status, 'failed');
   assert.equal(recovered.error, 'Recovered after restart');
-  // Prevent unrelated human work from actually executing during this deterministic reconciliation test.
   store2.getMember(ws.id, member.id).status = 'error';
   store2.save();
   const scheduler = new Scheduler({ store: store2, client: {}, maxHistoryMessages: 20 });
@@ -87,8 +86,6 @@ test('send_to_chat committed during run cancellation is compensated after proven
     _store: store,
     _scheduler: { abortByOrchestratorRun: () => { abortCalls += 1; return 0; } },
     async sendToChats(workspaceId, sourceMemberId, targets, prompt) {
-      // Model the race: cancellation happens while send_to_chat is awaiting validation,
-      // then the already-started call reaches its atomic enqueue before returning.
       store.updateOrchestratorRun(workspaceId, run.id, { status: 'cancelled' });
       const target = store.resolveMember(workspaceId, targets[0]);
       const item = store.enqueue(workspaceId, target.id, prompt, { source: 'tool', sourceMemberId });
@@ -103,4 +100,4 @@ test('send_to_chat committed during run cancellation is compensated after proven
   assert.equal(abortCalls, 1);
   assert.equal(store.getMember(ws.id, b.id).queue.length, 0);
   assert.equal(store.getOrchestratorRun(ws.id, run.id).status, 'cancelled');
-}
+});
