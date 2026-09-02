@@ -581,11 +581,11 @@ function renderOrchestratorBar(data) {
   const bar = document.getElementById('orchestratorBar');
   if (!bar || !data) return;
   bar.style.display = 'flex';
-  // P1 fix: only pending counts as queue, terminal goes to history
-  const qAll = data.queue || [];
-  const qPending = qAll.filter(x=>x.state==='pending');
-  const qHistory = qAll.filter(x=>['done','failed','cancelled'].includes(x.state));
-  const q0 = qPending.filter(x=>x.priority===0).length, q1=qPending.filter(x=>x.priority===1).length, q2=qPending.filter(x=>x.priority===2).length;
+  // P1 fix: use pending/history split from store (queue is pending only, queueHistory is terminal)
+  const qPending = data.queue || [];
+  const qHistory = data.queueHistory || [];
+  const counts = data.counts || { q0: qPending.filter(x=>x.priority===0).length, q1: qPending.filter(x=>x.priority===1).length, q2: qPending.filter(x=>x.priority===2).length };
+  const q0 = counts.q0, q1 = counts.q1, q2 = counts.q2;
   const runs = data.runs || [];
   const cur = runs.find(r=>r.status==='running' || r.status==='queued') || runs[0];
   // P1 fix: derive bar state correctly (was always RUNNING)
