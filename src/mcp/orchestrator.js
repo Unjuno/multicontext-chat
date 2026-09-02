@@ -168,6 +168,40 @@ export function registerOrchestratorTools(server, app) {
     const r = await app.addChat(workspace_id, { name, developerPrompt: developer_prompt || '', agentId: agent_id || '' });
     return { content: [{ type: 'text', text: JSON.stringify(r, null, 2) }], structuredContent: r };
   });
+
+  // Unified auto-run: same path as UI chat (app.*) but via MCP, auto-starts and waits for SETTLED so user sees same behavior
+  server.registerTool('multicontext_orchestrate_run', {
+    description: 'Auto-run: enqueue (broadcast or direct) via same app.* path as chat UI, then wait until SETTLED. MCP and chat behave identically; user sees progress in UI. Handles Q priority and auto-creation.',
+    inputSchema: z.object({
+      workspace_id: z.string().optional(),
+      preset: z.enum(['navier-stokes-4']).optional(),
+      name: z.string().optional(),
+      prompt: z.string().min(1),
+      priority: z.number().int().min(0).max(2).optional(),
+      broadcast: z.boolean().optional(),
+      chat_id: z.string().optional(),
+      timeout_seconds: z.number().min(5).max(300).optional(),
+    }),
+  }, async ({ workspace_id, preset, name, prompt, priority, broadcast, chat_id, timeout_seconds }) => {
+    let wsId = workspace_id;
+    // auto-create if needed
+    if (!wsId) {
+      const p = PRESETS[preset || 'navier-stokes-4'];
+      const ws = await app.createWorkspace({ name: name || p.name });
+      for (const m of p.members) await app.addChat(ws.id, { name: m.name, developerPrompt: m.developerPrompt });
+      wsId = ws.id;
+    }
+    const pr = priority ?? 1;
+    pushQ(wsId, prompt, pr);
+    let enqueueResult;
+    if (broadcast) enqueueResult = await app.broadcast(wsId, prompt);
+    else if (chat_id) enqueueResult = await app.send(wsId, chat_id, prompt);
+    else enqueueResult = await app.broadcast(wsId, prompt);
+    // wait same as UI does: poll until SETTLED/BLOCKED
+    const wait = await app.waitUntilSettled(wsId, timeout_seconds ?? 120, 500);
+    const distilled = await app.getWorkspace(wsId, { includeMessages: true, boundedMessages: 8 });
+    return { content: [{ type: 'text', text: JSON.stringify({ workspace_id: wsId, enqueueResult, wait, q: peekQ(wsId), distilled: Object.values(distilled.members).map(m=>`${m.name}:${(m.messages||[]).slice(-1)[0]?.content?.slice(0,200)}`).join(' | ') }, null, 2) }], structuredContent: { workspace_id: wsId, enqueueResult, wait, q: peekQ(wsId) } };
+  });
 }
 
 export function clearQ(workspaceId) { QStore.delete(workspaceId); }
