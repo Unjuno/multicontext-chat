@@ -285,19 +285,22 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     const [, workspaceId, sourceMemberId, action] = parts; const { workspace, member: source } = store.requireMember(workspaceId, sourceMemberId);
     if (action === 'openapi.json' && req.method === 'GET') return json(res, 200, buildActionSpec({ origin: publicOrigin(req), workspace, member: source, requireSecret: Boolean(config.toolSecret) }));
     if (!toolAuthorized(req)) return json(res, 401, { error: 'Invalid tool key' });
-    if (action === 'list-chats' && req.method === 'GET') return json(res, 200, { chats: Object.values(workspace.members).filter((m) => m.active && m.id !== source.id).map((m) => ({ id: m.id, name: m.name })) });
+    if (action === 'list-chats' && req.method === 'GET') {
+      try {
+        const chats = await app.listPeerChats(workspaceId, sourceMemberId);
+        return json(res, 200, { chats });
+      } catch (e) { return json(res, e.status || 400, { error: e.message, code: e.code }); }
+    }
     if (action === 'inspect-chat' && req.method === 'POST') {
-      if (!workspace.settings.allowCrossChatInspect || !source.canInspectOthers) return json(res, 403, { error: 'Cross-chat inspection is disabled' });
-      const body = await readBody(req); const target = store.resolveMember(workspaceId, body.target ?? body.target_member_id, { activeOnly: true });
-      if (target.id === source.id) return json(res, 400, { error: 'Target must be another chat' });
-      workspace.stats.inspections += 1; store.save();
-      return json(res, 200, { target: { id: target.id, name: target.name }, results: searchMemberMessages(target, body.query, Math.min(Number(body.limit) || config.maxInspectResults, 20)) });
+      try {
+        const body = await readBody(req);
+        const result = await app.inspectPeerChat(workspaceId, sourceMemberId, body.target ?? body.target_member_id, body.query, Math.min(Number(body.limit) || config.maxInspectResults, 20));
+        return json(res, 200, result);
+      } catch (e) { return json(res, e.status || 400, { error: e.message, code: e.code }); }
     }
     if (action === 'send-to-chat' && req.method === 'POST') {
-      if (!workspace.settings.allowCrossChatSend || !source.canSendOthers) return json(res, 403, { error: 'Cross-chat sending is disabled' });
-      const body = await readBody(req); const refs = Array.isArray(body.targets) ? body.targets : body.target_member_id ? [body.target_member_id] : [];
-      if (refs.length < 1 || refs.length > 2) return json(res, 400, { error: 'targets must contain one or two chats' });
       try {
+        const body = await readBody(req); const refs = Array.isArray(body.targets) ? body.targets : body.target_member_id ? [body.target_member_id] : [];
         const result = await app.sendToChats(workspaceId, sourceMemberId, refs, body.prompt);
         return json(res, 202, result);
       } catch (e) {

@@ -222,6 +222,30 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       return { content: [{ type: 'text', text: JSON.stringify({ result: res }, null, 2) }], structuredContent: { result: res } };
     });
 
+    server.registerTool('multicontext_list_peer_chats', {
+      description: 'List active peer chat ids and names, excluding self',
+      inputSchema: z.object({ workspace_id: z.string().min(1), source_chat_id: z.string().min(1) }),
+    }, async ({ workspace_id, source_chat_id }) => {
+      const chats = await app.listPeerChats(workspace_id, source_chat_id);
+      return { content: [{ type: 'text', text: JSON.stringify({ chats }, null, 2) }], structuredContent: { chats } };
+    });
+
+    server.registerTool('multicontext_inspect_peer_chat', {
+      description: 'Search selected messages from one peer chat by UUID or exact name',
+      inputSchema: z.object({ workspace_id: z.string().min(1), source_chat_id: z.string().min(1), target: z.string().min(1), query: z.string().optional(), limit: z.number().int().min(1).max(20).optional() }),
+    }, async ({ workspace_id, source_chat_id, target, query, limit }) => {
+      const result = await app.inspectPeerChat(workspaceId, source_chat_id, target, query ?? null, limit ?? 8);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result };
+    });
+
+    server.registerTool('multicontext_send_to_peer_chats', {
+      description: 'Queue prompt into one or two peer chats atomically (non-idempotent external call)',
+      inputSchema: z.object({ workspace_id: z.string().min(1), source_chat_id: z.string().min(1), targets: z.array(z.string().min(1)).min(1).max(2), prompt: z.string().min(1) }),
+    }, async ({ workspace_id, source_chat_id, targets, prompt }) => {
+      const result = await app.sendToChats(workspace_id, source_chat_id, targets, prompt);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result };
+    });
+
     return server;
   });
   return handler;
