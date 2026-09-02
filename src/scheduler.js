@@ -3,7 +3,7 @@ export class Scheduler {
   constructor({ store, client, app, maxHistoryMessages = 120 }) {
     this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.running = new Map(); this.executor = null;
   }
-  setApp(app) { this.app = app; this.executor = new CrossChatToolExecutor({ app }); }
+  setApp(app) { this.app = app; app._scheduler = this; this.executor = new CrossChatToolExecutor({ app }); }
   key(workspaceId, memberId) { return `${workspaceId}:${memberId}`; }
   runningMemberIds(workspaceId) {
     const prefix = `${workspaceId}:`;
@@ -37,7 +37,6 @@ export class Scheduler {
         const canList = typeof this.client.listAgents === 'function';
         if (!effectiveAgentId) {
           if (!canList) {
-            // No listAgents available (test mock); treat as cannot auto-resolve
             availableAgents = [];
           } else {
             try {
@@ -99,7 +98,6 @@ export class Scheduler {
             throw mkErr('設定されている既定エージェントがLibreChatに存在しません。エージェントを選び直してください。', 'AGENT_NOT_AVAILABLE', 400);
           }
         }
-        // Map known English errors to Japanese
         const japMap = (msg) => {
           const m = String(msg || '');
           if (m.includes('LibreChat agentId is required')) return '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
@@ -118,13 +116,11 @@ export class Scheduler {
           let currentResult = result;
           let currentConversationId = result.conversationId;
           let toolCalls = extractToolCalls(currentResult.raw);
-          // Compat mode must NOT run MultiContext native function_call continuation loop
           if (this.client.mode !== 'compat' && toolCalls.length > 0) {
             if (!this.executor) throw new Error('CrossChatToolExecutor not initialized — call setApp(app)');
             for (;;) {
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
               const toolResults = await this.executor.execute({ workspaceId, sourceMemberId: memberId, sourceQueueItemId: item.id, toolCalls, signal: controller.signal });
-              // observability: tool calls (metadata only, no full output)
               for (const r of toolResults) {
                 try {
                   const tc = toolCalls.find(t => (t.call_id || t.call_id === r.call_id) && t.call_id === r.call_id) || toolCalls[0];
@@ -137,7 +133,6 @@ export class Scheduler {
               }
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
               const functionCallOutput = toolResults.map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
-              // Native continuation must use previous_response_id only, no system/developer/user replay
               if (this.client.mode === 'native' && typeof this.client.continueAgent === 'function') {
                 currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, toolResults: functionCallOutput, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
               } else {
@@ -161,7 +156,6 @@ export class Scheduler {
         if (!this.store.getMember(workspaceId, memberId)) break;
         const msg = String(error?.message || String(error));
         const code = error?.code || '';
-        // Typed classification: DISCOVERY_FAILED and network/auth are retriable; config errors are not
         const isConfigError = code === 'AGENT_SELECTION_REQUIRED' || code === 'AGENT_NOT_AVAILABLE' || msg.includes('存在しません') || msg.includes('Agentが') || msg.includes('エージェント');
         const isDiscovery = code === 'DISCOVERY_FAILED' || msg.includes('取得に失敗');
         if (controller.signal.aborted) {
@@ -186,7 +180,6 @@ export class Scheduler {
     const workspace = this.store.getWorkspace(workspaceId); if (!workspace) return;
     for (const member of Object.values(workspace.members)) this.stopMember(workspaceId, member.id, { clearQueue });
   }
-  // P1: run-scoped abort for orchestrator cancel (only members whose current item belongs to runId)
   abortByOrchestratorRun(workspaceId, runId) {
     const ws = this.store.getWorkspace(workspaceId);
     if (!ws) return 0;
