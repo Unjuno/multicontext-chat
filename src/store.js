@@ -136,15 +136,15 @@ export class StateStore {
   // Orchestrator: Q, Runs, Events (persistent, bounded) — P0/P1 fixes
   enqueueOrchestrator(workspaceId, prompt, { priority = 1, origin = 'mcp', actor = null, runId = null } = {}) {
     const ws = this.requireWorkspace(workspaceId);
-    // bound active queue: keep at most 200 pending + 100 terminal history
     const activeCount = ws.orchestratorQueue.filter(x => x.state === 'pending' || x.state === 'claimed' || x.state === 'dispatched').length;
-    if (activeCount >= 200 && (prompt.length > 0)) {
-      // prune oldest done/failed/cancelled beyond 100
-      const terminal = ws.orchestratorQueue.filter(x => x.state === 'done' || x.state === 'failed' || x.state === 'cancelled');
-      if (terminal.length > 100) {
-        const toRemove = terminal.slice(0, terminal.length - 100);
-        ws.orchestratorQueue = ws.orchestratorQueue.filter(x => !toRemove.includes(x));
-      }
+    if (activeCount >= 200) {
+      throw Object.assign(new Error('Orchestrator queue full (200 active)'), { status: 429, code: 'QUEUE_FULL' });
+    }
+    // prune terminal history beyond 100
+    const terminal = ws.orchestratorQueue.filter(x => x.state === 'done' || x.state === 'failed' || x.state === 'cancelled');
+    if (terminal.length > 100) {
+      const toRemove = terminal.slice(0, terminal.length - 100);
+      ws.orchestratorQueue = ws.orchestratorQueue.filter(x => !toRemove.includes(x));
     }
     const item = { id: randomUUID(), prompt: String(prompt), priority: Number(priority), state: 'pending', origin: String(origin), actor: actor ? String(actor) : null, runId: runId ? String(runId) : null, createdAt: now(), claimedAt: null, dispatchedAt: null, doneAt: null };
     ws.orchestratorQueue.push(item);
@@ -289,8 +289,13 @@ export class StateStore {
   }
   getOrchestratorState(workspaceId) {
     const ws = this.requireWorkspace(workspaceId);
+    const pending = ws.orchestratorQueue.filter(x => x.state === 'pending').sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt));
+    const history = ws.orchestratorQueue.filter(x => ['done','failed','cancelled'].includes(x.state)).slice(-20);
+    const counts = { q0: pending.filter(x=>x.priority===0).length, q1: pending.filter(x=>x.priority===1).length, q2: pending.filter(x=>x.priority===2).length, pending: pending.length, history: history.length };
     return {
-      queue: ws.orchestratorQueue.slice(0, 20),
+      queue: pending.slice(0, 20),
+      queueHistory: history,
+      counts,
       runs: Object.values(ws.orchestratorRuns).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10),
       events: ws.orchestratorEvents.slice(-30),
       paused: Boolean(ws.orchestratorPaused),
@@ -302,6 +307,40 @@ export class StateStore {
     this.appendEvent(workspaceId, { type: paused ? 'orchestrator.paused' : 'orchestrator.resumed', origin: 'human' });
     this.save();
     return ws.orchestratorPaused;
+  }
+  // P1: run-scoped cancellation of member queue items
+  cancelOrchestratorRunMembers(workspaceId, runId) {
+    const ws = this.requireWorkspace(workspaceId);
+    let cancelled = 0;
+    for (const member of Object.values(ws.members)) {
+      const before = member.queue.length;
+      member.queue = member.queue.filter(item => !(item.orchestratorRunId === runId && item.orchestratorQId));
+      cancelled += before - member.queue.length;
+      // if current is from this run, abort it (do not clear queue, just current)
+      if (member.current && member.current.item && member.current.item.orchestratorRunId === runId) {
+        const pendingId = member.current.pendingMessageId;
+        if (pendingId) member.messages = member.messages.filter(m => m.id !== pendingId);
+        member.current = null;
+        member.status = 'idle';
+        member.lastError = null;
+      }
+      member.updatedAt = now();
+    }
+    ws.updatedAt = now();
+    if (cancelled > 0) this.appendEvent(workspaceId, { type: 'run.members.cancelled', origin: 'system', runId, detail: { cancelled } });
+    this.save();
+    return cancelled;
+  }
+  // P1: Q done should happen after workspace settled, not immediately after enqueue. Helper to mark dispatched Q as done when run settles
+  markDispatchedQDone(workspaceId, runId, finalStatus) {
+    const ws = this.requireWorkspace(workspaceId);
+    for (const q of ws.orchestratorQueue) {
+      if (q.runId === runId && q.state === 'dispatched') {
+        q.state = finalStatus === 'settled' ? 'done' : 'failed';
+        q.doneAt = now();
+      }
+    }
+    this.save();
   }
 
   addMember(workspaceId, input = {}) {
@@ -358,7 +397,7 @@ export class StateStore {
   enqueue(workspaceId, memberId, prompt, metadata = {}) {
     const { workspace, member } = this.requireMember(workspaceId, memberId);
     if (!member.active) throw problem('Target member is inactive', 409);
-    const item = { id: randomUUID(), prompt: String(prompt || '').trim(), attempts: Number(metadata.attempts || 0), source: metadata.source || 'user', sourceMemberId: metadata.sourceMemberId || null, createdAt: now() };
+    const item = { id: randomUUID(), prompt: String(prompt || '').trim(), attempts: Number(metadata.attempts || 0), source: metadata.source || 'user', sourceMemberId: metadata.sourceMemberId || null, orchestratorRunId: metadata.orchestratorRunId || null, orchestratorQId: metadata.orchestratorQId || null, createdAt: now() };
     if (!item.prompt) throw problem('Prompt is required');
     member.queue.push(item); member.updatedAt = now(); workspace.updatedAt = now();
     if (item.source === 'tool') workspace.stats.toolEnqueues += 1;
@@ -406,10 +445,11 @@ export class StateStore {
     return workspace?.crossChatReceipts?.[`${sourceMemberId}:${queueItemId}:${toolCallId}`] ?? null;
   }
 
-  broadcast(workspaceId, prompt) {
+  broadcast(workspaceId, prompt, metadata = {}) {
     const workspace = this.requireWorkspace(workspaceId); const text = String(prompt || '').trim(); if (!text) throw problem('Prompt is required');
     const items = [];
-    for (const member of Object.values(workspace.members)) if (member.active) items.push(this.enqueue(workspaceId, member.id, text, { source: 'user' }));
+    const source = metadata.orchestratorRunId ? 'orchestrator' : (metadata.source || 'user');
+    for (const member of Object.values(workspace.members)) if (member.active) items.push(this.enqueue(workspaceId, member.id, text, { source, sourceMemberId: metadata.sourceMemberId || null, orchestratorRunId: metadata.orchestratorRunId || null, orchestratorQId: metadata.orchestratorQId || null }));
     if (!items.length) throw problem('No active members', 409);
     workspace.stats.broadcasts += 1; this.save(); return items;
   }

@@ -390,7 +390,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return { deleted: true, workspace_id: workspaceId, chat_id: chatId };
   }
 
-  async function broadcast(workspaceId, prompt) {
+  async function broadcast(workspaceId, prompt, { orchestratorRunId = null, orchestratorQId = null } = {}) {
     const text = String(prompt || '').trim();
     if (!text) throw problem('Prompt is required', 400);
     const workspace = store.requireWorkspace(workspaceId);
@@ -431,12 +431,13 @@ export function createApplication({ config, store, client, scheduler } = {}) {
         }
       }
     }
-    const items = store.broadcast(workspaceId, text);
+    const items = store.broadcast(workspaceId, text, { orchestratorRunId, orchestratorQId });
     scheduler.kickWorkspace(workspaceId);
+    try { store.appendEvent(workspaceId, { type: 'q.dispatched', origin: orchestratorRunId ? 'orchestrator' : 'human', qId: orchestratorQId || null, detail: { broadcast: true, runId: orchestratorRunId } }); } catch {}
     return { items, workspace: await getWorkspace(workspaceId) };
   }
 
-  async function send(workspaceId, chatId, prompt) {
+  async function send(workspaceId, chatId, prompt, { orchestratorRunId = null, orchestratorQId = null } = {}) {
     const text = String(prompt || '').trim();
     if (!text) throw problem('Prompt is required', 400);
     const workspace = store.requireWorkspace(workspaceId);
@@ -467,8 +468,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (fresh.status === 'error' && fresh.lastError && (String(fresh.lastError).includes('利用可能なLibreChat Agent') || String(fresh.lastError).includes('LibreChat agentId is required') || String(fresh.lastError).includes('Agentが利用不可'))) {
       try { store.retryMember(workspaceId, chatId); } catch {}
     }
-    const item = store.enqueue(workspaceId, chatId, text, { source: 'user' });
+    const item = store.enqueue(workspaceId, chatId, text, { source: orchestratorRunId ? 'orchestrator' : 'user', orchestratorRunId, orchestratorQId });
     scheduler.kickMember(workspaceId, chatId);
+    try { if (orchestratorRunId) store.appendEvent(workspaceId, { type: 'q.dispatched', origin: 'orchestrator', qId: orchestratorQId, memberId: chatId, runId: orchestratorRunId }); } catch {}
     return { item, workspace: await getWorkspace(workspaceId) };
   }
 
