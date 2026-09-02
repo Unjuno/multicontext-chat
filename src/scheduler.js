@@ -11,13 +11,36 @@ export class Scheduler {
   }
   resumeAll() {
     for (const workspace of Object.values(this.store.state.workspaces)) {
-      // A run recovered after process restart is terminal/failed. Never replay member or Q work
-      // still carrying that run's provenance: side effects may already have happened before crash.
       const recoveredRunIds = new Set(Object.values(workspace.orchestratorRuns || {})
         .filter((run) => run.status === 'failed' && run.error === 'Recovered after restart')
         .map((run) => run.id));
       let changed = false;
       if (recoveredRunIds.size > 0) {
+        // Close the tiny crash window between an atomic cross-chat receipt commit and the
+        // executor's provenance attachment. On restart the source current item has already
+        // been requeued by StateStore recovery, so use the receipt key to recover ownership
+        // onto each delivered child before removing all work from the failed run.
+        for (const [receiptKey, receipt] of Object.entries(workspace.crossChatReceipts || {})) {
+          const [sourceMemberId, sourceQueueItemId] = String(receiptKey).split(':');
+          const sourceMember = workspace.members?.[sourceMemberId];
+          const sourceItem = sourceMember?.current?.item?.id === sourceQueueItemId
+            ? sourceMember.current.item
+            : sourceMember?.queue?.find((item) => item.id === sourceQueueItemId);
+          const runId = sourceItem?.orchestratorRunId || null;
+          if (!runId || !recoveredRunIds.has(runId)) continue;
+          const qId = sourceItem.orchestratorQId || null;
+          for (const delivery of receipt?.deliveries || []) {
+            const target = workspace.members?.[delivery.targetId];
+            if (!target) continue;
+            const delivered = target.current?.item?.id === delivery.queueItemId
+              ? target.current.item
+              : target.queue?.find((item) => item.id === delivery.queueItemId);
+            if (!delivered) continue;
+            delivered.orchestratorRunId = runId;
+            delivered.orchestratorQId = qId;
+            changed = true;
+          }
+        }
         for (const member of Object.values(workspace.members || {})) {
           const before = member.queue.length;
           member.queue = member.queue.filter((item) => !recoveredRunIds.has(item.orchestratorRunId));
@@ -150,13 +173,16 @@ export class Scheduler {
           if (this.client.mode !== 'compat' && toolCalls.length > 0) {
             if (!this.executor) throw new Error('CrossChatToolExecutor not initialized — call setApp(app)');
             for (;;) {
-              if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
+              const liveCurrent = this.store.getMember(workspaceId, memberId)?.current?.item;
+              if (controller.signal.aborted || !liveCurrent || liveCurrent.id !== item.id) break;
               const toolResults = await this.executor.execute({
                 workspaceId,
                 sourceMemberId: memberId,
                 sourceQueueItemId: item.id,
-                sourceOrchestratorRunId: item.orchestratorRunId || null,
-                sourceOrchestratorQId: item.orchestratorQId || null,
+                // Use the live store record rather than the beginNext clone. A parent send_to_chat
+                // may attach orchestrator provenance just after this child began executing.
+                sourceOrchestratorRunId: liveCurrent.orchestratorRunId || item.orchestratorRunId || null,
+                sourceOrchestratorQId: liveCurrent.orchestratorQId || item.orchestratorQId || null,
                 toolCalls,
                 signal: controller.signal,
               });
