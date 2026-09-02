@@ -1,5 +1,6 @@
 import { createMcpHandler as sdkCreateMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
+import { registerOrchestratorTools } from './orchestrator.js';
 
 export function createMcpHandlerFactory({ config, store, client, scheduler, app }) {
   // app is createApplication instance
@@ -245,6 +246,9 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       const result = await app.sendToChats(workspace_id, source_chat_id, targets, prompt);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result };
     });
+
+    // Q-orchestrator: higher-level session management for sub-agents
+    registerOrchestratorTools(server, app);
 
     return server;
   });
