@@ -186,5 +186,23 @@ export class Scheduler {
     const workspace = this.store.getWorkspace(workspaceId); if (!workspace) return;
     for (const member of Object.values(workspace.members)) this.stopMember(workspaceId, member.id, { clearQueue });
   }
+  // P1: run-scoped abort for orchestrator cancel (only members whose current item belongs to runId)
+  abortByOrchestratorRun(workspaceId, runId) {
+    const ws = this.store.getWorkspace(workspaceId);
+    if (!ws) return 0;
+    let aborted = 0;
+    for (const member of Object.values(ws.members)) {
+      const cur = member.current;
+      if (cur && cur.item && cur.item.orchestratorRunId === runId) {
+        const key = this.key(workspaceId, member.id);
+        const ctrl = this.running.get(key);
+        if (ctrl && !ctrl.signal.aborted) {
+          ctrl.abort(new Error('Cancelled by orchestrator run'));
+          aborted++;
+        }
+      }
+    }
+    return aborted;
+  }
   retryMember(workspaceId, memberId) { this.store.retryMember(workspaceId, memberId); this.kickMember(workspaceId, memberId); }
 }

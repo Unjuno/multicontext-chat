@@ -359,32 +359,34 @@ export function registerOrchestratorTools(server, app, store) {
   }, async ({ workspace_id, paused }) => {
     if (!hasStore) throw new Error('Orchestrator store not available');
     const p = store.setOrchestratorPaused(workspace_id, paused);
-    // P1: resume dispatcher - if unpaused, try to dispatch next pending Q/run
+    // P1: resume dispatcher - if unpaused, dispatch the queued run's own Q with correct target/provenance
     if (!p) {
       try {
         const pendingRuns = store.listOrchestratorRuns(workspace_id).filter(r=>r.status==='queued');
-        const pendingQ = store.peekOrchestratorQueue(workspace_id, 1);
-        if (pendingRuns.length>0 && pendingQ.length>0) {
+        if (pendingRuns.length>0) {
           const nextRun = pendingRuns.sort((a,b)=>a.createdAt.localeCompare(b.createdAt))[0];
-          const nextQ = pendingQ[0];
-          // dispatch it
-          store.updateOrchestratorRun(workspace_id, nextRun.id, { status: 'running' });
-          store.updateOrchestratorQueueItem(workspace_id, nextQ.id, { state: 'dispatched' });
-          // fire and forget the actual app dispatch
-          (async()=>{
-            try {
-              await app.broadcast(workspace_id, nextQ.prompt);
-              const wait = await app.waitUntilSettled(workspace_id, 300, 500);
-              const finalStatus = wait.state==='SETTLED'?'settled':wait.state==='BLOCKED'?'blocked':'failed';
-              const cur=store.getOrchestratorRun(workspace_id, nextRun.id);
-              if (['cancelled','settled','blocked','failed'].includes(cur.status) && cur.status!=='running') return;
-              store.updateOrchestratorRun(workspace_id, nextRun.id, { status: finalStatus });
-              store.markDispatchedQDone(workspace_id, nextRun.id, finalStatus);
-            } catch(e){
-              try{ store.updateOrchestratorRun(workspace_id, nextRun.id, { status: 'failed', error: String(e.message||e) }); }catch{}
-              try{ store.updateOrchestratorQueueItem(workspace_id, nextQ.id, { state: 'failed' }); }catch{}
-            }
-          })();
+          const ws = store.getWorkspace(workspace_id);
+          const nextQ = ws.orchestratorQueue.find(q=>q.runId===nextRun.id && q.state==='pending') || store.peekOrchestratorQueue(workspace_id, 1)[0];
+          if (nextQ) {
+            store.updateOrchestratorRun(workspace_id, nextRun.id, { status: 'running' });
+            store.updateOrchestratorQueueItem(workspace_id, nextQ.id, { state: 'dispatched' });
+            (async()=>{
+              try {
+                const t = nextQ.target;
+                if (t && t.type==='member') await app.send(workspace_id, t.memberId, nextQ.prompt, { orchestratorRunId: nextRun.id, orchestratorQId: nextQ.id });
+                else await app.broadcast(workspace_id, nextQ.prompt, { orchestratorRunId: nextRun.id, orchestratorQId: nextQ.id });
+                const wait = await app.waitUntilSettled(workspace_id, 300, 500);
+                const cur=store.getOrchestratorRun(workspace_id, nextRun.id);
+                if (['cancelled','settled','blocked','failed'].includes(cur.status) && cur.status!=='running') return;
+                const finalStatus = wait.state==='SETTLED'?'settled':wait.state==='BLOCKED'?'blocked':'failed';
+                store.updateOrchestratorRun(workspace_id, nextRun.id, { status: finalStatus });
+                store.markDispatchedQDone(workspace_id, nextRun.id, finalStatus);
+              } catch(e){
+                try{ store.updateOrchestratorRun(workspace_id, nextRun.id, { status: 'failed', error: String(e.message||e) }); }catch{}
+                try{ store.updateOrchestratorQueueItem(workspace_id, nextQ.id, { state: 'failed' }); }catch{}
+              }
+            })();
+          }
         }
       } catch {}
     }
