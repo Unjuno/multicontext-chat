@@ -3,13 +3,44 @@ export class Scheduler {
   constructor({ store, client, app, maxHistoryMessages = 120 }) {
     this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.running = new Map(); this.executor = null;
   }
-  setApp(app) { this.app = app; app._scheduler = this; this.executor = new CrossChatToolExecutor({ app }); }
+  setApp(app) { this.app = app; app._scheduler = this; app._store = this.store; this.executor = new CrossChatToolExecutor({ app }); }
   key(workspaceId, memberId) { return `${workspaceId}:${memberId}`; }
   runningMemberIds(workspaceId) {
     const prefix = `${workspaceId}:`;
     return new Set([...this.running.keys()].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)));
   }
-  resumeAll() { for (const workspace of Object.values(this.store.state.workspaces)) this.kickWorkspace(workspace.id); }
+  resumeAll() {
+    for (const workspace of Object.values(this.store.state.workspaces)) {
+      // A run recovered after process restart is terminal/failed. Never replay member or Q work
+      // still carrying that run's provenance: side effects may already have happened before crash.
+      const recoveredRunIds = new Set(Object.values(workspace.orchestratorRuns || {})
+        .filter((run) => run.status === 'failed' && run.error === 'Recovered after restart')
+        .map((run) => run.id));
+      let changed = false;
+      if (recoveredRunIds.size > 0) {
+        for (const member of Object.values(workspace.members || {})) {
+          const before = member.queue.length;
+          member.queue = member.queue.filter((item) => !recoveredRunIds.has(item.orchestratorRunId));
+          if (member.queue.length !== before) changed = true;
+          if (member.current?.item && recoveredRunIds.has(member.current.item.orchestratorRunId)) {
+            if (member.current.pendingMessageId) member.messages = member.messages.filter((m) => m.id !== member.current.pendingMessageId);
+            member.current = null;
+            if (member.status === 'running') member.status = 'idle';
+            changed = true;
+          }
+        }
+        for (const q of workspace.orchestratorQueue || []) {
+          if (recoveredRunIds.has(q.runId) && (q.state === 'pending' || q.state === 'claimed' || q.state === 'dispatched')) {
+            q.state = 'failed';
+            q.doneAt = new Date().toISOString();
+            changed = true;
+          }
+        }
+      }
+      if (changed) this.store.save();
+      this.kickWorkspace(workspace.id);
+    }
+  }
   kickWorkspace(workspaceId) { const w = this.store.requireWorkspace(workspaceId); for (const m of Object.values(w.members)) this.kickMember(workspaceId, m.id); }
   kickMember(workspaceId, memberId) {
     const key = this.key(workspaceId, memberId); if (this.running.has(key)) return;
@@ -120,7 +151,15 @@ export class Scheduler {
             if (!this.executor) throw new Error('CrossChatToolExecutor not initialized — call setApp(app)');
             for (;;) {
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
-              const toolResults = await this.executor.execute({ workspaceId, sourceMemberId: memberId, sourceQueueItemId: item.id, toolCalls, signal: controller.signal });
+              const toolResults = await this.executor.execute({
+                workspaceId,
+                sourceMemberId: memberId,
+                sourceQueueItemId: item.id,
+                sourceOrchestratorRunId: item.orchestratorRunId || null,
+                sourceOrchestratorQId: item.orchestratorQId || null,
+                toolCalls,
+                signal: controller.signal,
+              });
               for (const r of toolResults) {
                 try {
                   const tc = toolCalls.find(t => (t.call_id || t.call_id === r.call_id) && t.call_id === r.call_id) || toolCalls[0];
