@@ -247,8 +247,8 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result };
     });
 
-    // Q-orchestrator: higher-level session management for sub-agents
-    registerOrchestratorTools(server, app);
+    // Q-orchestrator: higher-level session management for sub-agents (persistent, observable)
+    registerOrchestratorTools(server, app, store);
 
     return server;
   });

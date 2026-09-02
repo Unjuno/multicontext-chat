@@ -566,6 +566,58 @@ function tick() {
 
 function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, 1200); }
 
+// ── Orchestrator Bar ──────────────────────────────────────────
+let orchestratorTimer = null;
+let orchestratorState = null;
+async function refreshOrchestrator() {
+  if (!currentId) return;
+  try {
+    const data = await request(`/api/workspaces/${currentId}/orchestrator`);
+    orchestratorState = data;
+    renderOrchestratorBar(data);
+  } catch {}
+}
+function renderOrchestratorBar(data) {
+  const bar = document.getElementById('orchestratorBar');
+  if (!bar || !data) return;
+  bar.style.display = 'flex';
+  const q = data.queue || [];
+  const q0 = q.filter(x=>x.priority===0).length, q1=q.filter(x=>x.priority===1).length, q2=q.filter(x=>x.priority===2).length;
+  const runs = data.runs || [];
+  const cur = runs.find(r=>r.status==='running') || runs[0];
+  const paused = data.paused ? 'paused' : 'idle';
+  const dotCls = data.paused ? 'paused' : (cur && cur.status==='running' ? 'running' : 'idle');
+  const curText = cur ? `${cur.id.slice(0,4)}:${cur.status}` : '—';
+  bar.innerHTML = `
+    <span class="ob-dot ${dotCls}"></span>
+    <strong>Orchestrator</strong> <span class="ob-sep">·</span> ${paused==='paused'?'PAUSED':'RUNNING'}
+    <span class="ob-sep">·</span> Q0 ${q0} <span class="ob-sep">|</span> Q1 ${q1} <span class="ob-sep">|</span> Q2 ${q2}
+    <span class="ob-sep">·</span> ${curText}
+    <span style="flex:1"></span>
+    <button class="sm" id="orchPauseBtn">${data.paused?'Resume':'Pause'}</button>
+    <button class="sm" id="orchQueueBtn">Queue</button>
+  `;
+  bar.querySelector('#orchPauseBtn')?.addEventListener('click', async () => {
+    await request(`/api/workspaces/${currentId}/orchestrator/pause`, { method:'POST', body: JSON.stringify({ paused: !data.paused }) });
+    refreshOrchestrator();
+  });
+  bar.querySelector('#orchQueueBtn')?.addEventListener('click', () => {
+    const dlg=document.getElementById('orchestratorDrawer');
+    const body=document.getElementById('orchestratorDrawerBody');
+    if (body) {
+      const qHtml = [0,1,2].map(p=>{
+        const items=q.filter(x=>x.priority===p);
+        return `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Q${p} (${items.length})</div>${items.map(it=>`<div class="orchestrator-event ${it.origin}">${it.state} ${it.prompt.slice(0,80)}</div>`).join('') || '<div class="small">empty</div>'}</div>`;
+      }).join('');
+      const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${e.origin}">${e.ts.slice(11,19)} ${e.type} <span style="color:var(--text-muted)">${e.origin}</span></div>`).join('');
+      body.innerHTML = qHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Events</div>${evHtml || '<div class="small">no events</div>'}</div>`;
+    }
+    if (dlg && typeof dlg.showModal==='function') dlg.showModal(); else dlg?.setAttribute('open','');
+  });
+  document.getElementById('orchestratorClose')?.addEventListener('click', ()=>{ const d=document.getElementById('orchestratorDrawer'); if(d.close) d.close(); else d.removeAttribute('open'); });
+}
+function scheduleOrchestrator() { clearTimeout(orchestratorTimer); orchestratorTimer=setTimeout(()=>{ refreshOrchestrator().finally(scheduleOrchestrator); }, 3000); }
+
 function memberCard(workspace, member) {
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
   const effectiveAgentId = String(member.agentId || workspace.defaultAgentId || '').trim();
@@ -704,6 +756,8 @@ async function refresh(expectedId = currentId) {
         </div>
       </div>
 
+      <div id="orchestratorBar" class="orchestrator-bar" style="display:none"></div>
+      <dialog id="orchestratorDrawer"><div class="orchestrator-drawer-head"><strong>Orchestrator</strong><button id="orchestratorClose" class="sm">閉じる</button></div><div id="orchestratorDrawerBody" class="orchestrator-drawer-body"><div class="small">読み込み中...</div></div></dialog>
       <div class="section-label">Broadcast <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件へ` : 'アクティブなチャットがありません'}</span></div>
       <div class="composer ${canBroadcast ? '' : 'disabled'}">
         <div style="flex:1; display:flex; flex-direction:column">
@@ -736,6 +790,8 @@ async function refresh(expectedId = currentId) {
       </div>
     `;
     wire(workspace);
+    refreshOrchestrator();
+    scheduleOrchestrator();
     const gp = $('#globalPrompt'); if (gp) autoResize(gp);
     const cp = $('#compilePrompt'); if (cp) autoResize(cp);
   } catch (error) {

@@ -35,6 +35,30 @@ export class StateStore {
       workspace.settings.allowCrossChatSend ??= true;
       workspace.stats ??= {};
       for (const key of ['broadcasts', 'executions', 'toolEnqueues', 'inspections']) workspace.stats[key] ??= 0;
+      workspace.orchestratorQueue ??= [];
+      workspace.orchestratorRuns ??= {};
+      workspace.orchestratorEvents ??= [];
+      workspace.orchestratorPaused ??= false;
+      // recover Q items: pending/claimed/dispatched that were in-flight go back to pending
+      for (const item of workspace.orchestratorQueue) {
+        if (item.state === 'claimed' || item.state === 'dispatched') {
+          item.state = 'pending';
+          dirty = true;
+        }
+      }
+      for (const run of Object.values(workspace.orchestratorRuns)) {
+        if (run.status === 'running' || run.status === 'queued') {
+          run.status = 'failed';
+          run.finishedAt = now();
+          run.error = 'Recovered after restart';
+          dirty = true;
+        }
+      }
+      // bound events
+      if (workspace.orchestratorEvents.length > 200) {
+        workspace.orchestratorEvents = workspace.orchestratorEvents.slice(-200);
+        dirty = true;
+      }
       for (const member of Object.values(workspace.members ?? {})) {
         member.queue ??= [];
         member.messages ??= [];
@@ -89,6 +113,7 @@ export class StateStore {
       settings: { allowCrossChatInspect: input.settings?.allowCrossChatInspect !== false, allowCrossChatSend: input.settings?.allowCrossChatSend !== false },
       crossChatReceipts: {}, members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
       stats: { broadcasts: 0, executions: 0, toolEnqueues: 0, inspections: 0 },
+      orchestratorQueue: [], orchestratorRuns: {}, orchestratorEvents: [], orchestratorPaused: false,
     };
     this.state.workspaces[id] = workspace; this.save(); return workspace;
   }
@@ -107,6 +132,92 @@ export class StateStore {
     workspace.updatedAt = now(); this.save(); return workspace;
   }
   deleteWorkspace(id) { this.requireWorkspace(id); delete this.state.workspaces[id]; this.save(); }
+
+  // Orchestrator: Q, Runs, Events (persistent, bounded)
+  enqueueOrchestrator(workspaceId, prompt, { priority = 1, origin = 'mcp', actor = null, runId = null } = {}) {
+    const ws = this.requireWorkspace(workspaceId);
+    const item = { id: randomUUID(), prompt: String(prompt), priority: Number(priority), state: 'pending', origin: String(origin), actor: actor ? String(actor) : null, runId: runId ? String(runId) : null, createdAt: now(), claimedAt: null, dispatchedAt: null, doneAt: null };
+    ws.orchestratorQueue.push(item);
+    ws.orchestratorQueue.sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt));
+    this.appendEvent(workspaceId, { type: 'q.enqueued', origin: item.origin, actor: item.actor, runId: item.runId, qId: item.id, detail: { priority: item.priority } });
+    this.save();
+    return item;
+  }
+  peekOrchestratorQueue(workspaceId, limit = 10) {
+    const ws = this.requireWorkspace(workspaceId);
+    return ws.orchestratorQueue.slice(0, Math.max(1, Math.min(Number(limit) || 10, 50)));
+  }
+  updateOrchestratorQueueItem(workspaceId, qId, patch = {}) {
+    const ws = this.requireWorkspace(workspaceId);
+    const item = ws.orchestratorQueue.find(x => x.id === qId);
+    if (!item) throw problem('Q item not found', 404);
+    for (const k of ['state', 'priority']) if (patch[k] !== undefined) item[k] = patch[k];
+    if (patch.state === 'claimed') item.claimedAt = now();
+    if (patch.state === 'dispatched') item.dispatchedAt = now();
+    if (patch.state === 'done' || patch.state === 'failed' || patch.state === 'cancelled') item.doneAt = now();
+    this.save();
+    return item;
+  }
+  createOrchestratorRun(workspaceId, { prompt, priority = 1, origin = 'mcp', actor = null, qItemIds = [] } = {}) {
+    const ws = this.requireWorkspace(workspaceId);
+    const id = randomUUID();
+    const run = { id, workspaceId, prompt: String(prompt || ''), priority: Number(priority), origin: String(origin), actor: actor ? String(actor) : null, qItemIds: Array.isArray(qItemIds) ? qItemIds : [], status: 'queued', createdAt: now(), startedAt: null, finishedAt: null, error: null };
+    ws.orchestratorRuns[id] = run;
+    this.appendEvent(workspaceId, { type: 'mcp.run.started', origin: run.origin, actor: run.actor, runId: id, detail: { priority } });
+    this.save();
+    return run;
+  }
+  getOrchestratorRun(workspaceId, runId) {
+    const ws = this.requireWorkspace(workspaceId);
+    const run = ws.orchestratorRuns[runId];
+    if (!run) throw problem('Run not found', 404);
+    return run;
+  }
+  updateOrchestratorRun(workspaceId, runId, patch = {}) {
+    const ws = this.requireWorkspace(workspaceId);
+    const run = ws.orchestratorRuns[runId];
+    if (!run) throw problem('Run not found', 404);
+    for (const k of ['status', 'error']) if (patch[k] !== undefined) run[k] = patch[k];
+    if (patch.status === 'running' && !run.startedAt) run.startedAt = now();
+    if (patch.status === 'settled' || patch.status === 'blocked' || patch.status === 'cancelled' || patch.status === 'failed') run.finishedAt = now();
+    this.appendEvent(workspaceId, { type: `run.${patch.status || 'updated'}`, origin: run.origin, actor: run.actor, runId, detail: patch });
+    this.save();
+    return run;
+  }
+  listOrchestratorRuns(workspaceId) {
+    const ws = this.requireWorkspace(workspaceId);
+    return Object.values(ws.orchestratorRuns).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  appendEvent(workspaceId, { type, origin = 'system', actor = null, runId = null, qId = null, memberId = null, detail = null } = {}) {
+    const ws = this.requireWorkspace(workspaceId);
+    const ev = { id: randomUUID(), ts: now(), type: String(type), origin: String(origin), actor: actor ? String(actor) : null, runId: runId ? String(runId) : null, qId: qId ? String(qId) : null, memberId: memberId ? String(memberId) : null, detail: detail ?? null };
+    ws.orchestratorEvents.push(ev);
+    if (ws.orchestratorEvents.length > 200) ws.orchestratorEvents = ws.orchestratorEvents.slice(-200);
+    // do not save on every event to avoid excessive I/O? save anyway for persistence
+    this.save();
+    return ev;
+  }
+  listOrchestratorEvents(workspaceId, limit = 50) {
+    const ws = this.requireWorkspace(workspaceId);
+    const lim = Math.max(1, Math.min(Number(limit) || 50, 200));
+    return ws.orchestratorEvents.slice(-lim);
+  }
+  getOrchestratorState(workspaceId) {
+    const ws = this.requireWorkspace(workspaceId);
+    return {
+      queue: ws.orchestratorQueue.slice(0, 20),
+      runs: Object.values(ws.orchestratorRuns).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10),
+      events: ws.orchestratorEvents.slice(-30),
+      paused: Boolean(ws.orchestratorPaused),
+    };
+  }
+  setOrchestratorPaused(workspaceId, paused) {
+    const ws = this.requireWorkspace(workspaceId);
+    ws.orchestratorPaused = Boolean(paused);
+    this.appendEvent(workspaceId, { type: paused ? 'orchestrator.paused' : 'orchestrator.resumed', origin: 'human' });
+    this.save();
+    return ws.orchestratorPaused;
+  }
 
   addMember(workspaceId, input = {}) {
     const workspace = this.requireWorkspace(workspaceId); const id = randomUUID();
@@ -276,7 +387,7 @@ export class StateStore {
   }
   isSettled(workspaceId, runningMemberIds = new Set()) { return this.runtimeState(workspaceId, runningMemberIds) === 'SETTLED'; }
   publicWorkspace(workspace, includeMessages = true) {
-    const { crossChatReceipts: _r, ...rest } = workspace;
+    const { crossChatReceipts: _r, orchestratorQueue: _q, orchestratorRuns: _runs, orchestratorEvents: _ev, orchestratorPaused: _p, ...rest } = workspace;
     return { ...rest, members: Object.fromEntries(Object.entries(workspace.members).map(([id, m]) => [id, publicMember(m, includeMessages)])) };
   }
 }

@@ -229,6 +229,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         try {
           const body = await readBody(req);
           const result = await app.send(workspaceId, memberId, body.prompt);
+          try { store.appendEvent(workspaceId, { type: 'human.send', origin: 'human', memberId, detail: { prompt: String(body.prompt||'').slice(0,200) } }); } catch {}
           return json(res, 202, { item: result.item });
         } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
       }
@@ -237,7 +238,11 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         catch (e) { return json(res, e.status || 500, { error: e.message }); }
       }
       if (parts[5] === 'stop' && req.method === 'POST') {
-        try { const view = await app.stopChat(workspaceId, memberId); return json(res, 200, enrichView(view, req)); }
+        try {
+          const view = await app.stopChat(workspaceId, memberId);
+          try { store.appendEvent(workspaceId, { type: 'human.stop', origin: 'human', memberId }); } catch {}
+          return json(res, 200, enrichView(view, req));
+        }
         catch (e) { return json(res, e.status || 500, { error: e.message }); }
       }
     }
@@ -245,11 +250,16 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       try {
         const body = await readBody(req);
         const result = await app.broadcast(workspaceId, body.prompt);
+        try { store.appendEvent(workspaceId, { type: 'human.broadcast', origin: 'human', detail: { prompt: String(body.prompt||'').slice(0,200) } }); } catch {}
         return json(res, 202, { items: result.items, workspace: enrichView(result.workspace, req) });
       } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (parts[3] === 'stop' && req.method === 'POST') {
-      try { const view = await app.stopWorkspace(workspaceId); return json(res, 200, enrichView(view, req)); }
+      try {
+        const view = await app.stopWorkspace(workspaceId);
+        try { store.appendEvent(workspaceId, { type: 'human.stop', origin: 'human', detail: { workspaceId } }); } catch {}
+        return json(res, 200, enrichView(view, req));
+      }
       catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (parts[3] === 'compile' && req.method === 'POST') {
@@ -266,6 +276,18 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         const result = await app.waitUntilSettled(workspaceId, timeout, interval);
         return json(res, 200, result);
       } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+    }
+    if (parts[3] === 'orchestrator' && req.method === 'GET') {
+      try { return json(res, 200, store.getOrchestratorState(workspaceId)); }
+      catch (e) { return json(res, e.status || 500, { error: e.message }); }
+    }
+    if (parts[3] === 'orchestrator' && parts[4] === 'pause' && req.method === 'POST') {
+      try {
+        const body = await readBody(req);
+        const paused = Boolean(body.paused);
+        const v = store.setOrchestratorPaused(workspaceId, paused);
+        return json(res, 200, { paused: v, orchestrator: store.getOrchestratorState(workspaceId) });
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
     if (parts[3] === 'messages' && req.method === 'GET') {
       const chatId = url.searchParams.get('chat_id') || parts[4];
