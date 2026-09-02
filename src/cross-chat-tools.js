@@ -3,7 +3,7 @@ export const CROSS_CHAT_TOOLS = [
     type: 'function',
     function: {
       name: 'list_chats',
-      description: 'List active peer chat ids and names in the workspace, excluding self.',
+      description: 'MUST call this tool when the user asks to list, discover, or see peer chats. Returns active peer ids and names, excluding self. Do not hallucinate the list.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
     },
   },
@@ -11,7 +11,7 @@ export const CROSS_CHAT_TOOLS = [
     type: 'function',
     function: {
       name: 'inspect_chat',
-      description: 'Search selected messages from one peer chat by UUID or exact name.',
+      description: 'MUST call this tool to read selected messages from one peer chat. Provide peer UUID or exact name. Do not invent peer content; use this tool instead.',
       parameters: {
         type: 'object',
         properties: {
@@ -28,7 +28,7 @@ export const CROSS_CHAT_TOOLS = [
     type: 'function',
     function: {
       name: 'send_to_chat',
-      description: 'Queue the same prompt into one or two peer chats atomically.',
+      description: 'MUST call this tool to send a message to one or two peer chats. This is the ONLY way to deliver a prompt to another chat. Queues atomically; do not hallucinate delivery.',
       parameters: {
         type: 'object',
         properties: {

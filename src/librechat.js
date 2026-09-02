@@ -43,7 +43,7 @@ export class LibreChatClient {
     try {
       const body = { model: agentId, input, stream: false, store: this.mode === 'native', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       if (this.mode === 'native' && conversationId) body.previous_response_id = conversationId;
-      if (this.mode === 'native') { body.tools = CROSS_CHAT_TOOLS; }
+      if (this.mode === 'native') { body.tools = CROSS_CHAT_TOOLS; body.tool_choice = 'auto'; }
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
