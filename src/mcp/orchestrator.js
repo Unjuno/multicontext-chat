@@ -92,7 +92,7 @@ export function registerOrchestratorTools(server, app, store) {
   });
 
   server.registerTool('multicontext_orchestrate_enqueue', {
-    description: 'Enqueue a prompt with Q priority (0=highest, 1=normal, 2=background). For broadcast set broadcast=true, otherwise specify chat_id. Q is ordered by priority then FIFO.',
+    description: 'Enqueue a prompt to Q with priority (0=highest, 1=normal, 2=background). Pure Q operation: enqueues as pending, does not immediately dispatch. Use start_run or wait for dispatcher to execute. For immediate dispatch, use broadcast/send directly.',
     inputSchema: z.object({
       workspace_id: z.string().min(1),
       prompt: z.string().min(1),
@@ -102,42 +102,16 @@ export function registerOrchestratorTools(server, app, store) {
     }),
   }, async ({ workspace_id, prompt, priority, broadcast, chat_id }) => {
     const pr = priority ?? 1;
+    // P1: standalone enqueue is pure Q, no immediate dispatch, no dispatched forever
+    let target = null;
+    if (broadcast) target = { type: 'broadcast' };
+    else if (chat_id) target = { type: 'member', memberId: chat_id };
     let qItem;
-    if (hasStore) qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: pr, origin: 'mcp', actor: 'orchestrator' });
+    if (hasStore) qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: pr, origin: 'mcp', actor: 'orchestrator', target });
     else qItem = pushQ(workspace_id, prompt, pr);
-    let result;
-    // P1: Q lifecycle - dispatched stays until run settles, not done immediately
-    if (broadcast) {
-      if (hasStore) {
-        const ws = store.getWorkspace(workspace_id);
-        if (ws.orchestratorPaused) {
-          return { content: [{ type: 'text', text: JSON.stringify({ qItem, result: { queued: true, paused: true } }, null, 2) }], structuredContent: { qItem, result: { queued: true, paused: true }, q: store.peekOrchestratorQueue(workspace_id) } };
-        }
-        store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: 'dispatched' });
-      }
-      result = await app.broadcast(workspace_id, prompt);
-      if (hasStore) {
-        store.appendEvent(workspace_id, { type: 'q.dispatched', origin: 'mcp', qId: qItem.id, detail: { broadcast: true } });
-        // keep dispatched, not done — will be marked done when member completes / run settles
-      }
-    } else if (chat_id) {
-      if (hasStore) {
-        const ws = store.getWorkspace(workspace_id);
-        if (ws.orchestratorPaused) {
-          return { content: [{ type: 'text', text: JSON.stringify({ qItem, result: { queued: true, paused: true } }, null, 2) }], structuredContent: { qItem, result: { queued: true, paused: true }, q: store.peekOrchestratorQueue(workspace_id) } };
-        }
-        store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: 'dispatched' });
-      }
-      result = await app.send(workspace_id, chat_id, prompt);
-      if (hasStore) {
-        store.appendEvent(workspace_id, { type: 'q.dispatched', origin: 'mcp', qId: qItem.id, memberId: chat_id });
-        // keep dispatched
-      }
-    } else {
-      result = { qItem, queued: true };
-    }
+    // do not dispatch here; Q remains pending until a Run dispatches it
     const q = hasStore ? store.peekOrchestratorQueue(workspace_id) : peekQ(workspace_id);
-    return { content: [{ type: 'text', text: JSON.stringify({ qItem, result }, null, 2) }], structuredContent: { qItem, result, q } };
+    return { content: [{ type: 'text', text: JSON.stringify({ qItem, queued: true, hint: 'Use start_run to dispatch' }, null, 2) }], structuredContent: { qItem, queued: true, q } };
   });
 
   server.registerTool('multicontext_orchestrate_next', {
@@ -273,7 +247,7 @@ export function registerOrchestratorTools(server, app, store) {
     return { content: [{ type: 'text', text: JSON.stringify({ workspace_id: wsId, enqueueResult, wait }, null, 2) }], structuredContent: { workspace_id: wsId, enqueueResult, wait } };
   });
 
-  // Async Run model: start → run_id immediate, poll via get/cancel (P1: pause gate, single active run, race-safe)
+  // Async Run model: start → run_id immediate, poll via get/cancel (P1: pause gate, single active run, race-safe, target preservation)
   server.registerTool('multicontext_orchestrate_start_run', {
     description: 'Start an async orchestrator run (non-blocking). Returns run_id immediately. Poll with multicontext_orchestrate_get_run. For long sessions, this avoids MCP timeout.',
     inputSchema: z.object({
@@ -285,11 +259,13 @@ export function registerOrchestratorTools(server, app, store) {
     }),
   }, async ({ workspace_id, prompt, priority, broadcast, chat_id }) => {
     if (!hasStore) throw new Error('Orchestrator store not available');
+    // determine target for Q
+    const target = broadcast ? { type: 'broadcast' } : chat_id ? { type: 'member', memberId: chat_id } : { type: 'broadcast' };
     // P1: pause gate - do not dispatch if paused, keep queued
     const wsCheck = store.getWorkspace(workspace_id);
     if (wsCheck.orchestratorPaused) {
       const run = store.createOrchestratorRun(workspace_id, { prompt, priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator' });
-      const qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator', runId: run.id });
+      const qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator', runId: run.id, target });
       // keep queued, not running
       return { content: [{ type: 'text', text: JSON.stringify({ run_id: run.id, workspace_id, qItem, paused: true, run }, null, 2) }], structuredContent: { run_id: run.id, workspace_id, qItem, paused: true, run } };
     }
@@ -300,16 +276,17 @@ export function registerOrchestratorTools(server, app, store) {
       if (e.code === 'ORCHESTRATOR_RUN_ALREADY_ACTIVE') throw Object.assign(new Error('An orchestrator run is already active for this workspace'), { status: 409, code: e.code });
       throw e;
     }
-    qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator', runId: run.id });
+    qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator', runId: run.id, target });
     // dispatch without waiting
     (async () => {
       try {
         store.updateOrchestratorRun(workspace_id, run.id, { status: 'running' });
         store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: 'dispatched' });
         let result;
-        if (broadcast) result = await app.broadcast(workspace_id, prompt);
-        else if (chat_id) result = await app.send(workspace_id, chat_id, prompt);
-        else result = await app.broadcast(workspace_id, prompt);
+        const t = qItem.target || target;
+        if (t.type === 'broadcast') result = await app.broadcast(workspace_id, prompt, { orchestratorRunId: run.id, orchestratorQId: qItem.id });
+        else if (t.type === 'member') result = await app.send(workspace_id, t.memberId, prompt, { orchestratorRunId: run.id, orchestratorQId: qItem.id });
+        else result = await app.broadcast(workspace_id, prompt, { orchestratorRunId: run.id, orchestratorQId: qItem.id });
         store.appendEvent(workspace_id, { type: 'q.dispatched', origin: 'mcp', runId: run.id, qId: qItem.id });
         const wait = await app.waitUntilSettled(workspace_id, 300, 500);
         // P1: check terminal race - if cancelled, do not overwrite
@@ -321,6 +298,8 @@ export function registerOrchestratorTools(server, app, store) {
         store.updateOrchestratorRun(workspace_id, run.id, { status: finalStatus });
         const qState = finalStatus === 'settled' ? 'done' : 'failed';
         try { store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: qState }); } catch {}
+        // mark dispatched Q done
+        try { store.markDispatchedQDone(workspace_id, run.id, finalStatus); } catch {}
       } catch (e) {
         try {
           const cur = store.getOrchestratorRun(workspace_id, run.id);

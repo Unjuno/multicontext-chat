@@ -133,8 +133,8 @@ export class StateStore {
   }
   deleteWorkspace(id) { this.requireWorkspace(id); delete this.state.workspaces[id]; this.save(); }
 
-  // Orchestrator: Q, Runs, Events (persistent, bounded) — P0/P1 fixes
-  enqueueOrchestrator(workspaceId, prompt, { priority = 1, origin = 'mcp', actor = null, runId = null } = {}) {
+  // Orchestrator: Q, Runs, Events (persistent, bounded) — P0/P1 fixes + P1 target preservation
+  enqueueOrchestrator(workspaceId, prompt, { priority = 1, origin = 'mcp', actor = null, runId = null, target = null } = {}) {
     const ws = this.requireWorkspace(workspaceId);
     const activeCount = ws.orchestratorQueue.filter(x => x.state === 'pending' || x.state === 'claimed' || x.state === 'dispatched').length;
     if (activeCount >= 200) {
@@ -146,10 +146,16 @@ export class StateStore {
       const toRemove = terminal.slice(0, terminal.length - 100);
       ws.orchestratorQueue = ws.orchestratorQueue.filter(x => !toRemove.includes(x));
     }
-    const item = { id: randomUUID(), prompt: String(prompt), priority: Number(priority), state: 'pending', origin: String(origin), actor: actor ? String(actor) : null, runId: runId ? String(runId) : null, createdAt: now(), claimedAt: null, dispatchedAt: null, doneAt: null };
+    // P1: preserve target for resume dispatcher
+    let targetNorm = null;
+    if (target) {
+      if (target.type === 'broadcast') targetNorm = { type: 'broadcast' };
+      else if (target.type === 'member' && target.memberId) targetNorm = { type: 'member', memberId: String(target.memberId) };
+    }
+    const item = { id: randomUUID(), prompt: String(prompt), priority: Number(priority), state: 'pending', origin: String(origin), actor: actor ? String(actor) : null, runId: runId ? String(runId) : null, target: targetNorm, createdAt: now(), claimedAt: null, dispatchedAt: null, doneAt: null };
     ws.orchestratorQueue.push(item);
     ws.orchestratorQueue.sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt));
-    this.appendEvent(workspaceId, { type: 'q.enqueued', origin: item.origin, actor: item.actor, runId: item.runId, qId: item.id, detail: { priority: item.priority } });
+    this.appendEvent(workspaceId, { type: 'q.enqueued', origin: item.origin, actor: item.actor, runId: item.runId, qId: item.id, detail: { priority: item.priority, target: targetNorm } });
     this.save();
     return item;
   }
