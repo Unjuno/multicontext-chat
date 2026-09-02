@@ -176,9 +176,10 @@ export class StateStore {
     const receiptKey = `${sourceMemberId}:${queueItemId}:${toolCallId}`;
     if (workspace.crossChatReceipts?.[receiptKey]) {
       const prev = workspace.crossChatReceipts[receiptKey].result;
-      // Ensure replayed flag present for legacy receipts
-      if (prev.replayed === undefined) prev.replayed = true;
-      return prev;
+      // Return replayed view without mutating stored original
+      if (prev.replayed === true) return prev;
+      // legacy stored false should be returned as true on replay
+      return { ...prev, replayed: true };
     }
     const refs = Array.isArray(targetRefs) ? targetRefs : [targetRefs];
     if (refs.length < 1 || refs.length > 2) throw problem('targets must contain one or two chats', 400);
