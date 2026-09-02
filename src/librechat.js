@@ -1,3 +1,5 @@
+import { CROSS_CHAT_TOOLS } from './cross-chat-tools.js';
+
 export const REMOTE_AGENTS_MODELS_PATH = "/api/agents/v1/responses/models";
 
 export class LibreChatClient {
@@ -9,8 +11,6 @@ export class LibreChatClient {
 
   async listAgents({ signal } = {}) {
     this.assertConfigured();
-    // Bound the probe so a wedged LibreChat cannot hang /api/health (and the
-    // UI health line) forever; generation requests keep the full timeout.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('LibreChat agents probe timed out')), Math.min(this.timeoutMs, 10_000));
     const relayAbort = () => controller.abort(signal?.reason ?? new Error('Aborted')); signal?.addEventListener('abort', relayAbort, { once: true });
@@ -27,7 +27,58 @@ export class LibreChatClient {
     catch (error) { return { ok: false, latencyMs: Date.now() - startedAt, error: error.message, mode: this.mode }; }
   }
 
+  async runAgentInitial({ agentId, globalPrompt, developerPrompt, history = [], prompt, conversationId, signal, metadata = {} }) {
+    if (!agentId) throw new Error('LibreChat agentId is required'); this.assertConfigured();
+    const input = [];
+    if (globalPrompt?.trim()) input.push({ type: 'message', role: 'system', content: globalPrompt.trim() });
+    if (developerPrompt?.trim()) input.push({ type: 'message', role: 'developer', content: developerPrompt.trim() });
+    if (this.mode === 'compat') {
+      for (const message of history) if (message.role === 'user' || message.role === 'assistant') input.push({ type: 'message', role: message.role, content: String(message.content || '') });
+    }
+    input.push({ type: 'message', role: 'user', content: String(prompt || '') });
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('LibreChat request timed out')), this.timeoutMs);
+    const relayAbort = () => controller.abort(signal?.reason ?? new Error('Aborted')); signal?.addEventListener('abort', relayAbort, { once: true });
+    try {
+      const body = { model: agentId, input, stream: false, store: this.mode === 'native', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
+      if (this.mode === 'native' && conversationId) body.previous_response_id = conversationId;
+      if (this.mode === 'native') { body.tools = CROSS_CHAT_TOOLS; }
+      const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
+      const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
+      const nextConversationId = response.headers?.get?.('x-librechat-conversation-id') || data.conversation_id || data.metadata?.conversation_id || conversationId || null;
+      if (this.mode === 'native' && !nextConversationId) throw new Error('Native LibreChat mode requires the MultiContext LibreChat patch (conversation id header missing)');
+      return { id: data.id, text: extractOutputText(data), usage: data.usage ?? null, conversationId: nextConversationId, raw: data };
+    } finally { clearTimeout(timer); signal?.removeEventListener('abort', relayAbort); }
+  }
+
+  async continueAgent({ agentId, conversationId, toolResults, signal, metadata = {} }) {
+    if (!conversationId) throw new Error('conversationId is required for continueAgent'); this.assertConfigured();
+    if (!agentId) throw new Error('LibreChat agentId is required');
+    const input = toolResults.map(tr => ({ type: 'function_call_output', call_id: tr.call_id, output: tr.output }));
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('LibreChat request timed out')), this.timeoutMs);
+    const relayAbort = () => controller.abort(signal?.reason ?? new Error('Aborted')); signal?.addEventListener('abort', relayAbort, { once: true });
+    try {
+      const body = { model: agentId, input, stream: false, store: this.mode === 'native', previous_response_id: conversationId, metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
+      const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
+      const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
+      const nextConversationId = response.headers?.get?.('x-librechat-conversation-id') || data.conversation_id || data.metadata?.conversation_id || conversationId || null;
+      if (this.mode === 'native' && !nextConversationId) throw new Error('Native LibreChat mode requires the MultiContext LibreChat patch (conversation id header missing)');
+      return { id: data.id, text: extractOutputText(data), usage: data.usage ?? null, conversationId: nextConversationId, raw: data };
+    } finally { clearTimeout(timer); signal?.removeEventListener('abort', relayAbort); }
+  }
+
   async runAgent({ agentId, globalPrompt, developerPrompt, history = [], prompt, conversationId, signal, metadata = {}, toolResults = [] }) {
+    if (this.mode === 'native') {
+      if (toolResults.length === 0) {
+        return this.runAgentInitial({ agentId, globalPrompt, developerPrompt, history, prompt, conversationId, signal, metadata });
+      }
+      return this.continueAgent({ agentId, conversationId, toolResults, signal, metadata });
+    }
     if (!agentId) throw new Error('LibreChat agentId is required'); this.assertConfigured();
     const input = [];
     if (globalPrompt?.trim()) input.push({ type: 'message', role: 'system', content: globalPrompt.trim() });
@@ -44,13 +95,6 @@ export class LibreChatClient {
     try {
       const body = { model: agentId, input, stream: false, store: this.mode === 'native', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       if (this.mode === 'native' && conversationId) body.previous_response_id = conversationId;
-      if (metadata.workspace_id && metadata.member_id) {
-        body.tools = [
-          { type: 'function', function: { name: 'list_chats', description: 'List peer chat ids and names in the workspace.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
-          { type: 'function', function: { name: 'inspect_chat', description: 'Search selected messages from one peer chat.', parameters: { type: 'object', properties: { target: { type: 'string', description: 'Peer chat UUID or exact name.' }, query: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 20, default: 8 } }, required: ['target'], additionalProperties: false } } },
-          { type: 'function', function: { name: 'send_to_chat', description: 'Queue the same prompt into one or two peer chats.', parameters: { type: 'object', properties: { targets: { type: 'array', minItems: 1, maxItems: 2, uniqueItems: true, items: { type: 'string', description: 'Peer chat UUID or exact name.' } }, prompt: { type: 'string', minLength: 1 } }, required: ['targets', 'prompt'], additionalProperties: false } } },
-        ];
-      }
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);

@@ -175,15 +175,20 @@ export class StateStore {
     if (!source) throw problem('Source member not found', 404);
     const receiptKey = `${sourceMemberId}:${queueItemId}:${toolCallId}`;
     if (workspace.crossChatReceipts?.[receiptKey]) {
-      return workspace.crossChatReceipts[receiptKey].result;
+      const prev = workspace.crossChatReceipts[receiptKey].result;
+      // Ensure replayed flag present for legacy receipts
+      if (prev.replayed === undefined) prev.replayed = true;
+      return prev;
     }
     const refs = Array.isArray(targetRefs) ? targetRefs : [targetRefs];
     if (refs.length < 1 || refs.length > 2) throw problem('targets must contain one or two chats', 400);
     const targets = refs.map(ref => this.resolveMember(workspaceId, ref, { activeOnly: true }));
     if (targets.some(m => m.id === sourceMemberId)) throw problem('Target must be another chat', 400);
     if (new Set(targets.map(m => m.id)).size !== targets.length) throw problem('Targets must be unique', 400);
+    const text = String(prompt || '').trim();
+    if (!text) throw problem('Prompt is required', 400);
     const items = targets.map(target => {
-      const item = { id: randomUUID(), prompt: String(prompt || '').trim(), attempts: 0, source: 'tool', sourceMemberId, createdAt: now() };
+      const item = { id: randomUUID(), prompt: text, attempts: 0, source: 'tool', sourceMemberId, createdAt: now() };
       target.queue.push(item); target.updatedAt = now(); workspace.updatedAt = now();
       if (item.source === 'tool') workspace.stats.toolEnqueues += 1;
       return { target: { id: target.id, name: target.name }, item };
@@ -192,7 +197,7 @@ export class StateStore {
     workspace.crossChatReceipts[receiptKey] = {
       sourceMemberId, targetIds: targets.map(m => m.id),
       deliveries: items.map(({ target, item }) => ({ targetId: target.id, queueItemId: item.id })),
-      result: { accepted: true, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) },
+      result: { accepted: true, replayed: false, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) },
       committedAt: now(),
     };
     this.save();

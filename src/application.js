@@ -497,7 +497,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return { target: { id: target.id, name: target.name }, results };
   }
 
-  async function sendToChats(workspaceId, sourceMemberId, targetRefs, prompt) {
+  async function sendToChats(workspaceId, sourceMemberId, targetRefs, prompt, { sourceQueueItemId = null, toolCallId = null } = {}) {
+    const hasQueue = sourceQueueItemId !== null && sourceQueueItemId !== undefined && String(sourceQueueItemId).trim() !== '';
+    const hasCall = toolCallId !== null && toolCallId !== undefined && String(toolCallId).trim() !== '';
+    if (hasQueue !== hasCall) throw problem('Invalid idempotency context: both sourceQueueItemId and toolCallId must be provided together', 400);
+    const useAtomic = hasQueue && hasCall;
     const text = String(prompt || '').trim();
     if (!text) throw problem('Prompt is required', 400);
     const workspace = store.requireWorkspace(workspaceId);
@@ -508,14 +512,18 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (!source.canSendOthers) throw problem('Cross-chat sending is disabled', 403, CROSS_CHAT_SEND_DISABLED);
     const refs = Array.isArray(targetRefs) ? targetRefs : [targetRefs];
     if (refs.length < 1 || refs.length > 2) throw problem('targets must contain one or two chats', 400);
-    const targets = refs.map(ref => store.resolveMember(workspaceId, ref, { activeOnly: true }));
-    if (new Set(targets.map(m => m.id)).size !== targets.length) throw problem('Targets must be unique', 400);
-    if (targets.some(m => m.id === sourceMemberId)) throw problem('Target must be another chat', 400);
-    // Centralized Agent validation for all targets before any mutation (no state change yet)
+    // Validate targets before agent discovery to avoid unnecessary calls, but keep ordering deterministic
+    // Do full validation (resolve, active, self, duplicate) before any mutation
+    // For atomic path, enqueueCrossChatAtomic will re-validate; for non-atomic we validate here
+    // Agent validation must happen before mutation in both paths
     const status = await getAvailableAgentsWithStatus(true);
     if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
     const agents = status.agents;
-    for (const t of targets) {
+    // Pre-resolve targets for validation (without mutation)
+    const preTargets = refs.map(ref => store.resolveMember(workspaceId, ref, { activeOnly: true }));
+    if (new Set(preTargets.map(m => m.id)).size !== preTargets.length) throw problem('Targets must be unique', 400);
+    if (preTargets.some(m => m.id === sourceMemberId)) throw problem('Target must be another chat', 400);
+    for (const t of preTargets) {
       const eff = String(t.agentId || workspace.defaultAgentId || '').trim();
       let effective = eff;
       if (!effective && agents.length === 1) {
@@ -536,11 +544,22 @@ export function createApplication({ config, store, client, scheduler } = {}) {
         store.updateWorkspace(workspaceId, { defaultAgentId: singleId });
       }
     }
-    // All validated, now enqueue atomically
+    if (useAtomic) {
+      const result = store.enqueueCrossChatAtomic(workspaceId, sourceMemberId, String(sourceQueueItemId), String(toolCallId), refs, text);
+      // Only kick targets on first commit, not on replay
+      if (!result.replayed) {
+        for (const d of result.deliveries) {
+          const tid = d.target.id;
+          scheduler.kickMember(workspaceId, tid);
+        }
+      }
+      return result;
+    }
+    // Non-atomic path for explicit external/manual calls
+    const targets = preTargets;
     const items = targets.map(target => ({ target: { id: target.id, name: target.name }, item: store.enqueue(workspaceId, target.id, text, { source: 'tool', sourceMemberId }) }));
     for (const t of targets) scheduler.kickMember(workspaceId, t.id);
-    workspace.stats.toolEnqueues += 0; // already counted via enqueue
-    return { accepted: true, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) };
+    return { accepted: true, replayed: false, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) };
   }
 
   function stopWorkspace(workspaceId) {
