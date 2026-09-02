@@ -133,9 +133,19 @@ export class StateStore {
   }
   deleteWorkspace(id) { this.requireWorkspace(id); delete this.state.workspaces[id]; this.save(); }
 
-  // Orchestrator: Q, Runs, Events (persistent, bounded)
+  // Orchestrator: Q, Runs, Events (persistent, bounded) — P0/P1 fixes
   enqueueOrchestrator(workspaceId, prompt, { priority = 1, origin = 'mcp', actor = null, runId = null } = {}) {
     const ws = this.requireWorkspace(workspaceId);
+    // bound active queue: keep at most 200 pending + 100 terminal history
+    const activeCount = ws.orchestratorQueue.filter(x => x.state === 'pending' || x.state === 'claimed' || x.state === 'dispatched').length;
+    if (activeCount >= 200 && (prompt.length > 0)) {
+      // prune oldest done/failed/cancelled beyond 100
+      const terminal = ws.orchestratorQueue.filter(x => x.state === 'done' || x.state === 'failed' || x.state === 'cancelled');
+      if (terminal.length > 100) {
+        const toRemove = terminal.slice(0, terminal.length - 100);
+        ws.orchestratorQueue = ws.orchestratorQueue.filter(x => !toRemove.includes(x));
+      }
+    }
     const item = { id: randomUUID(), prompt: String(prompt), priority: Number(priority), state: 'pending', origin: String(origin), actor: actor ? String(actor) : null, runId: runId ? String(runId) : null, createdAt: now(), claimedAt: null, dispatchedAt: null, doneAt: null };
     ws.orchestratorQueue.push(item);
     ws.orchestratorQueue.sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt));
@@ -145,24 +155,68 @@ export class StateStore {
   }
   peekOrchestratorQueue(workspaceId, limit = 10) {
     const ws = this.requireWorkspace(workspaceId);
-    return ws.orchestratorQueue.slice(0, Math.max(1, Math.min(Number(limit) || 10, 50)));
+    // P1: only pending is considered queue; terminal stays in history, not active queue
+    const pending = ws.orchestratorQueue.filter(x => x.state === 'pending');
+    pending.sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt));
+    return pending.slice(0, Math.max(1, Math.min(Number(limit) || 10, 50)));
+  }
+  peekOrchestratorQueueAll(workspaceId, limit = 20) {
+    const ws = this.requireWorkspace(workspaceId);
+    return ws.orchestratorQueue.slice(0, Math.max(1, Math.min(Number(limit) || 20, 50)));
+  }
+  listOrchestratorQueueHistory(workspaceId, limit = 50) {
+    const ws = this.requireWorkspace(workspaceId);
+    const terminal = ws.orchestratorQueue.filter(x => x.state === 'done' || x.state === 'failed' || x.state === 'cancelled');
+    return terminal.slice(-Math.max(1, Math.min(Number(limit) || 50, 100)));
   }
   updateOrchestratorQueueItem(workspaceId, qId, patch = {}) {
     const ws = this.requireWorkspace(workspaceId);
     const item = ws.orchestratorQueue.find(x => x.id === qId);
     if (!item) throw problem('Q item not found', 404);
+    // P1: state machine validation
+    const allowed = {
+      pending: ['claimed', 'dispatched', 'cancelled'],
+      claimed: ['dispatched', 'failed', 'cancelled'],
+      dispatched: ['done', 'failed', 'cancelled'],
+      done: [],
+      failed: [],
+      cancelled: [],
+    };
+    if (patch.state && patch.state !== item.state) {
+      const from = item.state;
+      const to = patch.state;
+      if (!allowed[from] || !allowed[from].includes(to)) {
+        throw problem(`Invalid Q transition ${from} -> ${to}`, 409);
+      }
+    }
     for (const k of ['state', 'priority']) if (patch[k] !== undefined) item[k] = patch[k];
     if (patch.state === 'claimed') item.claimedAt = now();
     if (patch.state === 'dispatched') item.dispatchedAt = now();
     if (patch.state === 'done' || patch.state === 'failed' || patch.state === 'cancelled') item.doneAt = now();
+    // prune terminal beyond 100
+    const terminal = ws.orchestratorQueue.filter(x => x.state === 'done' || x.state === 'failed' || x.state === 'cancelled');
+    if (terminal.length > 100) {
+      const toRemove = terminal.slice(0, terminal.length - 100);
+      ws.orchestratorQueue = ws.orchestratorQueue.filter(x => !toRemove.includes(x));
+    }
     this.save();
     return item;
   }
   createOrchestratorRun(workspaceId, { prompt, priority = 1, origin = 'mcp', actor = null, qItemIds = [] } = {}) {
     const ws = this.requireWorkspace(workspaceId);
+    // P0: one active run per workspace
+    const active = Object.values(ws.orchestratorRuns).find(r => r.status === 'queued' || r.status === 'running');
+    if (active) throw Object.assign(new Error('Orchestrator run already active'), { status: 409, code: 'ORCHESTRATOR_RUN_ALREADY_ACTIVE' });
     const id = randomUUID();
     const run = { id, workspaceId, prompt: String(prompt || ''), priority: Number(priority), origin: String(origin), actor: actor ? String(actor) : null, qItemIds: Array.isArray(qItemIds) ? qItemIds : [], status: 'queued', createdAt: now(), startedAt: null, finishedAt: null, error: null };
     ws.orchestratorRuns[id] = run;
+    // bound runs: keep at most 100, prune oldest terminal
+    const allRuns = Object.values(ws.orchestratorRuns);
+    if (allRuns.length > 100) {
+      const terminal = allRuns.filter(r => ['settled','blocked','failed','cancelled'].includes(r.status)).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+      const toPrune = terminal.slice(0, allRuns.length - 100);
+      for (const r of toPrune) delete ws.orchestratorRuns[r.id];
+    }
     this.appendEvent(workspaceId, { type: 'mcp.run.started', origin: run.origin, actor: run.actor, runId: id, detail: { priority } });
     this.save();
     return run;
@@ -177,9 +231,40 @@ export class StateStore {
     const ws = this.requireWorkspace(workspaceId);
     const run = ws.orchestratorRuns[runId];
     if (!run) throw problem('Run not found', 404);
+    // P1: terminal immutability and transition table
+    const allowed = {
+      queued: ['running', 'cancelled', 'failed'],
+      running: ['settled', 'blocked', 'failed', 'cancelled'],
+      settled: [],
+      blocked: [],
+      failed: [],
+      cancelled: [],
+    };
+    if (patch.status && patch.status !== run.status) {
+      const from = run.status;
+      const to = patch.status;
+      if (!allowed[from] || !allowed[from].includes(to)) {
+        throw problem(`Invalid run transition ${from} -> ${to}`, 409);
+      }
+    }
+    // terminal already -> no overwrite
+    if (['settled','blocked','failed','cancelled'].includes(run.status) && patch.status && patch.status !== run.status) {
+      throw problem(`Run already terminal ${run.status}`, 409);
+    }
     for (const k of ['status', 'error']) if (patch[k] !== undefined) run[k] = patch[k];
     if (patch.status === 'running' && !run.startedAt) run.startedAt = now();
-    if (patch.status === 'settled' || patch.status === 'blocked' || patch.status === 'cancelled' || patch.status === 'failed') run.finishedAt = now();
+    if (patch.status === 'settled' || patch.status === 'blocked' || patch.status === 'cancelled' || patch.status === 'failed') {
+      run.finishedAt = now();
+      // P0: when run becomes cancelled, also cancel its Q items (pending/claimed/dispatched)
+      if (patch.status === 'cancelled') {
+        for (const q of ws.orchestratorQueue) {
+          if (q.runId === runId && (q.state === 'pending' || q.state === 'claimed' || q.state === 'dispatched')) {
+            q.state = 'cancelled';
+            q.doneAt = now();
+          }
+        }
+      }
+    }
     this.appendEvent(workspaceId, { type: `run.${patch.status || 'updated'}`, origin: run.origin, actor: run.actor, runId, detail: patch });
     this.save();
     return run;

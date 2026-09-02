@@ -581,16 +581,24 @@ function renderOrchestratorBar(data) {
   const bar = document.getElementById('orchestratorBar');
   if (!bar || !data) return;
   bar.style.display = 'flex';
-  const q = data.queue || [];
-  const q0 = q.filter(x=>x.priority===0).length, q1=q.filter(x=>x.priority===1).length, q2=q.filter(x=>x.priority===2).length;
+  // P1 fix: only pending counts as queue, terminal goes to history
+  const qAll = data.queue || [];
+  const qPending = qAll.filter(x=>x.state==='pending');
+  const qHistory = qAll.filter(x=>['done','failed','cancelled'].includes(x.state));
+  const q0 = qPending.filter(x=>x.priority===0).length, q1=qPending.filter(x=>x.priority===1).length, q2=qPending.filter(x=>x.priority===2).length;
   const runs = data.runs || [];
-  const cur = runs.find(r=>r.status==='running') || runs[0];
-  const paused = data.paused ? 'paused' : 'idle';
-  const dotCls = data.paused ? 'paused' : (cur && cur.status==='running' ? 'running' : 'idle');
-  const curText = cur ? `${cur.id.slice(0,4)}:${cur.status}` : '—';
+  const cur = runs.find(r=>r.status==='running' || r.status==='queued') || runs[0];
+  // P1 fix: derive bar state correctly (was always RUNNING)
+  let barState = 'IDLE', dotCls = 'idle';
+  if (data.paused) { barState = 'PAUSED'; dotCls = 'paused'; }
+  else if (cur && cur.status==='running') { barState = 'RUNNING'; dotCls = 'running'; }
+  else if (cur && cur.status==='queued') { barState = 'QUEUED'; dotCls = 'pending'; }
+  else if (qPending.length>0) { barState = 'QUEUED'; dotCls = 'pending'; }
+  else if (cur && ['blocked','failed'].includes(cur.status)) { barState = cur.status.toUpperCase(); dotCls = 'blocked'; }
+  const curText = cur ? `${esc(cur.id.slice(0,4))}:${esc(cur.status)}` : '—';
   bar.innerHTML = `
-    <span class="ob-dot ${dotCls}"></span>
-    <strong>Orchestrator</strong> <span class="ob-sep">·</span> ${paused==='paused'?'PAUSED':'RUNNING'}
+    <span class="ob-dot ${esc(dotCls)}"></span>
+    <strong>Orchestrator</strong> <span class="ob-sep">·</span> ${esc(barState)}
     <span class="ob-sep">·</span> Q0 ${q0} <span class="ob-sep">|</span> Q1 ${q1} <span class="ob-sep">|</span> Q2 ${q2}
     <span class="ob-sep">·</span> ${curText}
     <span style="flex:1"></span>
@@ -605,12 +613,17 @@ function renderOrchestratorBar(data) {
     const dlg=document.getElementById('orchestratorDrawer');
     const body=document.getElementById('orchestratorDrawerBody');
     if (body) {
-      const qHtml = [0,1,2].map(p=>{
-        const items=q.filter(x=>x.priority===p);
-        return `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Q${p} (${items.length})</div>${items.map(it=>`<div class="orchestrator-event ${it.origin}">${it.state} ${it.prompt.slice(0,80)}</div>`).join('') || '<div class="small">empty</div>'}</div>`;
+      // Use textContent via DOM to avoid XSS, fallback to esc
+      const pendingHtml = [0,1,2].map(p=>{
+        const items=qPending.filter(x=>x.priority===p);
+        const title = `Q${p} pending (${items.length})`;
+        const rows = items.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,80))} <span style="color:var(--text-muted)">${esc(it.origin)}/${esc(it.runId||'')}</span></div>`).join('') || '<div class="small">empty</div>';
+        return `<div class="orchestrator-q-group"><div class="orchestrator-q-title">${esc(title)}</div>${rows}</div>`;
       }).join('');
-      const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${e.origin}">${e.ts.slice(11,19)} ${e.type} <span style="color:var(--text-muted)">${e.origin}</span></div>`).join('');
-      body.innerHTML = qHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Events</div>${evHtml || '<div class="small">no events</div>'}</div>`;
+      const historyItems = qHistory.slice(-10);
+      const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">History (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">empty</div>'}</div>`;
+      const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${esc(e.origin)}">${esc(e.ts.slice(11,19))} ${esc(e.type)} <span style="color:var(--text-muted)">${esc(e.origin)}${e.actor?'/'+esc(e.actor):''}</span></div>`).join('');
+      body.innerHTML = pendingHtml + histHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Events</div>${evHtml || '<div class="small">no events</div>'}</div>`;
     }
     if (dlg && typeof dlg.showModal==='function') dlg.showModal(); else dlg?.setAttribute('open','');
   });

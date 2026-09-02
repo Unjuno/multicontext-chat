@@ -26,6 +26,7 @@ export class Scheduler {
       const member = this.store.getMember(workspaceId, memberId); if (!member || !member.active || member.status === 'error' || member.queue.length === 0) break;
       const prepared = this.store.beginNext(workspaceId, memberId); if (!prepared) break;
       const { item, history, conversationId } = prepared;
+      try { this.store.appendEvent(workspaceId, { type: 'member.started', origin: 'system', memberId, qId: item.id, detail: { queueItemId: item.id } }); } catch {}
       try {
         const workspace = this.store.getWorkspace(workspaceId); const current = this.store.getMember(workspaceId, memberId);
         if (!workspace || !current || controller.signal.aborted) break;
@@ -123,6 +124,17 @@ export class Scheduler {
             for (;;) {
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
               const toolResults = await this.executor.execute({ workspaceId, sourceMemberId: memberId, sourceQueueItemId: item.id, toolCalls, signal: controller.signal });
+              // observability: tool calls (metadata only, no full output)
+              for (const r of toolResults) {
+                try {
+                  const tc = toolCalls.find(t => (t.call_id || t.call_id === r.call_id) && t.call_id === r.call_id) || toolCalls[0];
+                  const tname = tc?.name || tc?.function?.name || 'unknown';
+                  let replayed = false;
+                  try { const parsed = JSON.parse(r.output); if (parsed && parsed.replayed === true) replayed = true; if (parsed && parsed.ok === false) replayed = false; } catch {}
+                  const evType = replayed ? 'tool.replayed' : `tool.${tname}`;
+                  this.store.appendEvent(workspaceId, { type: evType, origin: 'system', memberId, qId: item.id, detail: { callId: r.call_id, tool: tname, replayed } });
+                } catch {}
+              }
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
               const functionCallOutput = toolResults.map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
               // Native continuation must use previous_response_id only, no system/developer/user replay
@@ -139,6 +151,7 @@ export class Scheduler {
             }
           }
           this.store.completeRun(workspaceId, memberId, item.id, currentResult);
+          try { this.store.appendEvent(workspaceId, { type: 'member.completed', origin: 'system', memberId, qId: item.id }); } catch {}
           this.store.trimMessages(workspaceId, memberId, this.maxHistoryMessages);
         } catch (inner) {
           const msg = japMap(inner?.message || String(inner));
@@ -151,9 +164,16 @@ export class Scheduler {
         // Typed classification: DISCOVERY_FAILED and network/auth are retriable; config errors are not
         const isConfigError = code === 'AGENT_SELECTION_REQUIRED' || code === 'AGENT_NOT_AVAILABLE' || msg.includes('存在しません') || msg.includes('Agentが') || msg.includes('エージェント');
         const isDiscovery = code === 'DISCOVERY_FAILED' || msg.includes('取得に失敗');
-        if (controller.signal.aborted) this.store.failRun(workspaceId, memberId, item.id, 'Stopped by user', { requeue: false });
-        else if (isDiscovery) this.store.failRun(workspaceId, memberId, item.id, msg, { requeue: true });
-        else this.store.failRun(workspaceId, memberId, item.id, msg, { requeue: !isConfigError });
+        if (controller.signal.aborted) {
+          this.store.failRun(workspaceId, memberId, item.id, 'Stopped by user', { requeue: false });
+          try { this.store.appendEvent(workspaceId, { type: 'member.cancelled', origin: 'system', memberId, qId: item.id }); } catch {}
+        } else if (isDiscovery) {
+          this.store.failRun(workspaceId, memberId, item.id, msg, { requeue: true });
+          try { this.store.appendEvent(workspaceId, { type: 'member.failed', origin: 'system', memberId, qId: item.id, detail: { code } }); } catch {}
+        } else {
+          this.store.failRun(workspaceId, memberId, item.id, msg, { requeue: !isConfigError });
+          try { this.store.appendEvent(workspaceId, { type: 'member.failed', origin: 'system', memberId, qId: item.id, detail: { code } }); } catch {}
+        }
         break;
       }
     }

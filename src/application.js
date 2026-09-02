@@ -629,11 +629,16 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
     if (!status.agents.some(a => String(a.id) === String(agentId))) throw problem(`Compile Agentが利用不可です: ${agentId}`, 400, AGENT_NOT_AVAILABLE);
     compilingWorkspaces.add(workspaceId);
+    try { store.appendEvent(workspaceId, { type: 'compile.started', origin: 'human', detail: { agentId } }); } catch {}
     try {
       const snapshots = Object.values(workspace.members).filter(m => m.active).map(m => ({ member: { id: m.id, name: m.name }, messages: m.messages.filter(x => !x.pending).slice(-12).map(({ role, content, at }) => ({ role, content, at })) }));
       const result = await client.runAgent({ agentId, globalPrompt: workspace.compilePrompt, developerPrompt: '', history: [], prompt: `Compress these independent chat records into a response for the user.\n\n${JSON.stringify(snapshots, null, 2)}`, metadata: { workspace_id: workspaceId, purpose: 'compile' } });
       store.setCompile(workspaceId, { text: result.text, responseId: result.id, usage: result.usage });
+      try { store.appendEvent(workspaceId, { type: 'compile.completed', origin: 'system', detail: { agentId } }); } catch {}
       return getWorkspace(workspaceId);
+    } catch (e) {
+      try { store.appendEvent(workspaceId, { type: 'compile.failed', origin: 'system', detail: { error: String(e.message || e) } }); } catch {}
+      throw e;
     } finally {
       compilingWorkspaces.delete(workspaceId);
     }

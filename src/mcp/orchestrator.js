@@ -106,12 +106,35 @@ export function registerOrchestratorTools(server, app, store) {
     if (hasStore) qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: pr, origin: 'mcp', actor: 'orchestrator' });
     else qItem = pushQ(workspace_id, prompt, pr);
     let result;
+    // P1: Q lifecycle - if immediate dispatch, mark dispatched
     if (broadcast) {
+      if (hasStore) {
+        // Check pause gate
+        const ws = store.getWorkspace(workspace_id);
+        if (ws.orchestratorPaused) {
+          // keep pending, do not dispatch
+          return { content: [{ type: 'text', text: JSON.stringify({ qItem, result: { queued: true, paused: true } }, null, 2) }], structuredContent: { qItem, result: { queued: true, paused: true }, q: store.peekOrchestratorQueue(workspace_id) } };
+        }
+        store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: 'dispatched' });
+      }
       result = await app.broadcast(workspace_id, prompt);
-      if (hasStore) store.appendEvent(workspace_id, { type: 'q.dispatched', origin: 'mcp', qId: qItem.id, detail: { broadcast: true } });
+      if (hasStore) {
+        store.appendEvent(workspace_id, { type: 'q.dispatched', origin: 'mcp', qId: qItem.id, detail: { broadcast: true } });
+        store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: 'done' });
+      }
     } else if (chat_id) {
+      if (hasStore) {
+        const ws = store.getWorkspace(workspace_id);
+        if (ws.orchestratorPaused) {
+          return { content: [{ type: 'text', text: JSON.stringify({ qItem, result: { queued: true, paused: true } }, null, 2) }], structuredContent: { qItem, result: { queued: true, paused: true }, q: store.peekOrchestratorQueue(workspace_id) } };
+        }
+        store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: 'dispatched' });
+      }
       result = await app.send(workspace_id, chat_id, prompt);
-      if (hasStore) store.appendEvent(workspace_id, { type: 'q.dispatched', origin: 'mcp', qId: qItem.id, memberId: chat_id });
+      if (hasStore) {
+        store.appendEvent(workspace_id, { type: 'q.dispatched', origin: 'mcp', qId: qItem.id, memberId: chat_id });
+        store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: 'done' });
+      }
     } else {
       result = { qItem, queued: true };
     }
@@ -189,9 +212,9 @@ export function registerOrchestratorTools(server, app, store) {
     return { content: [{ type: 'text', text: JSON.stringify(r, null, 2) }], structuredContent: r };
   });
 
-  // Unified auto-run: same path as UI chat (app.*) but via MCP, auto-starts and waits for SETTLED so user sees same behavior
+  // Unified auto-run: now a compat wrapper around start_run (single execution engine)
   server.registerTool('multicontext_orchestrate_run', {
-    description: 'Auto-run: enqueue (broadcast or direct) via same app.* path as chat UI, then wait until SETTLED. MCP and chat behave identically; user sees same progress in UI. Handles Q priority and auto-creation. DEPRECATED for long runs: use multicontext_orchestrate_start_run for async.',
+    description: 'Auto-run (compat wrapper): delegates to start_run and waits. Use start_run for async long runs.',
     inputSchema: z.object({
       workspace_id: z.string().optional(),
       preset: z.enum(['navier-stokes-4']).optional(),
@@ -202,30 +225,57 @@ export function registerOrchestratorTools(server, app, store) {
       chat_id: z.string().optional(),
       timeout_seconds: z.number().min(5).max(300).optional(),
     }),
-  }, async ({ workspace_id, preset, name, prompt, priority, broadcast, chat_id, timeout_seconds }) => {
-    let wsId = workspace_id;
+  }, async (args) => {
+    // delegate to start_run then poll
+    let wsId = args.workspace_id;
     if (!wsId) {
-      const p = PRESETS[preset || 'navier-stokes-4'];
-      const ws = await app.createWorkspace({ name: name || p.name });
+      const p = PRESETS[args.preset || 'navier-stokes-4'];
+      const ws = await app.createWorkspace({ name: args.name || p.name });
       for (const m of p.members) await app.addChat(ws.id, { name: m.name, developerPrompt: m.developerPrompt });
       wsId = ws.id;
     }
-    const pr = priority ?? 1;
-    if (hasStore) store.enqueueOrchestrator(wsId, prompt, { priority: pr, origin: 'mcp', actor: 'orchestrator' });
-    else pushQ(wsId, prompt, pr);
+    // create a proper async run via store so lifecycle is unified
+    if (hasStore) {
+      const run = store.createOrchestratorRun(wsId, { prompt: args.prompt, priority: args.priority ?? 1, origin: 'mcp', actor: 'orchestrator' });
+      const qItem = store.enqueueOrchestrator(wsId, args.prompt, { priority: args.priority ?? 1, origin: 'mcp', actor: 'orchestrator', runId: run.id });
+      // respect pause gate
+      const ws = store.getWorkspace(wsId);
+      if (ws.orchestratorPaused) {
+        return { content: [{ type: 'text', text: JSON.stringify({ workspace_id: wsId, run_id: run.id, queued: true, paused: true, qItem }, null, 2) }], structuredContent: { workspace_id: wsId, run_id: run.id, queued: true, paused: true } };
+      }
+      store.updateOrchestratorRun(wsId, run.id, { status: 'running' });
+      store.updateOrchestratorQueueItem(wsId, qItem.id, { state: 'dispatched' });
+      let enqueueResult;
+      try {
+        if (args.broadcast) enqueueResult = await app.broadcast(wsId, args.prompt);
+        else if (args.chat_id) enqueueResult = await app.send(wsId, args.chat_id, args.prompt);
+        else enqueueResult = await app.broadcast(wsId, args.prompt);
+      } catch (e) {
+        store.updateOrchestratorRun(wsId, run.id, { status: 'failed', error: String(e.message || e) });
+        store.updateOrchestratorQueueItem(wsId, qItem.id, { state: 'failed' });
+        throw e;
+      }
+      const wait = await app.waitUntilSettled(wsId, args.timeout_seconds ?? 120, 500);
+      // check terminal race: if run was cancelled in the meantime, do not overwrite
+      const curRun = store.getOrchestratorRun(wsId, run.id);
+      if (curRun.status !== 'cancelled') {
+        const finalStatus = wait.state === 'SETTLED' ? 'settled' : wait.state === 'BLOCKED' ? 'blocked' : 'failed';
+        store.updateOrchestratorRun(wsId, run.id, { status: finalStatus });
+        store.updateOrchestratorQueueItem(wsId, qItem.id, { state: finalStatus === 'settled' ? 'done' : 'failed' });
+      }
+      const q = store.peekOrchestratorQueue(wsId);
+      return { content: [{ type: 'text', text: JSON.stringify({ workspace_id: wsId, run_id: run.id, enqueueResult, wait, q }, null, 2) }], structuredContent: { workspace_id: wsId, run_id: run.id, enqueueResult, wait, q } };
+    }
+    // fallback in-memory
     let enqueueResult;
-    if (broadcast) enqueueResult = await app.broadcast(wsId, prompt);
-    else if (chat_id) enqueueResult = await app.send(wsId, chat_id, prompt);
-    else enqueueResult = await app.broadcast(wsId, prompt);
-    if (hasStore) store.appendEvent(wsId, { type: 'mcp.run.started', origin: 'mcp', detail: { broadcast: !!broadcast } });
-    const wait = await app.waitUntilSettled(wsId, timeout_seconds ?? 120, 500);
-    if (hasStore) store.appendEvent(wsId, { type: `run.${wait.state.toLowerCase()}`, origin: 'system', detail: wait });
-    const distilled = await app.getWorkspace(wsId, { includeMessages: true, boundedMessages: 8 });
-    const q = hasStore ? store.peekOrchestratorQueue(wsId) : peekQ(wsId);
-    return { content: [{ type: 'text', text: JSON.stringify({ workspace_id: wsId, enqueueResult, wait, q, distilled: Object.values(distilled.members).map(m=>`${m.name}:${(m.messages||[]).slice(-1)[0]?.content?.slice(0,200)}`).join(' | ') }, null, 2) }], structuredContent: { workspace_id: wsId, enqueueResult, wait, q } };
+    if (args.broadcast) enqueueResult = await app.broadcast(wsId, args.prompt);
+    else if (args.chat_id) enqueueResult = await app.send(wsId, args.chat_id, args.prompt);
+    else enqueueResult = await app.broadcast(wsId, args.prompt);
+    const wait = await app.waitUntilSettled(wsId, args.timeout_seconds ?? 120, 500);
+    return { content: [{ type: 'text', text: JSON.stringify({ workspace_id: wsId, enqueueResult, wait }, null, 2) }], structuredContent: { workspace_id: wsId, enqueueResult, wait } };
   });
 
-  // Async Run model: start → run_id immediate, poll via get/cancel
+  // Async Run model: start → run_id immediate, poll via get/cancel (P1: pause gate, single active run, race-safe)
   server.registerTool('multicontext_orchestrate_start_run', {
     description: 'Start an async orchestrator run (non-blocking). Returns run_id immediately. Poll with multicontext_orchestrate_get_run. For long sessions, this avoids MCP timeout.',
     inputSchema: z.object({
@@ -237,8 +287,22 @@ export function registerOrchestratorTools(server, app, store) {
     }),
   }, async ({ workspace_id, prompt, priority, broadcast, chat_id }) => {
     if (!hasStore) throw new Error('Orchestrator store not available');
-    const run = store.createOrchestratorRun(workspace_id, { prompt, priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator' });
-    const qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator', runId: run.id });
+    // P1: pause gate - do not dispatch if paused, keep queued
+    const wsCheck = store.getWorkspace(workspace_id);
+    if (wsCheck.orchestratorPaused) {
+      const run = store.createOrchestratorRun(workspace_id, { prompt, priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator' });
+      const qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator', runId: run.id });
+      // keep queued, not running
+      return { content: [{ type: 'text', text: JSON.stringify({ run_id: run.id, workspace_id, qItem, paused: true, run }, null, 2) }], structuredContent: { run_id: run.id, workspace_id, qItem, paused: true, run } };
+    }
+    let run, qItem;
+    try {
+      run = store.createOrchestratorRun(workspace_id, { prompt, priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator' });
+    } catch (e) {
+      if (e.code === 'ORCHESTRATOR_RUN_ALREADY_ACTIVE') throw Object.assign(new Error('An orchestrator run is already active for this workspace'), { status: 409, code: e.code });
+      throw e;
+    }
+    qItem = store.enqueueOrchestrator(workspace_id, prompt, { priority: priority ?? 1, origin: 'mcp', actor: 'orchestrator', runId: run.id });
     // dispatch without waiting
     (async () => {
       try {
@@ -250,11 +314,21 @@ export function registerOrchestratorTools(server, app, store) {
         else result = await app.broadcast(workspace_id, prompt);
         store.appendEvent(workspace_id, { type: 'q.dispatched', origin: 'mcp', runId: run.id, qId: qItem.id });
         const wait = await app.waitUntilSettled(workspace_id, 300, 500);
+        // P1: check terminal race - if cancelled, do not overwrite
+        const cur = store.getOrchestratorRun(workspace_id, run.id);
+        if (['cancelled','settled','blocked','failed'].includes(cur.status) && cur.status !== 'running') {
+          return;
+        }
         const finalStatus = wait.state === 'SETTLED' ? 'settled' : wait.state === 'BLOCKED' ? 'blocked' : 'failed';
         store.updateOrchestratorRun(workspace_id, run.id, { status: finalStatus });
-        store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: finalStatus === 'settled' ? 'done' : 'failed' });
+        const qState = finalStatus === 'settled' ? 'done' : 'failed';
+        try { store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: qState }); } catch {}
       } catch (e) {
-        store.updateOrchestratorRun(workspace_id, run.id, { status: 'failed', error: String(e.message || e) });
+        try {
+          const cur = store.getOrchestratorRun(workspace_id, run.id);
+          if (cur && ['cancelled','settled','blocked','failed'].includes(cur.status)) return;
+          store.updateOrchestratorRun(workspace_id, run.id, { status: 'failed', error: String(e.message || e) });
+        } catch {}
         try { store.updateOrchestratorQueueItem(workspace_id, qItem.id, { state: 'failed' }); } catch {}
       }
     })();
@@ -273,14 +347,21 @@ export function registerOrchestratorTools(server, app, store) {
   });
 
   server.registerTool('multicontext_orchestrate_cancel_run', {
-    description: 'Cancel a running orchestrator run. Stops all chats in the workspace.',
+    description: 'Cancel a running orchestrator run. Only cancels that run and its Q items; does not destroy unrelated human/cross-chat work.',
     inputSchema: z.object({ workspace_id: z.string().min(1), run_id: z.string().min(1) }),
   }, async ({ workspace_id, run_id }) => {
     if (!hasStore) throw new Error('Orchestrator store not available');
     const run = store.getOrchestratorRun(workspace_id, run_id);
     if (run.status === 'running' || run.status === 'queued') {
       store.updateOrchestratorRun(workspace_id, run_id, { status: 'cancelled' });
-      await app.stopWorkspace(workspace_id);
+      // P0 fix: only cancel Q items belonging to this run, not entire workspace
+      const ws = store.getWorkspace(workspace_id);
+      const qItems = ws.orchestratorQueue.filter(x => x.runId === run_id && (x.state === 'pending' || x.state === 'claimed' || x.state === 'dispatched'));
+      for (const q of qItems) {
+        try { store.updateOrchestratorQueueItem(workspace_id, q.id, { state: 'cancelled' }); } catch {}
+      }
+      // do not call stopWorkspace which would destroy human/other run work; only stop if this run had dispatched member work
+      // For now, we do not stop members; the detached worker will observe cancelled and not overwrite
       store.appendEvent(workspace_id, { type: 'run.cancelled', origin: 'mcp', runId: run_id });
     }
     return { content: [{ type: 'text', text: JSON.stringify({ run: store.getOrchestratorRun(workspace_id, run_id) }, null, 2) }], structuredContent: { run: store.getOrchestratorRun(workspace_id, run_id) } };
