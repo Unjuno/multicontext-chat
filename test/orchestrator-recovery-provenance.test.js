@@ -13,11 +13,12 @@ function sendTool(targetId, prompt = 'child') {
   return [{ type: 'function_call', name: 'send_to_chat', call_id: `call-${Math.random()}`, arguments: JSON.stringify({ targets: [targetId], prompt }) }];
 }
 
-test('restart reconciliation never replays work owned by a recovered failed run', () => {
+test('restart reconciliation never replays work owned by a recovered failed run, including receipt-only child deliveries', () => {
   const file = makeFile();
   const store1 = new StateStore(file);
   const ws = store1.createWorkspace({ name: 'W', defaultAgentId: 'a' });
   const member = store1.addMember(ws.id, { name: 'A', agentId: 'a' });
+  const childMember = store1.addMember(ws.id, { name: 'B', agentId: 'a' });
   const run = store1.createOrchestratorRun(ws.id, { prompt: 'root' });
   const q = store1.enqueueOrchestrator(ws.id, 'root', { runId: run.id, target: { type: 'member', memberId: member.id } });
   store1.updateOrchestratorRun(ws.id, run.id, { status: 'running' });
@@ -25,6 +26,19 @@ test('restart reconciliation never replays work owned by a recovered failed run'
   const owned = store1.enqueue(ws.id, member.id, 'run-owned', { source: 'orchestrator', orchestratorRunId: run.id, orchestratorQId: q.id });
   store1.beginNext(ws.id, member.id);
   store1.enqueue(ws.id, member.id, 'human survives', { source: 'user' });
+
+  // Model the exact crash window: the atomic cross-chat receipt + child delivery is persisted,
+  // but the executor has not yet attached orchestrator provenance to the child item.
+  const child = store1.enqueue(ws.id, childMember.id, 'receipt child', { source: 'tool', sourceMemberId: member.id });
+  const receiptKey = `${member.id}:${owned.id}:call-crash-window`;
+  store1.getWorkspace(ws.id).crossChatReceipts[receiptKey] = {
+    sourceMemberId: member.id,
+    targetIds: [childMember.id],
+    deliveries: [{ targetId: childMember.id, queueItemId: child.id }],
+    result: { accepted: true, replayed: false, deliveries: [{ target: { id: childMember.id, name: childMember.name }, queue_item_id: child.id }] },
+    committedAt: new Date().toISOString(),
+  };
+  store1.save();
 
   const store2 = new StateStore(file);
   const recovered = store2.getOrchestratorRun(ws.id, run.id);
@@ -38,6 +52,7 @@ test('restart reconciliation never replays work owned by a recovered failed run'
   const afterMember = store2.getMember(ws.id, member.id);
   assert.equal(afterMember.queue.some(item => item.id === owned.id), false);
   assert.equal(afterMember.queue.some(item => item.prompt === 'human survives'), true);
+  assert.equal(store2.getMember(ws.id, childMember.id).queue.some(item => item.id === child.id), false);
   const afterQ = store2.getWorkspace(ws.id).orchestratorQueue.find(item => item.id === q.id);
   assert.equal(afterQ.state, 'failed');
 });
