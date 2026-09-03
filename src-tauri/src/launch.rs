@@ -7,7 +7,8 @@
 #[derive(Debug, Clone, PartialEq)]
 pub struct GptOssProfile {
     pub reasoning_effort: String,
-    pub ctx_size: u16,
+    // u32: the production default (65536) exceeds u16::MAX.
+    pub ctx_size: u32,
     pub parallel: u8,
 }
 
@@ -15,7 +16,10 @@ impl Default for GptOssProfile {
     fn default() -> Self {
         Self {
             reasoning_effort: "low".to_string(),
-            ctx_size: 8192,
+            // Parity with the verified real-stack E2E environment, which serves
+            // gpt-oss with --ctx-size 65536. Long compiles and multi-chat
+            // recursion need the headroom; 8192 truncates them.
+            ctx_size: 65536,
             parallel: 4,
         }
     }
@@ -60,7 +64,8 @@ mod tests {
     fn test_default_profile() {
         let p = GptOssProfile::default();
         assert_eq!(p.reasoning_effort, "low");
-        assert_eq!(p.ctx_size, 8192);
+        // Must match the verified E2E serving profile (65536, not 8192).
+        assert_eq!(p.ctx_size, 65536);
         assert_eq!(p.parallel, 4);
     }
 
@@ -77,7 +82,7 @@ mod tests {
         assert!(s.contains(&"--port"));
         assert_eq!(s[s.iter().position(|x| *x == "--port").unwrap() + 1], "8080");
         let ctx = s[s.iter().position(|x| *x == "--ctx-size").unwrap() + 1];
-        assert_eq!(ctx, "8192");
+        assert_eq!(ctx, "65536");
         let par = s[s.iter().position(|x| *x == "--parallel").unwrap() + 1];
         assert_eq!(par, "4");
         let kwargs = s[s.iter().position(|x| *x == "--chat-template-kwargs").unwrap() + 1];
