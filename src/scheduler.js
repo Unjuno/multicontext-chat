@@ -201,9 +201,33 @@ export class Scheduler {
                   const tc = toolCalls.find(t => (t.call_id || t.call_id === r.call_id) && t.call_id === r.call_id) || toolCalls[0];
                   const tname = tc?.name || tc?.function?.name || 'unknown';
                   let replayed = false;
-                  try { const parsed = JSON.parse(r.output); if (parsed && parsed.replayed === true) replayed = true; if (parsed && parsed.ok === false) replayed = false; } catch {}
+                  let targets = null;
+                  try {
+                    const parsed = JSON.parse(r.output);
+                    if (parsed && parsed.replayed === true) replayed = true;
+                    if (parsed && parsed.ok === false) replayed = false;
+                    // Surface send_to_chat deliveries (target ids/names) so the
+                    // observer activity feed can show source → target without
+                    // inventing a new event channel.
+                    if (parsed && Array.isArray(parsed.deliveries)) {
+                      targets = parsed.deliveries.map((d) => d?.target?.name || d?.target?.id || d?.targetId).filter(Boolean).slice(0, 2);
+                      if (!targets.length) targets = null;
+                    }
+                  } catch {}
+                  // Surface the addressed target for inspect_chat (from the
+                  // call arguments) for the same feed purpose.
+                  let argTarget = null;
+                  try {
+                    const rawArgs = tc?.arguments ?? tc?.args ?? tc?.function?.arguments;
+                    const args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
+                    const t = args?.target ?? (Array.isArray(args?.targets) ? args.targets.join(',') : null);
+                    if (typeof t === 'string' && t) argTarget = t.slice(0, 120);
+                  } catch {}
+                  const detail = { callId: r.call_id, tool: tname, replayed };
+                  if (targets) detail.targets = targets;
+                  if (argTarget) detail.target = argTarget;
                   const evType = replayed ? 'tool.replayed' : `tool.${tname}`;
-                  this.store.appendEvent(workspaceId, { type: evType, origin: 'system', memberId, qId: item.id, detail: { callId: r.call_id, tool: tname, replayed } });
+                  this.store.appendEvent(workspaceId, { type: evType, origin: 'system', memberId, qId: item.id, detail });
                 } catch {}
               }
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;

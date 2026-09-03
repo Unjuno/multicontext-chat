@@ -427,3 +427,38 @@ test('Phase10 OpenAPI derived from CROSS_CHAT_TOOLS - schema parity', async () =
   assert.equal(sendProps.targets.maxItems, 2);
   assert.equal(sendProps.targets.uniqueItems, true);
 });
+
+// Observer: scheduler persists enriched tool event details for the activity feed
+test('Observer tool events carry send targets and inspect target from existing data', async () => {
+  const store = makeStore();
+  const ws = store.createWorkspace({ name: 'W' });
+  const a = store.addMember(ws.id, { name: 'A', agentId: 'a' });
+  const b = store.addMember(ws.id, { name: 'B', agentId: 'b' });
+  let n = 0;
+  const calls = [
+    { type: 'function_call', name: 'send_to_chat', call_id: 's1', args: { targets: [b.id], prompt: 'hi-b' } },
+    { type: 'function_call', name: 'inspect_chat', call_id: 'i1', args: { target: b.id } },
+  ];
+  const client = {
+    mode: 'native',
+    listAgents: async () => [{ id: 'a' }, { id: 'b' }],
+    runAgent: async () => ({ id: 'r1', text: '', conversationId: 'conv1', raw: { output: [calls[n++]] } }),
+    runAgentInitial: async (args) => client.runAgent(args),
+    continueAgent: async () => ({ id: 'r9', text: 'done', conversationId: 'conv1', raw: { output: [] } }),
+  };
+  const scheduler = new Scheduler({ store, client, maxHistoryMessages: 20 });
+  const realApp = createApplication({ config: { mcpEnabled: false, mcpToken: '' }, store, client, scheduler });
+  scheduler.setApp(realApp);
+  store.enqueue(ws.id, a.id, 'go');
+  scheduler.kickMember(ws.id, a.id);
+  for (let i = 0; i < 100 && scheduler.running.size > 0; i++) await sleep(10);
+  await sleep(30);
+  const events = store.getWorkspace(ws.id).orchestratorEvents.filter(e => e.type.startsWith('tool.'));
+  const send = events.find(e => e.type === 'tool.send_to_chat');
+  assert.ok(send, 'send_to_chat event stored');
+  assert.deepEqual(send.detail.targets, ['B']);
+  assert.equal(send.memberId, a.id);
+  const inspect = events.find(e => e.type === 'tool.inspect_chat');
+  assert.ok(inspect, 'inspect_chat event stored');
+  assert.equal(inspect.detail.target, b.id);
+});

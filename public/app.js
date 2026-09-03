@@ -1,5 +1,6 @@
 import { workspaceStatusLabel as sharedWorkspaceLabel, memberStatusLabel as sharedMemberLabel } from './runtimeLabels.js';
 import { pickDisplayedRun, followedRunState } from './follow-run.js';
+import { selectActivityEvents } from './activity-feed.js';
 
 let currentId = null;
 let timer = null;
@@ -619,7 +620,20 @@ function tick() {
   }).finally(() => { ticking = false; scheduleNext(); });
 }
 
-function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, 1200); }
+// Observer cadence: fast (1.2s) while attached to a live run or while the
+// workspace has active work; relaxed (5s) when idle so the observer loop
+// stops churning after a followed run reaches terminal state.
+function observerDelay() {
+  try {
+    if (focusedRunId && orchestratorState && followedRunState(orchestratorState.runs, focusedRunId) !== 'terminal') return 1200;
+  } catch {}
+  try {
+    const rs = lastWorkspace && lastWorkspace.runtimeState;
+    if (rs === 'RUNNING' || rs === 'PENDING' || rs === 'BLOCKED') return 1200;
+  } catch {}
+  return 5000;
+}
+function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, observerDelay()); }
 
 // ── Orchestrator Bar ──────────────────────────────────────────
 let orchestratorTimer = null;
@@ -628,11 +642,50 @@ let orchestratorState = null;
 let focusedRunId = null;
 async function refreshOrchestrator() {
   if (!currentId) return;
+  const expectedId = currentId;
   try {
-    const data = await request(`/api/workspaces/${currentId}/orchestrator`);
+    const data = await request(`/api/workspaces/${expectedId}/orchestrator`);
+    if (expectedId !== currentId) return;
     orchestratorState = data;
     renderOrchestratorBar(data);
+    // Keep an open drawer live: re-render its body on every orchestrator
+    // poll so the observer sees queue/member/tool activity move without
+    // clicking anything. Closed drawers cost nothing.
+    const dlg = document.getElementById('orchestratorDrawer');
+    if (dlg && (dlg.open || dlg.hasAttribute('open'))) renderOrchestratorDrawer(data);
   } catch {}
+}
+// Renders the drawer body from fresh orchestrator state. Pure DOM write of
+// already-escaped content; safe to call on every poll while open.
+function renderOrchestratorDrawer(data) {
+  const body = document.getElementById('orchestratorDrawerBody');
+  if (!body || !data) return;
+  const qPending = data.queue || [];
+  const qHistory = data.queueHistory || [];
+  const memberNames = {};
+  try {
+    for (const [id, m] of Object.entries((lastWorkspace && lastWorkspace.members) || {})) {
+      if (m && m.name) memberNames[id] = m.name;
+    }
+  } catch {}
+  const activity = selectActivityEvents(data.events, { limit: 30, memberNames });
+  const activityHtml = activity.map((row) => {
+    const who = row.actor ? `<strong>${esc(row.actor)}</strong> ` : '';
+    const tgt = row.target ? ` → <strong>${esc(row.target)}</strong>` : '';
+    const det = row.detail ? ` <span style="color:var(--text-muted)">${esc(row.detail)}</span>` : '';
+    const run = row.runId ? ` <span style="color:var(--text-muted)">[${esc(row.runId)}]</span>` : '';
+    return `<div class="orchestrator-event ${esc(row.origin || '')}">${esc(row.time)} ${who}${esc(row.action)}${tgt}${det}${run}</div>`;
+  }).join('') || '<div class="small">no activity yet</div>';
+  const pendingHtml = [0,1,2].map(p=>{
+    const items=qPending.filter(x=>x.priority===p);
+    const title = `Q${p} pending (${items.length})`;
+    const rows = items.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,80))} <span style="color:var(--text-muted)">${esc(it.origin)}/${esc(it.runId||'')}</span></div>`).join('') || '<div class="small">empty</div>';
+    return `<div class="orchestrator-q-group"><div class="orchestrator-q-title">${esc(title)}</div>${rows}</div>`;
+  }).join('');
+  const historyItems = qHistory.slice(-10);
+  const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">History (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">empty</div>'}</div>`;
+  const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${esc(e.origin)}">${esc(e.ts.slice(11,19))} ${esc(e.type)} <span style="color:var(--text-muted)">${esc(e.origin)}${e.actor?'/'+esc(e.actor):''}</span></div>`).join('');
+  body.innerHTML = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Live activity</div>${activityHtml}</div>` + pendingHtml + histHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Events</div>${evHtml || '<div class="small">no events</div>'}</div>`;
 }
 function renderOrchestratorBar(data) {
   const bar = document.getElementById('orchestratorBar');
@@ -674,20 +727,7 @@ function renderOrchestratorBar(data) {
   });
   bar.querySelector('#orchQueueBtn')?.addEventListener('click', () => {
     const dlg=document.getElementById('orchestratorDrawer');
-    const body=document.getElementById('orchestratorDrawerBody');
-    if (body) {
-      // Use textContent via DOM to avoid XSS, fallback to esc
-      const pendingHtml = [0,1,2].map(p=>{
-        const items=qPending.filter(x=>x.priority===p);
-        const title = `Q${p} pending (${items.length})`;
-        const rows = items.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,80))} <span style="color:var(--text-muted)">${esc(it.origin)}/${esc(it.runId||'')}</span></div>`).join('') || '<div class="small">empty</div>';
-        return `<div class="orchestrator-q-group"><div class="orchestrator-q-title">${esc(title)}</div>${rows}</div>`;
-      }).join('');
-      const historyItems = qHistory.slice(-10);
-      const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">History (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">empty</div>'}</div>`;
-      const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${esc(e.origin)}">${esc(e.ts.slice(11,19))} ${esc(e.type)} <span style="color:var(--text-muted)">${esc(e.origin)}${e.actor?'/'+esc(e.actor):''}</span></div>`).join('');
-      body.innerHTML = pendingHtml + histHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Events</div>${evHtml || '<div class="small">no events</div>'}</div>`;
-    }
+    renderOrchestratorDrawer(data);
     if (dlg && typeof dlg.showModal==='function') dlg.showModal(); else dlg?.setAttribute('open','');
   });
   document.getElementById('orchestratorClose')?.addEventListener('click', ()=>{ const d=document.getElementById('orchestratorDrawer'); if(d.close) d.close(); else d.removeAttribute('open'); });
