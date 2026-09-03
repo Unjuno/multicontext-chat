@@ -39,6 +39,31 @@ Queue reservation is persisted before a model call. On process restart, an inter
 
 `native` requires the small patch documented in `GPT_OSS.md`. It uses LibreChat persistence as the canonical model context: the first turn creates a LibreChat conversation, its id is stored on the member, and later turns send `previous_response_id`. MultiContext still mirrors visible user/assistant messages for UI and cross-chat inspection, but does not replay them to the model.
 
+### Native cross-chat tool ownership and continuation
+
+Request-level `CROSS_CHAT_TOOLS` are externally executed tools. LibreChat exposes their definitions to the provider so gpt-oss can emit a `function_call`, but the MultiContext LibreChat patch prevents those calls from entering LibreChat's normal internal tool executor. LibreChat-owned Agent tools remain on the stock execution path.
+
+The native round trip is:
+
+```
+initial:      system + developer + user + tools + store:true
+                    ↓
+model:        function_call
+                    ↓
+LibreChat:    return function_call without executing it
+                    ↓
+MultiContext: execute list_chats / inspect_chat / send_to_chat
+                    ↓
+continuation: previous_response_id
+              + answered function_call
+              + matching function_call_output
+              + same tools
+                    ↓
+model:        final assistant response or another function_call
+```
+
+The continuation deliberately re-sends the answered `function_call` before its `function_call_output`. LibreChat persistence does not preserve enough structured tool-call state for gpt-oss to reliably ground a standalone output; without the paired call, the output can dangle and the model may re-call the tool or return empty text. `system`, `developer`, `user`, and local member history are **not** replayed during continuation. `previous_response_id` owns the stored conversational history, while the explicit call/output pair restores the structured tool round trip required by the provider.
+
 ## Prompt hierarchy
 
 At the MultiContext → LibreChat API boundary the request order is:
