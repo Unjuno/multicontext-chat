@@ -32,7 +32,7 @@ Rebuild LibreChat, then set:
 MULTICONTEXT_LIBRECHAT_MODE=native
 ```
 
-Native mode stores one stable LibreChat conversation id per MultiContext member and continues it with `previous_response_id`. It fails fast if the patched conversation-id header is absent. See `docs/GPT_OSS.md`.
+Native mode stores one stable LibreChat conversation id per MultiContext member and continues it with `previous_response_id`. Request-level cross-chat tools are exposed to the model but executed by MultiContext, not LibreChat. After a model `function_call`, the native continuation re-sends the answered `function_call` item followed by its `function_call_output`, together with `previous_response_id` and the same tool definitions. It does **not** replay `system`, `developer`, `user`, or local history. This explicit tool round trip is required because LibreChat persistence alone does not retain enough structured tool-call state for gpt-oss to ground a dangling `function_call_output`. Native mode fails fast if the patched conversation-id header is absent. See `docs/GPT_OSS.md`.
 
 ### `compat`
 
