@@ -26,6 +26,8 @@ function fixture() {
   ].join('\n'));
   fs.writeFileSync(controller, [
     "const { v4: uuidv4 } = require('uuid');",
+    "  const request = envelope.payload;",
+    "  const { principal } = envelope;",
     "    const conversationId = request.previous_response_id ?? uuidv4();",
     "    const parentMessageId = null;",
     "    // Merge previous messages with new input",
@@ -56,4 +58,7 @@ test('LibreChat patch is idempotent and preserves developer + conversation conti
   // Upstream bug fix: Remote Agents API-key auth sets only req.user while
   // message persistence reads userId off the request object.
   assert.match(controllerText, /req\.userId = req\.userId \?\? req\.user\?\.id/);
+  // Request-level cross-chat tools forwarding (native CROSS_CHAT_TOOLS).
+  assert.match(controllerText, /req\._crossChatTools/);
+  assert.match(controllerText, /primaryConfig\.toolDefinitions/);
 });

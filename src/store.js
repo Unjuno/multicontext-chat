@@ -39,18 +39,29 @@ export class StateStore {
       workspace.orchestratorRuns ??= {};
       workspace.orchestratorEvents ??= [];
       workspace.orchestratorPaused ??= false;
-      // recover Q items: pending/claimed/dispatched that were in-flight go back to pending
-      for (const item of workspace.orchestratorQueue) {
-        if (item.state === 'claimed' || item.state === 'dispatched') {
-          item.state = 'pending';
-          dirty = true;
-        }
-      }
       for (const run of Object.values(workspace.orchestratorRuns)) {
         if (run.status === 'running' || run.status === 'queued') {
           run.status = 'failed';
           run.finishedAt = now();
           run.error = 'Recovered after restart';
+          dirty = true;
+        }
+      }
+      // recover Q items: in-flight items whose run is still active go back to pending.
+      // Items whose run is already terminal (e.g. a crash tore the run-status save
+      // apart from the Q-done save) reconcile to the matching terminal state so
+      // settled runs never leave phantom active queue entries behind.
+      for (const item of workspace.orchestratorQueue) {
+        const run = item.runId ? workspace.orchestratorRuns[item.runId] : null;
+        const runTerminal = run && ['settled', 'blocked', 'failed', 'cancelled'].includes(run.status);
+        if (runTerminal && (item.state === 'pending' || item.state === 'claimed' || item.state === 'dispatched')) {
+          item.state = run.status === 'settled' ? 'done' : run.status === 'cancelled' ? 'cancelled' : 'failed';
+          item.doneAt = item.doneAt || now();
+          dirty = true;
+          continue;
+        }
+        if (item.state === 'claimed' || item.state === 'dispatched') {
+          item.state = 'pending';
           dirty = true;
         }
       }

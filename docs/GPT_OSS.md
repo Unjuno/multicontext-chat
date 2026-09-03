@@ -23,8 +23,9 @@ The patch is intentionally small and idempotent. It:
 
 1. preserves `developer` in the Responses converter,
 2. inserts developer input as LangChain `ChatMessage(role='developer')` in the actual Remote Responses controller path; LibreChat's OpenAI adapter maps that generic role to OpenAI `developer`,
-3. returns `X-LibreChat-Conversation-Id` so MultiContext can continue one real LibreChat conversation per member, and
-4. sets `req.userId` from the authenticated user before persistence, fixing an upstream bug where Remote Agents API-key requests (which only set `req.user`) always failed to store `store:true` turns, silently breaking native conversation continuation.
+3. returns `X-LibreChat-Conversation-Id` so MultiContext can continue one real LibreChat conversation per member,
+4. sets `req.userId` from the authenticated user before persistence, fixing an upstream bug where Remote Agents API-key requests (which only set `req.user`) always failed to store `store:true` turns, silently breaking native conversation continuation, and
+5. forwards request-level `tools` (MultiContext `CROSS_CHAT_TOOLS`) into `primaryConfig.tools`/`toolDefinitions` so the model can emit `function_call` items that MultiContext executes via `function_call_output` continuation. Known limit: LibreChat then also attempts internal execution of those calls (`Tool "list_chats" not found`) and retries in a loop; with the current patch the calls are still returned in `output` for MultiContext, but a long retry loop can break the harmony parser (`peg-native format`). A full proxy-execution patch is future work.
 
 `native` mode fails fast if that conversation-id header is missing. `compat` mode does not modify LibreChat; it keeps independent history in MultiContext and replays it on each request.
 

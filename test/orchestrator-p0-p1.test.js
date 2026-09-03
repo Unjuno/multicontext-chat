@@ -163,7 +163,9 @@ test('P1: restart does not silently duplicate side effects (Q pending, Run faile
   const run2 = ws2.orchestratorRuns[run.id];
   const q2 = ws2.orchestratorQueue.find(x=>x.id===q.id);
   assert.equal(run2.status, 'failed');
-  assert.equal(q2.state, 'pending');
+  // Q owned by the failed run must never become executable again: recovery
+  // reconciles it straight to failed (not transiently pending).
+  assert.equal(q2.state, 'failed');
 });
 
 test('P1: deprecated run and async run share one engine (both use store Run)', async () => {

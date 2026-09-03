@@ -57,6 +57,29 @@ test('restart reconciliation never replays work owned by a recovered failed run,
   assert.equal(afterQ.state, 'failed');
 });
 
+test('restart reconciles torn run-status/Q saves: settled run with dispatched Q becomes done', () => {
+  const file = makeFile();
+  const store1 = new StateStore(file);
+  const ws = store1.createWorkspace({ name: 'W', defaultAgentId: 'a' });
+  store1.addMember(ws.id, { name: 'A', agentId: 'a' });
+  const run = store1.createOrchestratorRun(ws.id, { prompt: 'root' });
+  const q = store1.enqueueOrchestrator(ws.id, 'root', { runId: run.id });
+  store1.updateOrchestratorRun(ws.id, run.id, { status: 'running' });
+  store1.updateOrchestratorQueueItem(ws.id, q.id, { state: 'dispatched' });
+  // Crash tears the two settle saves apart: run persisted as settled, Q still dispatched.
+  store1.updateOrchestratorRun(ws.id, run.id, { status: 'settled' });
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const rawQ = raw.workspaces[ws.id].orchestratorQueue.find((item) => item.id === q.id);
+  assert.equal(raw.workspaces[ws.id].orchestratorRuns[run.id].status, 'settled');
+  assert.equal(rawQ.state, 'dispatched');
+
+  const store2 = new StateStore(file);
+  const afterQ = store2.getWorkspace(ws.id).orchestratorQueue.find((item) => item.id === q.id);
+  assert.equal(afterQ.state, 'done');
+  assert.ok(afterQ.doneAt);
+  assert.equal(store2.getOrchestratorState(ws.id).counts.pending, 0);
+});
+
 test('cross-chat send recursively inherits orchestrator run/Q provenance', async () => {
   const store = new StateStore(makeFile());
   const ws = store.createWorkspace({ name: 'W' });
