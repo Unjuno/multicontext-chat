@@ -47,7 +47,11 @@ it does **not** depend on the Git checkout remaining at a development path.
 
 After the first save, config lives at
 `~/Library/Application Support/com.unjuno.multicontext/config.json`
-(created via Tauri `app_config_dir`). Defaults:
+(created via Tauri `app_config_dir`). The Desktop-owned workspace state lives
+next to it at `~/Library/Application Support/com.unjuno.multicontext/state.json`
+(`MULTICONTEXT_DATA_FILE` is set explicitly for the bundled server), which is
+separate from a dev checkout's `./data/state.json` — workspaces created inside
+the app do not appear under `node src/server.js` and vice versa. Defaults:
 
 - `librechat_url: http://127.0.0.1:3080`
 - `model_url: http://127.0.0.1:8080/v1`

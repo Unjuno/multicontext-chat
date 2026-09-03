@@ -78,6 +78,40 @@ OpenCode uses `opencode.json` (`~/.config/opencode/opencode.json` global or `./o
 
 Paste into `opencode.json` and restart OpenCode. Verify with `/mcps` in OpenCode — `multicontext` should appear.
 
+**Desktop bootstrap (recommended):** the remote entry above fails when no
+MultiContext server is running — it cannot start `MultiContext.app` by itself.
+`scripts/multicontext-mcp-launcher.mjs` is a stdio MCP entry point that fixes
+this without changing the server: it checks `/api/health`, opens
+`MultiContext.app` in the background (`open -g`, no focus steal) only when
+nothing is listening, waits until `/mcp` is ready, reuses an already-running
+instance otherwise (single-instance; never launches a second app), then proxies
+newline-delimited JSON-RPC between stdio and Streamable HTTP (tracking
+`Mcp-Session-Id`). It never interprets tool schemas, so it cannot drift from
+the server registry; non-JSON-RPC HTTP bodies are wrapped as JSON-RPC errors.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "multicontext": {
+      "type": "local",
+      "command": ["node", "/path/to/multicontext-chat/scripts/multicontext-mcp-launcher.mjs"],
+      "environment": { "MULTICONTEXT_MCP_TOKEN": "YOUR_TOKEN_HERE" },
+      "enabled": true
+    }
+  }
+}
+```
+
+Env: `MULTICONTEXT_PORT` (default 4317), `MULTICONTEXT_MCP_TOKEN` (Bearer;
+required when the Desktop app configured one — copy it from the Desktop
+`OpenCode設定をコピー` output), `MULTICONTEXT_APP_PATH` (explicit `.app`
+path; default resolution: env → `/Applications/MultiContext.app` →
+`~/Applications/MultiContext.app`),
+`MULTICONTEXT_LAUNCH_TIMEOUT_MS` (default 180000),
+`MULTICONTEXT_NO_LAUNCH=1` (fail fast instead of opening the app).
+Logs go to stderr; stdout is JSON-RPC only.
+
 **Manual minimal:**
 
 ```json
