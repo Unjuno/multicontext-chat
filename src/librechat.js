@@ -53,16 +53,32 @@ export class LibreChatClient {
     } finally { clearTimeout(timer); signal?.removeEventListener('abort', relayAbort); }
   }
 
-  async continueAgent({ agentId, conversationId, toolResults, signal, metadata = {} }) {
+  async continueAgent({ agentId, conversationId, toolCalls = [], toolResults, signal, metadata = {} }) {
     if (!conversationId) throw new Error('conversationId is required for continueAgent'); this.assertConfigured();
     if (!agentId) throw new Error('LibreChat agentId is required');
-    const input = toolResults.map(tr => ({ type: 'function_call_output', call_id: tr.call_id, output: tr.output }));
+    // Native continuation replays the answered function_call items first so the
+    // provider sees a coherent tool round trip (assistant tool_calls -> tool
+    // outputs). LibreChat persists only message text, so without this the
+    // function_call_output items would dangle and gpt-oss returns empty text.
+    // System/developer/user/history are still never replayed here.
+    const input = [];
+    for (const tc of toolCalls) {
+      const callId = tc?.call_id ?? tc?.callId;
+      if (!callId) continue;
+      const args = tc?.arguments ?? tc?.args ?? tc?.function?.arguments ?? {};
+      input.push({ type: 'function_call', call_id: callId, name: tc?.name ?? tc?.function?.name ?? '', arguments: typeof args === 'string' ? args : JSON.stringify(args) });
+    }
+    for (const tr of toolResults) input.push({ type: 'function_call_output', call_id: tr.call_id, output: tr.output });
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('LibreChat request timed out')), this.timeoutMs);
     const relayAbort = () => controller.abort(signal?.reason ?? new Error('Aborted')); signal?.addEventListener('abort', relayAbort, { once: true });
     try {
-      const body = { model: agentId, input, stream: false, store: this.mode === 'native', previous_response_id: conversationId, metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
+      // Native tools are re-supplied on every turn (standard OpenAI practice):
+      // without bound definitions the provider cannot ground prior tool
+      // outputs and gpt-oss re-calls or goes empty. History is still never
+      // replayed (previous_response_id owns it).
+      const body = { model: agentId, input, stream: false, store: this.mode === 'native', previous_response_id: conversationId, tools: CROSS_CHAT_TOOLS, tool_choice: 'auto', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
@@ -72,12 +88,12 @@ export class LibreChatClient {
     } finally { clearTimeout(timer); signal?.removeEventListener('abort', relayAbort); }
   }
 
-  async runAgent({ agentId, globalPrompt, developerPrompt, history = [], prompt, conversationId, signal, metadata = {}, toolResults = [] }) {
+  async runAgent({ agentId, globalPrompt, developerPrompt, history = [], prompt, conversationId, signal, metadata = {}, toolCalls = [], toolResults = [] }) {
     if (this.mode === 'native') {
       if (toolResults.length === 0) {
         return this.runAgentInitial({ agentId, globalPrompt, developerPrompt, history, prompt, conversationId, signal, metadata });
       }
-      return this.continueAgent({ agentId, conversationId, toolResults, signal, metadata });
+      return this.continueAgent({ agentId, conversationId, toolCalls, toolResults, signal, metadata });
     }
     if (!agentId) throw new Error('LibreChat agentId is required'); this.assertConfigured();
     const input = [];

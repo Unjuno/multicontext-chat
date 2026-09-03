@@ -193,7 +193,7 @@ test('Phase5 crash recovery retains receipt and prevents duplicate', async () =>
 });
 
 // Phase6 native protocol
-test('Phase6 native initial contains system/developer/user/tools, continuation only function_call_output', async () => {
+test('Phase6 native initial contains system/developer/user/tools, continuation replays answered function_call plus outputs', async () => {
   const bodies = [];
   const fakeFetch = async (url, init) => {
     bodies.push(JSON.parse(init.body));
@@ -208,15 +208,35 @@ test('Phase6 native initial contains system/developer/user/tools, continuation o
   assert.deepEqual(b0.tools, CROSS_CHAT_TOOLS);
   assert.equal(b0.previous_response_id, 'conv0');
   bodies.length = 0;
-  await client.continueAgent({ agentId: 'a', conversationId: 'conv1', toolResults: [{ call_id: 'c1', output: '{"ok":true}' }], metadata: {} });
+  await client.continueAgent({ agentId: 'a', conversationId: 'conv1', toolCalls: [{ type: 'function_call', call_id: 'c1', name: 'list_chats', arguments: '{}' }], toolResults: [{ call_id: 'c1', output: '{"ok":true}' }], metadata: {} });
   const b1 = bodies[0];
-  assert.equal(b1.input.length, 1);
-  assert.equal(b1.input[0].type, 'function_call_output');
+  assert.equal(b1.input.length, 2);
+  assert.equal(b1.input[0].type, 'function_call');
   assert.equal(b1.input[0].call_id, 'c1');
+  assert.equal(b1.input[0].name, 'list_chats');
+  assert.equal(b1.input[1].type, 'function_call_output');
+  assert.equal(b1.input[1].call_id, 'c1');
   assert.equal(b1.previous_response_id, 'conv1');
   assert.ok(!b1.input.some(i => i.role === 'system'));
   assert.ok(!b1.input.some(i => i.role === 'developer'));
   assert.ok(!b1.input.some(i => i.role === 'user'));
+  // Tools are bound on every native turn so the provider can ground tool
+  // outputs; history itself is never replayed.
+  assert.deepEqual(b1.tools, CROSS_CHAT_TOOLS);
+  assert.equal(b1.tool_choice, 'auto');
+});
+
+test('Phase6 native continuation without original calls stays outputs-only (backward compatible)', async () => {
+  const bodies = [];
+  const fakeFetch = async (url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ id: 'r1', output: [{ type: 'message', content: [{ type: 'output_text', text: 'ok' }] }] }), { status: 200, headers: { 'x-librechat-conversation-id': 'conv1' } });
+  };
+  const client = new LibreChatClient({ baseUrl: 'http://x', apiKey: 'k', mode: 'native', fetchImpl: fakeFetch });
+  await client.continueAgent({ agentId: 'a', conversationId: 'conv1', toolResults: [{ call_id: 'c1', output: '{"ok":true}' }], metadata: {} });
+  const b1 = bodies[0];
+  assert.equal(b1.input.length, 1);
+  assert.equal(b1.input[0].type, 'function_call_output');
 });
 
 test('Phase6 native multi-round does not duplicate user prompt', async () => {

@@ -199,7 +199,7 @@ export class Scheduler {
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
               const functionCallOutput = toolResults.map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
               if (this.client.mode === 'native' && typeof this.client.continueAgent === 'function') {
-                currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, toolResults: functionCallOutput, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
+                currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, toolCalls, toolResults: functionCallOutput, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
               } else {
                 currentResult = await this.client.runAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id }, toolResults: functionCallOutput });
               }
