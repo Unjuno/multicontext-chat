@@ -72,11 +72,15 @@ function fixture() {
   return { root, service, controller };
 }
 
+function runPatch(root) {
+  return spawnSync(process.execPath, [patchScript, root], { encoding: 'utf8' });
+}
+
 test('LibreChat patch is idempotent and preserves developer + conversation continuation hooks', () => {
   const { root, service, controller } = fixture();
-  const first = spawnSync(process.execPath, [patchScript, root], { encoding: 'utf8' });
+  const first = runPatch(root);
   assert.equal(first.status, 0, first.stderr || first.stdout);
-  const second = spawnSync(process.execPath, [patchScript, root], { encoding: 'utf8' });
+  const second = runPatch(root);
   assert.equal(second.status, 0, second.stderr || second.stdout);
   assert.match(second.stdout, /already patched/);
 
@@ -87,25 +91,51 @@ test('LibreChat patch is idempotent and preserves developer + conversation conti
   assert.match(controllerText, /ChatMessage/);
   assert.match(controllerText, /X-LibreChat-Conversation-Id/);
   assert.match(controllerText, /role: 'developer'/);
-  // Upstream bug fix: Remote Agents API-key auth sets only req.user while
-  // message persistence reads userId off the request object.
   assert.match(controllerText, /req\.userId = req\.userId \?\? req\.user\?\.id/);
-  // Request-level cross-chat tools forwarding (native CROSS_CHAT_TOOLS).
   assert.match(controllerText, /req\._crossChatTools/);
   assert.match(controllerText, /primaryConfig\.toolDefinitions/);
-  // Deferred/external execution: cross-chat tools are exposed to the model
-  // but never executed inside LibreChat; the run turn unwinds so the caller
-  // receives function_call items for external execution + continuation.
   assert.match(controllerText, /class ExternalCrossChatToolCall/);
   assert.match(controllerText, /EXTERNAL_TOOL_DEFERRED/);
   assert.match(controllerText, /AIMessage/);
-  assert.match(controllerText, /new ToolMessage/);
   assert.match(controllerText, /isToolRoundTripMessage/);
+
+  // LangChain/LibreChat use ToolMessage's object constructor. A positional
+  // (content, tool_call_id) call looks plausible but does not match upstream API usage.
+  assert.match(
+    controllerText,
+    /new ToolMessage\(\{\s*content: String\(message\.content \?\? ''\),\s*tool_call_id: message\.tool_call_id \?\? '',\s*\}\)/,
+  );
+  assert.doesNotMatch(controllerText, /new ToolMessage\(String\(message\.content/);
+
   const deferrals = controllerText.match(/throwIfExternalCrossChatTools\(req, toolNames\);/g) || [];
   assert.equal(deferrals.length, 2);
-  // Only the non-streaming branch (last processStream occurrence) unwinds;
-  // the streaming branch keeps stock behavior.
   const catches = controllerText.match(/} catch \(streamError\) \{/g) || [];
   assert.equal(catches.length, 1);
   assert.ok(controllerText.lastIndexOf('await run.processStream') < controllerText.indexOf('} catch (streamError) {'));
+});
+
+test('LibreChat patch upgrades the legacy positional ToolMessage form without a clean checkout', () => {
+  const { root, controller } = fixture();
+  const first = runPatch(root);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+
+  let text = fs.readFileSync(controller, 'utf8');
+  const objectForm = "formattedMessages.push(new ToolMessage({\n            content: String(message.content ?? ''),\n            tool_call_id: message.tool_call_id ?? '',\n          }));";
+  const legacyForm = "formattedMessages.push(new ToolMessage(String(message.content ?? ''), message.tool_call_id ?? ''));";
+  assert.ok(text.includes(objectForm));
+
+  // Simulate a local LibreChat checkout already patched by 6b906273.
+  text = text.replace(objectForm, legacyForm);
+  fs.writeFileSync(controller, text);
+  assert.ok(fs.readFileSync(controller, 'utf8').includes(legacyForm));
+
+  const migrated = runPatch(root);
+  assert.equal(migrated.status, 0, migrated.stderr || migrated.stdout);
+  text = fs.readFileSync(controller, 'utf8');
+  assert.ok(text.includes(objectForm));
+  assert.equal(text.includes(legacyForm), false);
+
+  const again = runPatch(root);
+  assert.equal(again.status, 0, again.stderr || again.stdout);
+  assert.match(again.stdout, /already patched/);
 });
