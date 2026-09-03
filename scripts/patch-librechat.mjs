@@ -3,51 +3,176 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(process.argv[2] || '');
-if (!process.argv[2]) { console.error('Usage: node scripts/patch-librechat.mjs /path/to/LibreChat'); process.exit(2); }
-
-const replacements = [
-  {
-    file: 'packages/api/src/agents/responses/service.ts',
-    edits: [
-      ["role: 'system' | 'user' | 'assistant' | 'tool';", "role: 'system' | 'developer' | 'user' | 'assistant' | 'tool';"],
-      ["// Map developer role to system (LibreChat convention)\n      let role: InternalMessage['role'];\n      if (messageItem.role === 'developer') {\n        role = 'system';", "// Preserve developer as a distinct role for gpt-oss/Harmony-compatible paths.\n      let role: InternalMessage['role'];\n      if (messageItem.role === 'developer') {\n        role = 'developer';"],
-    ],
-  },
-  {
-    file: 'api/server/controllers/agents/responses.js',
-    edits: [
-      ["const { v4: uuidv4 } = require('uuid');", "const { v4: uuidv4 } = require('uuid');\nconst { AIMessage, ChatMessage, ToolMessage } = require('@langchain/core/messages');"],
-      ["const db = require('~/models');", "const db = require('~/models');\n\n/**\n * MultiContext extension: request-level cross-chat tools use deferred/external\n * execution. They are exposed to the provider so the model can emit\n * function_call items, but they must never run inside LibreChat: the caller\n * (MultiContext) executes them and continues via function_call_output +\n * previous_response_id. Throwing here unwinds the run turn while the already\n * recorded function_call steps stay in the aggregator/tracker, so the\n * Responses API returns them to the caller instead of entering the internal\n * execute-and-retry loop (\"Tool X not found\" until the harmony parser breaks).\n * Applies ONLY to request-level cross-chat tools; all DB/agent-owned tools\n * (Web Search, MCP, code execution, Actions, ...) are untouched.\n */\nclass ExternalCrossChatToolCall extends Error {\n  constructor(toolNames) {\n    super(`External cross-chat tool call deferred to caller: ${(toolNames || []).join(',')}`);\n    this.name = 'ExternalCrossChatToolCall';\n    this.code = 'EXTERNAL_TOOL_DEFERRED';\n    this.toolNames = Array.isArray(toolNames) ? toolNames : [];\n  }\n}\n\nfunction crossChatToolNames(req) {\n  const tools = req?._crossChatTools;\n  if (!Array.isArray(tools)) return new Set();\n  return new Set(tools.map((t) => t?.function?.name).filter(Boolean));\n}\n\nfunction throwIfExternalCrossChatTools(req, toolNames) {\n  const cross = crossChatToolNames(req);\n  if (cross.size === 0 || !Array.isArray(toolNames) || toolNames.length === 0) return;\n  if (toolNames.every((n) => cross.has(n))) throw new ExternalCrossChatToolCall(toolNames);\n}"],
-      ["  const request = envelope.payload;\n  const { principal } = envelope;", "  const request = envelope.payload;\n  // MultiContext extension: capture request-level cross-chat tools (if any).\n  // MultiContext owns orchestration; LibreChat exposes these to the model but\n  // MultiContext executes them via function_call_output continuation.\n  const requestTools = Array.isArray(request.tools) ? request.tools : null;\n  if (requestTools) req._crossChatTools = requestTools;\n  const { principal } = envelope;"],
-      ["    const conversationId = request.previous_response_id ?? uuidv4();\n    const parentMessageId = null;", "    const conversationId = request.previous_response_id ?? uuidv4();\n    // MultiContext extension: expose the stable LibreChat conversation id so\n    // a remote caller can continue the same stored thread on later turns.\n    res.setHeader('X-LibreChat-Conversation-Id', conversationId);\n    // MultiContext extension: message persistence reads userId off the request\n    // object, but the Remote Agents API-key middleware only sets req.user.\n    // Without this, every store:true response fails to persist its turn.\n    req.userId = req.userId ?? req.user?.id;\n    const parentMessageId = null;"],
-      ["    // Merge previous messages with new input\n    const allMessages = [...previousMessages, ...inputMessages];\n\n    const toolSet = buildToolSet(primaryConfig);\n    const formatted = formatAgentMessages(stripActivityLabelParts(allMessages), {}, toolSet);\n    const formattedMessages = formatted.messages;", "    // Keep developer instructions distinct from system instructions. The shared\n    // formatter currently maps every non-user/non-assistant role to system, so\n    // format the rest normally and insert developer messages as generic\n    // ChatMessage(role='developer') immediately before the current user turn.\n    const developerMessages = inputMessages.filter((message) => message.role === 'developer');\n    // MultiContext extension: round-trip tool messages (assistant function_call\n    // + function_call_output) must bypass the shared formatter, which maps\n    // every non-user/non-assistant role to system and drops tool_calls. They\n    // are re-appended below as first-class LangChain messages.\n    const isToolRoundTripMessage = (message) =>\n      message?.role === 'tool' ||\n      (message?.role === 'assistant' &&\n        Array.isArray(message?.tool_calls) &&\n        message.tool_calls.length > 0);\n    const toolRoundTrips = inputMessages.filter(isToolRoundTripMessage);\n    const allMessages = [\n      ...previousMessages,\n      ...inputMessages.filter((message) => message.role !== 'developer' && !isToolRoundTripMessage(message)),\n    ];\n\n    // MultiContext extension: expose request-level cross-chat tools to the model.\n    // These bypass DB resolution; MultiContext executes them via continuation.\n    const crossTools = Array.isArray(req._crossChatTools) ? req._crossChatTools : null;\n    if (crossTools && crossTools.length > 0) {\n      if (!Array.isArray(primaryConfig.tools)) primaryConfig.tools = [];\n      if (!Array.isArray(primaryConfig.toolDefinitions)) primaryConfig.toolDefinitions = [];\n      for (const rt of crossTools) {\n        const fname = rt?.function?.name;\n        if (!fname) continue;\n        if (!primaryConfig.tools.some((t) => t?.function?.name === fname || t?.name === fname)) {\n          primaryConfig.tools.push({ ...rt, name: fname });\n        }\n        if (!primaryConfig.toolDefinitions.some((d) => d?.name === fname || d?.function?.name === fname)) {\n          primaryConfig.toolDefinitions.push({ ...rt, name: fname });\n        }\n      }\n    }\n\n    const toolSet = buildToolSet(primaryConfig);\n    const formatted = formatAgentMessages(stripActivityLabelParts(allMessages), {}, toolSet);\n    const formattedMessages = formatted.messages;\n    if (developerMessages.length > 0) {\n      const insertionIndex = Math.max(0, formattedMessages.length - 1);\n      formattedMessages.splice(\n        insertionIndex,\n        0,\n        ...developerMessages.map(\n          (message) => new ChatMessage({ role: 'developer', content: message.content }),\n        ),\n      );\n    }\n    if (toolRoundTrips.length > 0) {\n      for (const message of toolRoundTrips) {\n        if (message.role === 'tool') {\n          formattedMessages.push(new ToolMessage(String(message.content ?? ''), message.tool_call_id ?? ''));\n          continue;\n        }\n        formattedMessages.push(new AIMessage({\n          content: typeof message.content === 'string' ? message.content : '',\n          tool_calls: message.tool_calls.map((tc) => {\n            let parsedArgs = {};\n            const rawArgs = tc?.function?.arguments ?? tc?.args;\n            if (typeof rawArgs === 'string' && rawArgs) {\n              try { parsedArgs = JSON.parse(rawArgs); } catch { parsedArgs = {}; }\n            } else if (rawArgs && typeof rawArgs === 'object') {\n              parsedArgs = rawArgs;\n            }\n            return {\n              name: tc?.function?.name ?? tc?.name ?? '',\n              args: parsedArgs,\n              id: tc?.id ?? tc?.call_id ?? '',\n              type: 'tool_call',\n            };\n          }),\n        }));\n      }\n    }"],
-      ["      // Use Responses API-specific callback that emits librechat:attachment events\n      const toolEndCallback = createResponsesToolEndCallback({\n        req,\n        res,\n        tracker,\n        artifactPromises,\n      });\n\n      // Create tool execute options for event-driven tool execution\n      const toolExecuteOptions = {\n        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {\n          const ctx =", "      // Use Responses API-specific callback that emits librechat:attachment events\n      const toolEndCallback = createResponsesToolEndCallback({\n        req,\n        res,\n        tracker,\n        artifactPromises,\n      });\n\n      // Create tool execute options for event-driven tool execution\n      const toolExecuteOptions = {\n        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {\n          // MultiContext extension: request-level cross-chat tools are executed\n          // externally; never resolve or run them inside LibreChat.\n          throwIfExternalCrossChatTools(req, toolNames);\n          const ctx ="],
-      ["      const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId: null });\n\n      const toolExecuteOptions = {\n        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {\n          const ctx =", "      const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId: null });\n\n      const toolExecuteOptions = {\n        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {\n          // MultiContext extension: request-level cross-chat tools are executed\n          // externally; never resolve or run them inside LibreChat.\n          throwIfExternalCrossChatTools(req, toolNames);\n          const ctx ="],
-      ["      await run.processStream({ messages: formattedMessages }, config, {\n        callbacks: {\n          [Callback.TOOL_ERROR]: (graph, error, toolId) => {\n            logger.error(`[Responses API] Tool Error \"${toolId}\"`, getSafeErrorMetadata(error));\n          },\n        },\n      });", "      try {\n        await run.processStream({ messages: formattedMessages }, config, {\n          callbacks: {\n            [Callback.TOOL_ERROR]: (graph, error, toolId) => {\n              logger.error(`[Responses API] Tool Error \"${toolId}\"`, getSafeErrorMetadata(error));\n            },\n          },\n        });\n      } catch (streamError) {\n        // MultiContext extension: an external cross-chat tool call unwinds the\n        // run turn here. The model-emitted function_call steps are already\n        // recorded in the aggregator, so fall through: the partial response is\n        // built, persisted, and returned below for external execution +\n        // function_call_output continuation. Anything else still throws.\n        if (!streamError || streamError.code !== 'EXTERNAL_TOOL_DEFERRED') throw streamError;\n        logger.info(\n          `[MultiContext] deferred external tool call to caller: ${(streamError.toolNames || []).join(',')}`,\n        );\n      }", "last"],
-    ],
-  },
-];
-
-// An edit is [from, to] applied to the first occurrence, or
-// [from, to, 'last'] applied to the last occurrence (for blocks that appear
-// in both the streaming and non-streaming branches).
-let changed = 0;
-for (const spec of replacements) {
-  const file = path.join(root, spec.file);
-  if (!fs.existsSync(file)) throw new Error(`LibreChat file not found: ${spec.file}`);
-  let text = fs.readFileSync(file, 'utf8'); let fileChanged = false;
-  for (const [from, to, occurrence] of spec.edits) {
-    if (text.includes(to)) continue;
-    if (!text.includes(from)) throw new Error(`Patch anchor not found in ${spec.file}`);
-    if (occurrence === 'last') {
-      const idx = text.lastIndexOf(from);
-      text = text.slice(0, idx) + to + text.slice(idx + from.length);
-    } else {
-      text = text.replace(from, to);
-    }
-    fileChanged = true;
-  }
-  if (fileChanged) { fs.writeFileSync(file, text); changed += 1; console.log(`patched ${spec.file}`); }
-  else console.log(`already patched ${spec.file}`);
+if (!process.argv[2]) {
+  console.error('Usage: node scripts/patch-librechat.mjs /path/to/LibreChat');
+  process.exit(2);
 }
+
+let changed = 0;
+
+function filePath(rel) {
+  const file = path.join(root, rel);
+  if (!fs.existsSync(file)) throw new Error(`LibreChat file not found: ${rel}`);
+  return file;
+}
+
+function replaceRequired(text, from, to, label, occurrence = 'first') {
+  if (text.includes(to)) return { text, changed: false };
+  if (!text.includes(from)) throw new Error(`Patch anchor not found: ${label}`);
+  if (occurrence === 'last') {
+    const idx = text.lastIndexOf(from);
+    return { text: text.slice(0, idx) + to + text.slice(idx + from.length), changed: true };
+  }
+  return { text: text.replace(from, to), changed: true };
+}
+
+function save(rel, text, didChange) {
+  if (!didChange) {
+    console.log(`already patched ${rel}`);
+    return;
+  }
+  fs.writeFileSync(filePath(rel), text);
+  changed += 1;
+  console.log(`patched ${rel}`);
+}
+
+// 1) Preserve developer role in the Responses converter.
+{
+  const rel = 'packages/api/src/agents/responses/service.ts';
+  let text = fs.readFileSync(filePath(rel), 'utf8');
+  let dirty = false;
+  for (const [from, to, label] of [
+    ["role: 'system' | 'user' | 'assistant' | 'tool';", "role: 'system' | 'developer' | 'user' | 'assistant' | 'tool';", `${rel}: InternalMessage role`],
+    ["// Map developer role to system (LibreChat convention)\n      let role: InternalMessage['role'];\n      if (messageItem.role === 'developer') {\n        role = 'system';", "// Preserve developer as a distinct role for gpt-oss/Harmony-compatible paths.\n      let role: InternalMessage['role'];\n      if (messageItem.role === 'developer') {\n        role = 'developer';", `${rel}: developer role mapping`],
+  ]) {
+    const out = replaceRequired(text, from, to, label);
+    text = out.text;
+    dirty ||= out.changed;
+  }
+  save(rel, text, dirty);
+}
+
+// 2) Patch the actual Remote Responses controller path.
+{
+  const rel = 'api/server/controllers/agents/responses.js';
+  let text = fs.readFileSync(filePath(rel), 'utf8');
+  let dirty = false;
+
+  // Support stock LibreChat as well as older MultiContext patches that imported only ChatMessage.
+  if (!text.includes("const { AIMessage, ChatMessage, ToolMessage } = require('@langchain/core/messages');")) {
+    if (text.includes("const { ChatMessage } = require('@langchain/core/messages');")) {
+      text = text.replace(
+        "const { ChatMessage } = require('@langchain/core/messages');",
+        "const { AIMessage, ChatMessage, ToolMessage } = require('@langchain/core/messages');",
+      );
+      dirty = true;
+    } else {
+      const out = replaceRequired(
+        text,
+        "const { v4: uuidv4 } = require('uuid');",
+        "const { v4: uuidv4 } = require('uuid');\nconst { AIMessage, ChatMessage, ToolMessage } = require('@langchain/core/messages');",
+        `${rel}: LangChain message imports`,
+      );
+      text = out.text;
+      dirty ||= out.changed;
+    }
+  }
+
+  const externalHelpers = `const db = require('~/models');\n\n/**\n * MultiContext extension: request-level cross-chat tools use deferred/external\n * execution. They are exposed to the provider so the model can emit\n * function_call items, but they must never run inside LibreChat: the caller\n * (MultiContext) executes them and continues via function_call_output +\n * previous_response_id. Applies ONLY to request-level cross-chat tools; normal\n * LibreChat-owned tools keep their stock execution path.\n */\nclass ExternalCrossChatToolCall extends Error {\n  constructor(toolNames) {\n    super(\`External cross-chat tool call deferred to caller: \${(toolNames || []).join(',')}\`);\n    this.name = 'ExternalCrossChatToolCall';\n    this.code = 'EXTERNAL_TOOL_DEFERRED';\n    this.toolNames = Array.isArray(toolNames) ? toolNames : [];\n  }\n}\n\nfunction crossChatToolNames(req) {\n  const tools = req?._crossChatTools;\n  if (!Array.isArray(tools)) return new Set();\n  return new Set(tools.map((t) => t?.function?.name).filter(Boolean));\n}\n\nfunction throwIfExternalCrossChatTools(req, toolNames) {\n  const cross = crossChatToolNames(req);\n  if (cross.size === 0 || !Array.isArray(toolNames) || toolNames.length === 0) return;\n  if (toolNames.every((name) => cross.has(name))) throw new ExternalCrossChatToolCall(toolNames);\n}`;
+  if (!text.includes('class ExternalCrossChatToolCall extends Error')) {
+    const out = replaceRequired(text, "const db = require('~/models');", externalHelpers, `${rel}: external tool helpers`);
+    text = out.text;
+    dirty ||= out.changed;
+  }
+
+  if (!text.includes('req._crossChatTools = requestTools')) {
+    const out = replaceRequired(
+      text,
+      "  const request = envelope.payload;\n  const { principal } = envelope;",
+      "  const request = envelope.payload;\n  // MultiContext extension: capture request-level cross-chat tools.\n  // MultiContext exposes them to the model and executes them externally.\n  const requestTools = Array.isArray(request.tools) ? request.tools : null;\n  if (requestTools) req._crossChatTools = requestTools;\n  const { principal } = envelope;",
+      `${rel}: request-level tools capture`,
+    );
+    text = out.text;
+    dirty ||= out.changed;
+  }
+
+  if (!text.includes("res.setHeader('X-LibreChat-Conversation-Id', conversationId)")) {
+    const out = replaceRequired(
+      text,
+      "    const conversationId = request.previous_response_id ?? uuidv4();\n    const parentMessageId = null;",
+      "    const conversationId = request.previous_response_id ?? uuidv4();\n    // MultiContext extension: expose the stable LibreChat conversation id.\n    res.setHeader('X-LibreChat-Conversation-Id', conversationId);\n    // Remote Agents API-key auth sets req.user; persistence reads req.userId.\n    req.userId = req.userId ?? req.user?.id;\n    const parentMessageId = null;",
+      `${rel}: conversation id + userId`,
+    );
+    text = out.text;
+    dirty ||= out.changed;
+  }
+
+  // First establish the developer-preserving/request-tool-aware formatting block if absent.
+  if (!text.includes('const developerMessages = inputMessages.filter')) {
+    const stockFormatting = "    // Merge previous messages with new input\n    const allMessages = [...previousMessages, ...inputMessages];\n\n    const toolSet = buildToolSet(primaryConfig);\n    const formatted = formatAgentMessages(stripActivityLabelParts(allMessages), {}, toolSet);\n    const formattedMessages = formatted.messages;";
+    const baseFormatting = `    // Keep developer instructions distinct from system instructions.\n    const developerMessages = inputMessages.filter((message) => message.role === 'developer');\n    const allMessages = [\n      ...previousMessages,\n      ...inputMessages.filter((message) => message.role !== 'developer'),\n    ];\n\n    // MultiContext extension: expose request-level cross-chat tools to the model.\n    const crossTools = Array.isArray(req._crossChatTools) ? req._crossChatTools : null;\n    if (crossTools && crossTools.length > 0) {\n      if (!Array.isArray(primaryConfig.tools)) primaryConfig.tools = [];\n      if (!Array.isArray(primaryConfig.toolDefinitions)) primaryConfig.toolDefinitions = [];\n      for (const rt of crossTools) {\n        const fname = rt?.function?.name;\n        if (!fname) continue;\n        if (!primaryConfig.tools.some((t) => t?.function?.name === fname || t?.name === fname)) {\n          primaryConfig.tools.push({ ...rt, name: fname });\n        }\n        if (!primaryConfig.toolDefinitions.some((d) => d?.name === fname || d?.function?.name === fname)) {\n          primaryConfig.toolDefinitions.push({ ...rt, name: fname });\n        }\n      }\n    }\n\n    const toolSet = buildToolSet(primaryConfig);\n    const formatted = formatAgentMessages(stripActivityLabelParts(allMessages), {}, toolSet);\n    const formattedMessages = formatted.messages;\n    if (developerMessages.length > 0) {\n      const insertionIndex = Math.max(0, formattedMessages.length - 1);\n      formattedMessages.splice(\n        insertionIndex,\n        0,\n        ...developerMessages.map(\n          (message) => new ChatMessage({ role: 'developer', content: message.content }),\n        ),\n      );\n    }`;
+    const out = replaceRequired(text, stockFormatting, baseFormatting, `${rel}: developer/request-tool formatting`);
+    text = out.text;
+    dirty ||= out.changed;
+  }
+
+  // Add first-class assistant tool_call + tool result round-trip handling. This also upgrades
+  // the prior 6b906273 patch safely instead of requiring a clean LibreChat checkout.
+  if (!text.includes('const isToolRoundTripMessage = (message) =>')) {
+    const developerLine = "    const developerMessages = inputMessages.filter((message) => message.role === 'developer');";
+    const roundTripDecl = `${developerLine}\n    // MultiContext extension: tool round-trips must bypass the shared formatter,\n    // which would otherwise drop assistant tool_calls / coerce tool messages.\n    const isToolRoundTripMessage = (message) =>\n      message?.role === 'tool' ||\n      (message?.role === 'assistant' &&\n        Array.isArray(message?.tool_calls) &&\n        message.tool_calls.length > 0);\n    const toolRoundTrips = inputMessages.filter(isToolRoundTripMessage);`;
+    let out = replaceRequired(text, developerLine, roundTripDecl, `${rel}: tool round-trip declarations`);
+    text = out.text;
+    dirty ||= out.changed;
+
+    out = replaceRequired(
+      text,
+      "      ...inputMessages.filter((message) => message.role !== 'developer'),",
+      "      ...inputMessages.filter((message) => message.role !== 'developer' && !isToolRoundTripMessage(message)),",
+      `${rel}: exclude tool round-trips from shared formatter`,
+    );
+    text = out.text;
+    dirty ||= out.changed;
+
+    const developerRender = `    if (developerMessages.length > 0) {\n      const insertionIndex = Math.max(0, formattedMessages.length - 1);\n      formattedMessages.splice(\n        insertionIndex,\n        0,\n        ...developerMessages.map(\n          (message) => new ChatMessage({ role: 'developer', content: message.content }),\n        ),\n      );\n    }`;
+    const roundTripRender = `${developerRender}\n    if (toolRoundTrips.length > 0) {\n      for (const message of toolRoundTrips) {\n        if (message.role === 'tool') {\n          formattedMessages.push(new ToolMessage({\n            content: String(message.content ?? ''),\n            tool_call_id: message.tool_call_id ?? '',\n          }));\n          continue;\n        }\n        formattedMessages.push(new AIMessage({\n          content: typeof message.content === 'string' ? message.content : '',\n          tool_calls: message.tool_calls.map((tc) => {\n            let parsedArgs = {};\n            const rawArgs = tc?.function?.arguments ?? tc?.args;\n            if (typeof rawArgs === 'string' && rawArgs) {\n              try { parsedArgs = JSON.parse(rawArgs); } catch { parsedArgs = {}; }\n            } else if (rawArgs && typeof rawArgs === 'object') {\n              parsedArgs = rawArgs;\n            }\n            return {\n              name: tc?.function?.name ?? tc?.name ?? '',\n              args: parsedArgs,\n              id: tc?.id ?? tc?.call_id ?? '',\n              type: 'tool_call',\n            };\n          }),\n        }));\n      }\n    }`;
+    out = replaceRequired(text, developerRender, roundTripRender, `${rel}: render tool round-trips`);
+    text = out.text;
+    dirty ||= out.changed;
+  }
+
+  // Migrate the historical positional constructor from 6b906273 to the LangChain API shape
+  // used by LibreChat upstream: ToolMessage({ content, tool_call_id }).
+  const legacyToolMessage = "          formattedMessages.push(new ToolMessage(String(message.content ?? ''), message.tool_call_id ?? ''));";
+  const objectToolMessage = "          formattedMessages.push(new ToolMessage({\n            content: String(message.content ?? ''),\n            tool_call_id: message.tool_call_id ?? '',\n          }));";
+  if (text.includes(legacyToolMessage)) {
+    text = text.replace(legacyToolMessage, objectToolMessage);
+    dirty = true;
+  }
+
+  // Install the external-execution guard in both loadTools branches.
+  const guard = '          throwIfExternalCrossChatTools(req, toolNames);';
+  const loadAnchor = "        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {\n          const ctx =";
+  while ((text.match(/throwIfExternalCrossChatTools\(req, toolNames\);/g) || []).length < 2) {
+    if (!text.includes(loadAnchor)) throw new Error(`Patch anchor not found: ${rel}: loadTools external guard`);
+    text = text.replace(
+      loadAnchor,
+      "        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {\n          // MultiContext request-level tools execute outside LibreChat.\n" + guard + "\n          const ctx =",
+    );
+    dirty = true;
+  }
+
+  // Non-streaming Remote Responses must return the model-emitted function_call rather than
+  // converting external-tool deferral into a normal LibreChat tool error/retry loop.
+  if (!text.includes("streamError.code !== 'EXTERNAL_TOOL_DEFERRED'")) {
+    const processStream = `      await run.processStream({ messages: formattedMessages }, config, {\n        callbacks: {\n          [Callback.TOOL_ERROR]: (graph, error, toolId) => {\n            logger.error(\`[Responses API] Tool Error \\\"\${toolId}\\\"\`, getSafeErrorMetadata(error));\n          },\n        },\n      });`;
+    const wrapped = `      try {\n        await run.processStream({ messages: formattedMessages }, config, {\n          callbacks: {\n            [Callback.TOOL_ERROR]: (graph, error, toolId) => {\n              logger.error(\`[Responses API] Tool Error \\\"\${toolId}\\\"\`, getSafeErrorMetadata(error));\n            },\n          },\n        });\n      } catch (streamError) {\n        if (!streamError || streamError.code !== 'EXTERNAL_TOOL_DEFERRED') throw streamError;\n        logger.info(\n          \`[MultiContext] deferred external tool call to caller: \${(streamError.toolNames || []).join(',')}\`,\n        );\n      }`;
+    const out = replaceRequired(text, processStream, wrapped, `${rel}: non-streaming external deferral`, 'last');
+    text = out.text;
+    dirty ||= out.changed;
+  }
+
+  save(rel, text, dirty);
+}
+
 console.log(changed ? `Patched ${changed} LibreChat file(s). Rebuild LibreChat.` : 'LibreChat is already patched.');
