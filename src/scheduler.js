@@ -1,7 +1,7 @@
 import { CrossChatToolExecutor, extractToolCalls } from './cross-chat-executor.js';
 export class Scheduler {
-  constructor({ store, client, app, maxHistoryMessages = 120 }) {
-    this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.running = new Map(); this.executor = null;
+  constructor({ store, client, app, maxHistoryMessages = 120, maxNativeToolIterations = 10 }) {
+    this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.maxNativeToolIterations = maxNativeToolIterations; this.running = new Map(); this.executor = null;
   }
   setApp(app) { this.app = app; app._scheduler = this; app._store = this.store; this.executor = new CrossChatToolExecutor({ app }); }
   key(workspaceId, memberId) { return `${workspaceId}:${memberId}`; }
@@ -172,7 +172,17 @@ export class Scheduler {
           let toolCalls = extractToolCalls(currentResult.raw);
           if (this.client.mode !== 'compat' && toolCalls.length > 0) {
             if (!this.executor) throw new Error('CrossChatToolExecutor not initialized — call setApp(app)');
+            // Bound the native tool loop: a model that keeps emitting function
+            // calls would otherwise recurse unboundedly within one queue item
+            // (unbounded model spend and deliveries). Exhaustion BLOCKs the
+            // member with an explicit message; deliveries already made are kept
+            // and Retry continues explicitly. Stop still aborts immediately.
+            let toolIterations = 0;
             for (;;) {
+              toolIterations += 1;
+              if (toolIterations > this.maxNativeToolIterations) {
+                throw Object.assign(new Error(`Cross-chat tool iteration budget exhausted after ${this.maxNativeToolIterations} tool rounds; deliveries already made are kept. Retry to continue or Stop to end.`), { code: 'TOOL_ITERATION_BUDGET_EXHAUSTED', status: 400 });
+              }
               const liveCurrent = this.store.getMember(workspaceId, memberId)?.current?.item;
               if (controller.signal.aborted || !liveCurrent || liveCurrent.id !== item.id) break;
               const toolResults = await this.executor.execute({

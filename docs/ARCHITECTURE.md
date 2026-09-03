@@ -62,6 +62,13 @@ continuation: previous_response_id
 model:        final assistant response or another function_call
 ```
 
+The native tool loop is bounded: at most `maxNativeToolIterations` tool rounds
+(default 10) execute within one queue item. A model that keeps emitting
+function calls exhausts the budget and the member BLOCKs with an explicit
+message; deliveries already made are kept, and Retry continues explicitly
+while Stop ends immediately. This bounds model spend and cross-chat deliveries
+without disabling legitimate recursion (A→B→A / A→B→C).
+
 The continuation deliberately re-sends the answered `function_call` before its `function_call_output`. LibreChat persistence does not preserve enough structured tool-call state for gpt-oss to reliably ground a standalone output; without the paired call, the output can dangle and the model may re-call the tool or return empty text. `system`, `developer`, `user`, and local member history are **not** replayed during continuation. `previous_response_id` owns the stored conversational history, while the explicit call/output pair restores the structured tool round trip required by the provider.
 
 ## Prompt hierarchy
