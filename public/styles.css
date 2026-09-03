@@ -840,6 +840,7 @@ dialog menu { display: flex; gap: 6px; justify-content: flex-end; }
 .orchestrator-bar .ob-dot.paused { background: #f59e0b; }
 .orchestrator-bar .ob-dot.idle { background: var(--settled); }
 .orchestrator-bar .ob-sep { color: var(--border-strong); }
+.orchestrator-bar .ob-follow { color: var(--running); font-weight: 700; white-space: nowrap; }
 .orchestrator-bar button { padding: 3px 8px; font-size: 11px; }
 #orchestratorDrawer {
   border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0;

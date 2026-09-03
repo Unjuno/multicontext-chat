@@ -1,4 +1,5 @@
 import { workspaceStatusLabel as sharedWorkspaceLabel, memberStatusLabel as sharedMemberLabel } from './runtimeLabels.js';
+import { pickDisplayedRun, followedRunState } from './follow-run.js';
 
 let currentId = null;
 let timer = null;
@@ -364,6 +365,9 @@ async function pollPendingFocus() {
     const focus = data && data.focus;
     if (focus && focus.workspace_id) {
       await handleWorkspaceSelect(focus.workspace_id);
+      // Attach run-level follow: the bar tracks this run until terminal.
+      focusedRunId = focus.run_id || null;
+      if (focus.run_id) openOrchestratorDrawer();
       frontWindow();
     }
   } catch {
@@ -371,6 +375,16 @@ async function pollPendingFocus() {
   } finally {
     focusPolling = false;
     scheduleFocusPoll(2500);
+  }
+}
+
+function openOrchestratorDrawer() {
+  const dlg = document.getElementById('orchestratorDrawer');
+  if (!dlg) return;
+  if (typeof dlg.showModal === 'function' && !dlg.open) {
+    try { dlg.showModal(); } catch { dlg.setAttribute('open', ''); }
+  } else {
+    dlg.setAttribute('open', '');
   }
 }
 
@@ -610,6 +624,8 @@ function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, 1200); }
 // ── Orchestrator Bar ──────────────────────────────────────────
 let orchestratorTimer = null;
 let orchestratorState = null;
+// Run id attached via experiment-start focus hint; followed until terminal.
+let focusedRunId = null;
 async function refreshOrchestrator() {
   if (!currentId) return;
   try {
@@ -628,7 +644,12 @@ function renderOrchestratorBar(data) {
   const counts = data.counts || { q0: qPending.filter(x=>x.priority===0).length, q1: qPending.filter(x=>x.priority===1).length, q2: qPending.filter(x=>x.priority===2).length };
   const q0 = counts.q0, q1 = counts.q1, q2 = counts.q2;
   const runs = data.runs || [];
-  const cur = runs.find(r=>r.status==='running' || r.status==='queued') || runs[0];
+  const picked = pickDisplayedRun(runs, focusedRunId);
+  // Drop the hint only once the followed run is observably terminal; an
+  // unknown id means orchestrator state lags run creation, so keep waiting.
+  if (followedRunState(runs, focusedRunId) === 'terminal') focusedRunId = null;
+  const cur = picked.run;
+  const following = picked.following;
   // P1 fix: derive bar state correctly (was always RUNNING)
   let barState = 'IDLE', dotCls = 'idle';
   if (data.paused) { barState = 'PAUSED'; dotCls = 'paused'; }
@@ -637,9 +658,10 @@ function renderOrchestratorBar(data) {
   else if (qPending.length>0) { barState = 'QUEUED'; dotCls = 'pending'; }
   else if (cur && ['blocked','failed'].includes(cur.status)) { barState = cur.status.toUpperCase(); dotCls = 'blocked'; }
   const curText = cur ? `${esc(cur.id.slice(0,4))}:${esc(cur.status)}` : '—';
+  const followTag = following && cur ? ` <span class="ob-follow" title="Agent experiment under observation">◎追跡中 ${esc(cur.id.slice(0,8))}</span>` : '';
   bar.innerHTML = `
     <span class="ob-dot ${esc(dotCls)}"></span>
-    <strong>Orchestrator</strong> <span class="ob-sep">·</span> ${esc(barState)}
+    <strong>Orchestrator</strong> <span class="ob-sep">·</span> ${esc(barState)}${followTag}
     <span class="ob-sep">·</span> Q0 ${q0} <span class="ob-sep">|</span> Q1 ${q1} <span class="ob-sep">|</span> Q2 ${q2}
     <span class="ob-sep">·</span> ${curText}
     <span style="flex:1"></span>

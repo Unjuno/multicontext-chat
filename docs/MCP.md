@@ -122,6 +122,14 @@ workspace, and shows live member/run/tool state there. Routine traffic
 focus. Server endpoint `GET /api/focus/pending` is consume-once; the hint is
 in-memory only and never persisted into workspace state.
 
+**Run-level follow:** when the hint carries a `run_id`, the GUI tracks that run
+explicitly in the orchestrator bar (`◎追跡中 <short-id>`) and opens the
+orchestrator drawer, instead of deriving "current" from the run list. The
+follow drops automatically once the run reaches a terminal state
+(settled/blocked/failed/cancelled); an id that never appears (state lagging
+run creation) keeps waiting rather than clearing. Pure helpers live in
+`public/follow-run.js` with node unit tests (`test/follow-run.test.js`).
+
 **Manual minimal:**
 
 ```json
