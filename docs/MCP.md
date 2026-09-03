@@ -112,6 +112,16 @@ path; default resolution: env → `/Applications/MultiContext.app` →
 `MULTICONTEXT_NO_LAUNCH=1` (fail fast instead of opening the app).
 Logs go to stderr; stdout is JSON-RPC only.
 
+**Experiment → GUI attach:** when a proxied call starts a user-visible
+experiment (`create_workspace`, `orchestrate_create_session`,
+`orchestrate_start_run`, `orchestrate_run`), the launcher records a focus hint
+(`POST /api/workspaces/:id/focus`) and brings the Desktop app forward
+(`open -a`, no `-g`). The GUI consumes the hint once (2.5s poll), selects the
+workspace, and shows live member/run/tool state there. Routine traffic
+(broadcast, send, status, inspection) never sets the hint and never steals
+focus. Server endpoint `GET /api/focus/pending` is consume-once; the hint is
+in-memory only and never persisted into workspace state.
+
 **Manual minimal:**
 
 ```json

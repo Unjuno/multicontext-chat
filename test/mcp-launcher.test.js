@@ -2,13 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_PORT,
+  FOCUS_METHODS,
   ensureReady,
+  focusTargetOf,
   forwardOneLine,
+  frontApp,
   healthUrl,
   isAppRunning,
   isReady,
   mapHttpResponseToStdio,
   mcpUrl,
+  notifyFocus,
   openAppInBackground,
   requestIdOf,
   resolveAppPath,
@@ -180,4 +184,74 @@ test('forwardOneLine sends session header after capturing it', async () => {
   await forwardOneLine({ line: line2, endpoint: 'http://x/mcp', token: null, sessionId: r1.sessionId, fetchImpl });
   assert.equal(calls[1]['Mcp-Session-Id'], 'sess-1');
   assert.ok(!('Authorization' in calls[1]));
+});
+
+test('focus triggers only on experiment-start methods, with ids from params or result', () => {
+  assert.ok(FOCUS_METHODS.has('multicontext_create_workspace'));
+  assert.ok(FOCUS_METHODS.has('multicontext_orchestrate_start_run'));
+  assert.ok(!FOCUS_METHODS.has('multicontext_broadcast'));
+  assert.ok(!FOCUS_METHODS.has('multicontext_send'));
+  assert.ok(!FOCUS_METHODS.has('tools/list'));
+  // ids from request params
+  assert.deepEqual(
+    focusTargetOf({ method: 'multicontext_orchestrate_start_run', params: { workspace_id: 'ws-1', prompt: 'x' }, outLines: [] }),
+    { workspace_id: 'ws-1', run_id: null },
+  );
+  // ids from structured result
+  const created = JSON.stringify({ jsonrpc: '2.0', id: 'a', result: { workspace: { id: 'ws-2' }, run_id: 'run-9' } });
+  assert.deepEqual(
+    focusTargetOf({ method: 'multicontext_orchestrate_create_session', params: {}, outLines: [created] }),
+    { workspace_id: 'ws-2', run_id: 'run-9' },
+  );
+  // routine traffic never focuses, even with ids present
+  assert.equal(
+    focusTargetOf({ method: 'multicontext_broadcast', params: { workspace_id: 'ws-1' }, outLines: [created] }),
+    null,
+  );
+  assert.equal(focusTargetOf({ method: null, params: null, outLines: [created] }), null);
+  // experiment method without any workspace id: no focus
+  assert.equal(focusTargetOf({ method: 'multicontext_orchestrate_run', params: {}, outLines: [] }), null);
+  // multicontext_create_workspace returns the workspace itself, unwrapped
+  const bareWs = JSON.stringify({ jsonrpc: '2.0', id: 'b', result: { id: 'ws-bare', name: 'W', members: {} } });
+  assert.deepEqual(
+    focusTargetOf({ method: 'multicontext_create_workspace', params: {}, outLines: [bareWs] }),
+    { workspace_id: 'ws-bare', run_id: null },
+  );
+  // ...but a bare id on other methods must not misfire
+  assert.equal(
+    focusTargetOf({ method: 'multicontext_orchestrate_start_run', params: {}, outLines: [bareWs] }),
+    null,
+  );
+});
+
+test('notifyFocus posts workspace focus with run and reason', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, status: 200, text: async () => '{}', headers: new Map() };
+  };
+  await notifyFocus({ port: 4317, token: 'tok', workspace_id: 'ws-1', run_id: 'run-9', fetchImpl });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://127.0.0.1:4317/api/workspaces/ws-1/focus');
+  assert.equal(calls[0].init.method, 'POST');
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer tok');
+  assert.deepEqual(JSON.parse(calls[0].init.body), { run_id: 'run-9', reason: 'mcp-experiment-start' });
+});
+
+test('frontApp foregrounds the resolved app and is silent without one', () => {
+  const opened = [];
+  const ok = frontApp({
+    env: {}, existsSync: (p) => p === '/Applications/MultiContext.app', home: '/h',
+    runner: (args) => { opened.push(args); return { status: 0 }; },
+  });
+  assert.equal(ok, true);
+  // Foreground open: no -g flag (background open is only for cold bootstrap).
+  assert.deepEqual(opened, [['open', '-a', '/Applications/MultiContext.app']]);
+  const missing = frontApp({ env: {}, existsSync: () => false, home: '/h', runner: () => { throw new Error('must not run'); } });
+  assert.equal(missing, false);
+  const failed = frontApp({
+    env: {}, existsSync: () => true, home: '/h',
+    runner: () => ({ status: 1, stderr: 'nope' }),
+  });
+  assert.equal(failed, false);
 });

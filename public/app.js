@@ -336,6 +336,47 @@ function initRuntimeStatus() {
   }
   // Start polling after a short delay, don't overlap with initial load
   setTimeout(pollRuntime, 2000);
+  scheduleFocusPoll(2500);
+}
+
+// ── Desktop focus attach ────────────────────────────────────────────
+// An external agent (MCP bootstrap launcher) records experiment starts via
+// POST /api/workspaces/:id/focus. Consume the pending hint here: navigate to
+// the workspace and bring the window forward — only on experiment start,
+// never on routine traffic (the server only sets the hint for those).
+let focusPollTimer = null;
+let focusPolling = false;
+
+function frontWindow() {
+  try {
+    const t = window.__TAURI__;
+    const w = t && t.window && (typeof t.window.getCurrentWindow === 'function' ? t.window.getCurrentWindow() : null);
+    if (w && typeof w.setFocus === 'function') { void w.setFocus().catch(() => {}); return; }
+  } catch {}
+  try { window.focus(); } catch {}
+}
+
+async function pollPendingFocus() {
+  if (focusPolling) return;
+  focusPolling = true;
+  try {
+    const data = await request('/api/focus/pending');
+    const focus = data && data.focus;
+    if (focus && focus.workspace_id) {
+      await handleWorkspaceSelect(focus.workspace_id);
+      frontWindow();
+    }
+  } catch {
+    // Transient failure: keep polling; never break the runtime loop.
+  } finally {
+    focusPolling = false;
+    scheduleFocusPoll(2500);
+  }
+}
+
+function scheduleFocusPoll(delay = 2500) {
+  clearTimeout(focusPollTimer);
+  focusPollTimer = setTimeout(pollPendingFocus, delay);
 }
 
 function workspaceDot(members) {

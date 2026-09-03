@@ -26,6 +26,13 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
 
   const app = createApplication({ config, store, client, scheduler });
   scheduler.setApp?.(app);
+  // Transient Desktop-focus hint (in-memory only, never persisted): an external
+  // agent (e.g. via the MCP bootstrap launcher) records which workspace/run the
+  // GUI should navigate to. The GUI consumes it once via GET /api/focus/pending
+  // and then selects the workspace + brings its window forward. Only set on
+  // experiment start (workspace creation, orchestrator run start), never on
+  // routine traffic, so the window is not stolen on every tool call.
+  let pendingFocus = null;
   const authorized = (req) => !config.appToken || req.headers.authorization === `Bearer ${config.appToken}`;
   const toolAuthorized = (req) => !config.toolSecret || req.headers['x-multicontext-key'] === config.toolSecret;
   const mcpAuthorized = (req) => {
@@ -161,6 +168,11 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         return json(res, 201, enrichView(view, req));
       } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
+    if (url.pathname === '/api/focus/pending' && req.method === 'GET') {
+      const focus = pendingFocus;
+      pendingFocus = null;
+      return json(res, 200, { focus });
+    }
     // MCP runtime status also exposed via REST for convenience
     if (url.pathname === '/api/mcp/status' && req.method === 'GET') {
       return json(res, 200, { enabled: Boolean(config.mcpEnabled), tokenConfigured: Boolean(config.mcpToken), endpoint: `http://${config.host}:${config.port}/mcp` });
@@ -200,6 +212,19 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
 
+    if (parts[3] === 'focus' && parts.length === 4 && req.method === 'POST') {
+      try {
+        store.requireWorkspace(workspaceId);
+        const body = await readBody(req);
+        pendingFocus = {
+          workspace_id: workspaceId,
+          run_id: body.run_id ?? body.runId ?? null,
+          reason: body.reason ?? null,
+          at: new Date().toISOString(),
+        };
+        return json(res, 200, { ok: true, focus: pendingFocus });
+      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+    }
     if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') {
       try {
         const body = await readBody(req);
@@ -357,7 +382,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     } catch (error) { console.error(error); if (!res.headersSent) json(res, error.status || 500, { error: error.message || 'Internal error', code: error.code }); else res.end(); }
   });
   // Expose for testing
-  return { server, store, client, scheduler, workspaceView, app, config };
+  return { server, store, client, scheduler, workspaceView, app, config, getPendingFocus: () => pendingFocus };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

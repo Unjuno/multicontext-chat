@@ -178,6 +178,93 @@ export function requestIdOf(line) {
   return Array.isArray(parsed.value) ? null : (parsed.value.id ?? null);
 }
 
+// MCP methods that start a user-visible experiment. Only these trigger a
+// Desktop focus hint (workspace navigation + window front); routine traffic
+// such as broadcasts, sends, or status polls must never steal focus.
+export const FOCUS_METHODS = new Set([
+  'multicontext_create_workspace',
+  'multicontext_orchestrate_create_session',
+  'multicontext_orchestrate_start_run',
+  'multicontext_orchestrate_run',
+]);
+
+function digWorkspaceId(value, method = null) {
+  if (!value || typeof value !== 'object') return null;
+  if (typeof value.workspace_id === 'string') return value.workspace_id;
+  if (value.workspace && typeof value.workspace.id === 'string') return value.workspace.id;
+  // multicontext_create_workspace returns the workspace itself, not wrapped.
+  if (method === 'multicontext_create_workspace' && typeof value.id === 'string') return value.id;
+  return null;
+}
+
+function digRunId(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (typeof value.run_id === 'string') return value.run_id;
+  if (value.run && typeof value.run.id === 'string') return value.run.id;
+  return null;
+}
+
+function structuredResultsOf(outLines) {
+  const results = [];
+  for (const line of outLines) {
+    const parsed = tryParseJson(line);
+    if (!parsed.ok) continue;
+    const values = Array.isArray(parsed.value) ? parsed.value : [parsed.value];
+    for (const value of values) {
+      if (value !== null && typeof value === 'object' && 'result' in value) results.push(value.result);
+    }
+  }
+  return results;
+}
+
+function contentJsonOf(result) {
+  try {
+    const text = result?.content?.[0]?.text;
+    if (typeof text !== 'string') return null;
+    const parsed = JSON.parse(text);
+    return parsed !== null && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Decide whether an MCP exchange starts an experiment worth showing in the
+// Desktop GUI. Returns { workspace_id, run_id } or null. Pure.
+export function focusTargetOf({ method, params, outLines }) {
+  if (!FOCUS_METHODS.has(method)) return null;
+  let workspace_id = (params !== null && typeof params === 'object' && typeof params.workspace_id === 'string')
+    ? params.workspace_id
+    : null;
+  let run_id = null;
+  for (const result of structuredResultsOf(outLines)) {
+    workspace_id = workspace_id || digWorkspaceId(result, method) || digWorkspaceId(contentJsonOf(result), method);
+    const foundRun = digRunId(result) || digRunId(contentJsonOf(result));
+    run_id = run_id || foundRun;
+  }
+  if (!workspace_id) return null;
+  return { workspace_id, run_id };
+}
+
+export async function notifyFocus({ port = DEFAULT_PORT, token = null, workspace_id, run_id = null, fetchImpl = fetch } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetchImpl(`http://127.0.0.1:${port}/api/workspaces/${workspace_id}/focus`, {
+    method: 'POST', headers, body: JSON.stringify({ run_id, reason: 'mcp-experiment-start' }),
+  });
+  if (!response.ok) throw new Error(`focus hint HTTP ${response.status}`);
+  return true;
+}
+
+// Bring the Desktop app to the foreground when a new experiment starts.
+// Only ever called for experiment-start focus hints, never for routine
+// traffic. Best-effort: failures are swallowed by the caller.
+export function frontApp({ env = process.env, existsSync = fs.existsSync, home = os.homedir(), runner = (args) => spawnSync(args[0], args.slice(1), { encoding: 'utf8' }) } = {}) {
+  const appPath = resolveAppPath({ env, existsSync, home });
+  if (!appPath) return false;
+  const result = runner(['open', '-a', appPath]);
+  return result.status === 0;
+}
+
 export async function forwardOneLine({ line, endpoint, token, sessionId, fetchImpl = fetch }) {
   const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -222,10 +309,26 @@ export async function runLauncher({ env = process.env, fetchImpl = fetch, stdin 
   let sessionId = null;
   const writeLine = (text) => process.stdout.write(`${text}\n`);
   await readStdinLines(async (line) => {
+    let method = null;
+    let params = null;
     try {
+      const parsed = tryParseJson(line);
+      if (parsed.ok && parsed.value !== null && typeof parsed.value === 'object' && !Array.isArray(parsed.value)) {
+        if (parsed.value.method === 'tools/call') {
+          method = parsed.value.params?.name ?? null;
+          params = parsed.value.params?.arguments ?? null;
+        }
+      }
       const mapped = await forwardOneLine({ line, endpoint, token, sessionId, fetchImpl });
       if (mapped.sessionId) sessionId = mapped.sessionId;
       for (const out of mapped.outLines) writeLine(out);
+      const focus = focusTargetOf({ method, params, outLines: mapped.outLines });
+      if (focus) {
+        // Fire-and-forget: focus UX must never break MCP proxying.
+        notifyFocus({ port, token, workspace_id: focus.workspace_id, run_id: focus.run_id, fetchImpl })
+          .then(() => frontApp())
+          .catch((error) => console.error(`[multicontext-mcp-launcher] focus hint failed: ${error.message}`));
+      }
     } catch (error) {
       writeLine(JSON.stringify({
         jsonrpc: '2.0', id: requestIdOf(line),
