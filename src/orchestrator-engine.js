@@ -32,7 +32,8 @@ export function createRunEngine({ store, scheduler = null, invoke = {} }) {
   const dispatchRun = async ({ workspaceId, run, qItem, timeoutSeconds = 300 }) => {
     const currentRun = store.getOrchestratorRun(workspaceId, run.id);
     if (terminalRunStatuses.has(currentRun.status)) return { run: currentRun, qItem, enqueueResult: null, wait: null };
-    if (currentRun.status === 'queued') store.updateOrchestratorRun(workspaceId, run.id, { status: 'running' });
+    if (currentRun.status !== 'queued') return { run: currentRun, qItem, enqueueResult: null, wait: null };
+    store.updateOrchestratorRun(workspaceId, run.id, { status: 'running' });
     const currentQ = store.getWorkspace(workspaceId).orchestratorQueue.find(q => q.id === qItem.id);
     if (currentQ?.state === 'pending' || currentQ?.state === 'claimed') {
       store.updateOrchestratorQueueItem(workspaceId, qItem.id, { state: 'dispatched' });
@@ -92,10 +93,10 @@ export function createRunEngine({ store, scheduler = null, invoke = {} }) {
 
   const cancelRun = (workspaceId, runId) => {
     const run = store.getOrchestratorRun(workspaceId, runId);
-    if (run.status !== 'running' && run.status !== 'queued') return { run, aborted: 0, cancelledMemberItems: 0 };
+    if (!['running', 'queued', 'blocked', 'failed'].includes(run.status)) return { run, aborted: 0, cancelledMemberItems: 0 };
     const aborted = typeof scheduler?.abortByOrchestratorRun === 'function' ? scheduler.abortByOrchestratorRun(workspaceId, runId) : 0;
     const cancelledMemberItems = store.cancelOrchestratorRunMembers(workspaceId, runId);
-    store.updateOrchestratorRun(workspaceId, runId, { status: 'cancelled' });
+    try { store.updateOrchestratorRun(workspaceId, runId, { status: 'cancelled' }); } catch {}
     return { run: store.getOrchestratorRun(workspaceId, runId), aborted, cancelledMemberItems };
   };
 

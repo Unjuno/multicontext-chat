@@ -429,6 +429,51 @@ test('parity: cancel run is run-scoped on the canonical engine (MCP surface)', a
   });
 });
 
+test('parity: cancel run works on blocked and failed status (canonical method)', async () => {
+  await withStack(async ({ gui, callTool, store, scheduler, calls, app }) => {
+    const failing = { listAgents: async () => [{ id: 'agent-1' }], runAgent: async () => { throw new Error('boom'); } };
+    const mkFixture = async (viaGui, name) => {
+      const wsId = viaGui
+        ? (await gui('/api/workspaces', { method: 'POST', body: JSON.stringify({ name }) })).data.id
+        : (await callTool('multicontext_create_workspace', { name })).id;
+      const memberRes = viaGui
+        ? await gui(`/api/workspaces/${wsId}/members`, { method: 'POST', body: JSON.stringify({ name: 'A', agentId: 'agent-1' }) })
+        : await callTool('multicontext_add_chat', { workspace_id: wsId, name: 'A', agent_id: 'agent-1' });
+      const mid = viaGui ? memberRes.data.member.id : (memberRes.member || memberRes).id;
+      return { wsId, mid };
+    };
+    const realRun = scheduler.client.runAgent;
+    scheduler.client.runAgent = failing.runAgent;
+    const fA = await mkFixture(true, 'W');
+    const fB = await mkFixture(false, 'W');
+    assert.ok(fA.mid && fB.mid, 'members must exist');
+    // start runs via MCP (canonical engine) so both fixtures create orchestrator runs
+    const startedA = await callTool('multicontext_orchestrate_start_run', { workspace_id: fA.wsId, prompt: 'run work', chat_id: fA.mid });
+    const startedB = await callTool('multicontext_orchestrate_start_run', { workspace_id: fB.wsId, prompt: 'run work', chat_id: fB.mid });
+    assert.ok(startedA.run_id && startedB.run_id, 'runs must start');
+    // wait until both runs reach terminal status (failed)
+    const t0 = Date.now();
+    while (Date.now() - t0 < 10000) {
+      const runA = store.getOrchestratorRun(fA.wsId, startedA.run_id);
+      const runB = store.getOrchestratorRun(fB.wsId, startedB.run_id);
+      if (runA.status === 'failed' && runB.status === 'failed') break;
+      await new Promise(r => setTimeout(r, 10));
+    }
+    scheduler.client.runAgent = realRun;
+    const runAFinal = store.getOrchestratorRun(fA.wsId, startedA.run_id);
+    const runBFinal = store.getOrchestratorRun(fB.wsId, startedB.run_id);
+    assert.equal(runAFinal.status, 'blocked', 'fA run must be blocked');
+    assert.equal(runBFinal.status, 'blocked', 'fB run must be blocked');
+    const before = calls.length;
+    const cancelledA = await callTool('multicontext_orchestrate_cancel_run', { workspace_id: fA.wsId, run_id: startedA.run_id });
+    const cancelledB = await callTool('multicontext_orchestrate_cancel_run', { workspace_id: fB.wsId, run_id: startedB.run_id });
+    assert.ok(calls.slice(before).includes('cancelRun'), 'canonical cancelRun must be called');
+    assert.equal(store.getOrchestratorRun(fA.wsId, startedA.run_id).status, 'cancelled');
+    assert.equal(store.getOrchestratorRun(fB.wsId, startedB.run_id).status, 'cancelled');
+    void app;
+  });
+});
+
 test('parity: inspect via GUI tools route vs MCP tool (incl. former ReferenceError)', async () => {
   await withStack(async ({ gui, callTool, store, base }) => {
     const mkFixture = async (viaGui, name) => {

@@ -253,8 +253,8 @@ export class StateStore {
       queued: ['running', 'cancelled', 'failed'],
       running: ['settled', 'blocked', 'failed', 'cancelled'],
       settled: [],
-      blocked: [],
-      failed: [],
+      blocked: ['cancelled'],
+      failed: ['cancelled'],
       cancelled: [],
     };
     if (patch.status && patch.status !== run.status) {
@@ -264,9 +264,13 @@ export class StateStore {
         throw problem(`Invalid run transition ${from} -> ${to}`, 409);
       }
     }
-    // terminal already -> no overwrite
+    // terminal already -> no overwrite (exception: cancelled is allowed from blocked/failed)
     if (['settled','blocked','failed','cancelled'].includes(run.status) && patch.status && patch.status !== run.status) {
-      throw problem(`Run already terminal ${run.status}`, 409);
+      if (patch.status === 'cancelled' && ['blocked','failed'].includes(run.status)) {
+        // allowed
+      } else {
+        throw problem(`Run already terminal ${run.status}`, 409);
+      }
     }
     for (const k of ['status', 'error']) if (patch[k] !== undefined) run[k] = patch[k];
     if (patch.status === 'running' && !run.startedAt) run.startedAt = now();

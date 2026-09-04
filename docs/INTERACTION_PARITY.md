@@ -75,7 +75,7 @@ surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op)
 | create session / run (preset) | — | `multicontext_orchestrate_create_session`, `multicontext_orchestrate_run` | engine via `app.startRun` | = | = | = | MCP ONLY | agent-driven; GUI observes via state/focus |
 | pause dispatch | `POST …/orchestrator/pause` | `multicontext_orchestrate_set_paused` | `app.setOrchestratorPaused` → engine | = | = | = | VERIFIED | opposite-surface resume tested |
 | resume dispatch | `POST …/orchestrator/pause` (`paused:false`) | `multicontext_orchestrate_set_paused` (`paused:false`) | engine `resumeQueuedRun` (oldest queued) | = | = | = | VERIFIED | |
-| cancel run | — | `multicontext_orchestrate_cancel_run` | `app.cancelRun` → engine | = | = | = | MCP ONLY | run-scoped; unrelated human work preserved; tested in-flight via gate |
+| cancel run | — | `multicontext_orchestrate_cancel_run` | `app.cancelRun` → engine | = | = | = | VERIFIED | works on running, queued, **blocked**, **failed**; run-scoped; unrelated human work preserved |
 | read workspace | `GET /api/workspaces/:id` | `multicontext_get_workspace` | `app.getWorkspace` | = | n/a | = | VERIFIED | mid-flight provenance item identical on both reads |
 | read run / orchestrator state | `GET …/orchestrator` | `multicontext_orchestrate_get_run`, `…_get_state` | `store.getOrchestratorRun / getOrchestratorState` | = | n/a | = | PARTIAL | direct store reads; envelopes differ |
 | inspect chat | `POST /tools/:ws/:member/inspect-chat` | `multicontext_inspect_peer_chat` | `app.inspectPeerChat` | = | = | n/a | VERIFIED | incl. former ReferenceError regression |
@@ -89,12 +89,12 @@ surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op)
 | focus hints | `GET /api/focus/pending` (consume) | emitted on experiment-start tools | none (metadata) | n/a | n/a | n/a | TRANSPORT-ONLY | consume-once, in-memory, never alters domain |
 | toasts / dialogs / dirty guard / navigation | GUI rendering | MCP envelope | none (presentation) | n/a | n/a | n/a | TRANSPORT-ONLY | |
 
-Summary: **VERIFIED 17** (incl. 4 cross-cutting: permission-denied, invalid
+Summary: **VERIFIED 18** (incl. 4 cross-cutting: permission-denied, invalid
 input/ids, recursive provenance, tool-budget block), **PARTIAL 7**,
-**MCP ONLY 5**, **GUI ONLY 0** (visual-only operations intentionally unexposed),
+**MCP ONLY 4**, **GUI ONLY 0** (visual-only operations intentionally unexposed),
 **TRANSPORT-ONLY 2**.
 
-## Differential tests (`test/interaction-parity.test.js`, 16 tests)
+## Differential tests (`test/interaction-parity.test.js`, 17 tests)
 
 Each test builds equivalent fixtures A (GUI/HTTP) and B (MCP), normalizes only
 transport-only fields (uuids, timestamps, envelopes, caller origin), and
@@ -106,26 +106,32 @@ the same implementation.
    member · 4. broadcast state/queue/events · 5. direct enqueue · 6. stop member
    + stop workspace · 7. retry blocked member · 8. compile precondition + result
    isolation · 9. pause/resume dispatch (opposite-surface resume) · 10. cancel
-   run run-scoped (in-flight, gated) · 11. inspect (ReferenceError regression) ·
-   12. send_to_chat idempotency + replay + bad key · 13. permission-denied
-   inspect/send (identical codes `CROSS_CHAT_INSPECT_DISABLED` /
-   `CROSS_CHAT_SEND_DISABLED`) · 14. invalid input + unknown ids ·
-   15. recursive provenance A→B→C collapses to root run/Q + GUI/MCP read
+   run run-scoped (in-flight, gated) · 11. cancel run on blocked/failed status
+   (store transition `blocked/failed → cancelled`, run-scoped) · 12. inspect
+   (ReferenceError regression) · 13. send_to_chat idempotency + replay + bad key ·
+   14. permission-denied inspect/send (identical codes `CROSS_CHAT_INSPECT_DISABLED` /
+   `CROSS_CHAT_SEND_DISABLED`) · 15. invalid input + unknown ids ·
+   16. recursive provenance A→B→C collapses to root run/Q + GUI/MCP read
    agreement mid-flight + normalized messages/events equality ·
-   16. native tool-budget block (`TOOL_ITERATION_BUDGET_EXHAUSTED`, deliveries
+   17. native tool-budget block (`TOOL_ITERATION_BUDGET_EXHAUSTED`, deliveries
    kept, `BLOCKED` on both surfaces).
 
-Notable: while writing test 16, a fixed `call_id` caused the second tool round
+Notable: while writing test 17, a fixed `call_id` caused the second tool round
 to replay instead of deliver — the canonical atomic receipt working as
-designed. Test uses unique call ids per round.
+designed. Test uses unique call ids per round (test 16).
 
 ## Remaining limitations
 
 - PARTIAL rows have shared-impl evidence but no differential test yet (delete
   workspace, run-state reads, list peers, wait, message reads, compile-result
   read). Promote them by adding A/B tests, not by weakening the suite.
-- Run/session creation, cancellation, and queue mechanics are MCP-only
+- Run/session creation and queue mechanics are MCP-only
   surfaces; GUI parity for them means observing identical state, not issuing
-  the operations.
+  the operations. (cancel now VERIFIED — it works on all terminal statuses)
 - MCP error envelopes are opaque SDK errors while GUI returns `{error, code}`
   JSON; parity is proven at the canonical error (`status/code/message`) level.
+
+Implementation notes:
+- `store.js` transition table: `blocked: ['cancelled']`, `failed: ['cancelled']` (were `[]`); terminal immutability exception for `cancelled` from blocked/failed
+- `orchestrator-engine.js`: `cancelRun` guard changed from `!(running||queued)` to `!['running','queued','blocked','failed'].includes(status)`; TOCTOU fixed via store atomic transition validation; `dispatchRun` race fixed by re-checking status before dispatching
+- Total: **264** Node tests (+1), 46 Rust tests, bundle verified
