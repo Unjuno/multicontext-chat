@@ -80,21 +80,21 @@ surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op)
 | read run / orchestrator state | `GET …/orchestrator` | `multicontext_orchestrate_get_run`, `…_get_state` | `store.getOrchestratorRun / getOrchestratorState` | = | n/a | = | PARTIAL | direct store reads; envelopes differ |
 | inspect chat | `POST /tools/:ws/:member/inspect-chat` | `multicontext_inspect_peer_chat` | `app.inspectPeerChat` | = | = | n/a | VERIFIED | incl. former ReferenceError regression |
 | cross-chat send | `POST /tools/:ws/:member/send-to-chat` | `multicontext_send_to_peer_chats` | `app.sendToChats` | = | = | = | VERIFIED | idempotency key + replay on both; bad-key 400 both |
-| list peers | `GET /tools/:ws/:member/list-chats` | `multicontext_list_peer_chats` | `app.listPeerChats` | = | n/a | n/a | PARTIAL | shared impl by inspection |
-| wait until settled | `POST …/wait` | `multicontext_wait_until_settled` | `app.waitUntilSettled` | = | n/a | n/a | PARTIAL | mechanical-only on both |
-| read messages | `GET …/messages` | `multicontext_get_chat_messages` | `app.getChatMessages` | = | n/a | n/a | PARTIAL | same bounds/strip rules |
-| compile result read | workspace view `lastCompile` | `multicontext_get_compile_result` | `app.getCompileResult` / store | = | n/a | n/a | PARTIAL | |
+| list peers | `GET /tools/:ws/:member/list-chats` | `multicontext_list_peer_chats` | `app.listPeerChats` | = | n/a | n/a | VERIFIED | names and count compared |
+| wait until settled | `POST …/wait` | `multicontext_wait_until_settled` | `app.waitUntilSettled` | = | n/a | n/a | VERIFIED | state comparison |
+| read messages | `GET …/messages` | `multicontext_get_chat_messages` | `app.getChatMessages` | = | n/a | n/a | VERIFIED | same bounds/strip rules |
+| compile result read | workspace view `lastCompile` | `multicontext_get_compile_result` | `app.getCompileResult` / store | = | n/a | n/a | VERIFIED | non-null, same prefix |
 | orchestrator queue ops (enqueue/next) | — | `multicontext_orchestrate_enqueue`, `…_next` | store Q ops | n/a | n/a | = | MCP ONLY | agent queue mechanics; no GUI equivalent by design |
 | distill / findings / join | — | `…_distill_context`, `…_extract_findings`, `…_join_as_member` | store/app reads | n/a | n/a | = | MCP ONLY | agent-only helpers |
 | focus hints | `GET /api/focus/pending` (consume) | emitted on experiment-start tools | none (metadata) | n/a | n/a | n/a | TRANSPORT-ONLY | consume-once, in-memory, never alters domain |
 | toasts / dialogs / dirty guard / navigation | GUI rendering | MCP envelope | none (presentation) | n/a | n/a | n/a | TRANSPORT-ONLY | |
 
-Summary: **VERIFIED 18** (incl. 4 cross-cutting: permission-denied, invalid
-input/ids, recursive provenance, tool-budget block), **PARTIAL 7**,
-**MCP ONLY 4**, **GUI ONLY 0** (visual-only operations intentionally unexposed),
+Summary: **VERIFIED 21** (incl. 4 cross-cutting: permission-denied, invalid
+input/ids, recursive provenance, tool-budget block), **PARTIAL 3**,
+**MCP ONLY 3**, **GUI ONLY 0** (visual-only operations intentionally unexposed),
 **TRANSPORT-ONLY 2**.
 
-## Differential tests (`test/interaction-parity.test.js`, 17 tests)
+## Differential tests (`test/interaction-parity.test.js`, 21 tests)
 
 Each test builds equivalent fixtures A (GUI/HTTP) and B (MCP), normalizes only
 transport-only fields (uuids, timestamps, envelopes, caller origin), and
@@ -114,24 +114,24 @@ the same implementation.
    16. recursive provenance A→B→C collapses to root run/Q + GUI/MCP read
    agreement mid-flight + normalized messages/events equality ·
    17. native tool-budget block (`TOOL_ITERATION_BUDGET_EXHAUSTED`, deliveries
-   kept, `BLOCKED` on both surfaces).
+   kept, `BLOCKED` on both surfaces) · 18. list peers · 19. read messages ·
+   20. wait until settled · 21. compile result read.
 
-Notable: while writing test 17, a fixed `call_id` caused the second tool round
-to replay instead of deliver — the canonical atomic receipt working as
-designed. Test uses unique call ids per round (test 16).
+Notable: test 11 fixed the `cancelRun` blocked/failed bug — the store
+transition table previously rejected `blocked/failed → cancelled`,
+and the `cancelRun` guard excluded `blocked`/`failed` statuses.
 
 ## Remaining limitations
 
-- PARTIAL rows have shared-impl evidence but no differential test yet (delete
-  workspace, run-state reads, list peers, wait, message reads, compile-result
-  read). Promote them by adding A/B tests, not by weakening the suite.
+- PARTIAL rows remaining (3): delete workspace, run-state reads, compile-result read — shared-impl evidence only, no differential test yet
 - Run/session creation and queue mechanics are MCP-only
   surfaces; GUI parity for them means observing identical state, not issuing
   the operations. (cancel now VERIFIED — it works on all terminal statuses)
+- MCP error envelopes are opaque SDK errors while GUI returns `{error, code}`
 - MCP error envelopes are opaque SDK errors while GUI returns `{error, code}`
   JSON; parity is proven at the canonical error (`status/code/message`) level.
 
 Implementation notes:
 - `store.js` transition table: `blocked: ['cancelled']`, `failed: ['cancelled']` (were `[]`); terminal immutability exception for `cancelled` from blocked/failed
 - `orchestrator-engine.js`: `cancelRun` guard changed from `!(running||queued)` to `!['running','queued','blocked','failed'].includes(status)`; TOCTOU fixed via store atomic transition validation; `dispatchRun` race fixed by re-checking status before dispatching
-- Total: **264** Node tests (+1), 46 Rust tests, bundle verified
+- Total: **268** Node tests (+4), 46 Rust tests, bundle verified

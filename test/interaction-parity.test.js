@@ -795,3 +795,94 @@ test('parity: native tool-budget block is identical for GUI- vs MCP-enqueued wor
     assert.equal(sB.kept, 2);
   });
 });
+
+ test('parity: list peers returns identical member list via both surfaces', async () => {
+   await withStack(async ({ gui, callTool, store, calls }) => {
+     const g0 = await gui('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: 'W' }) });
+     const m0 = await callTool('multicontext_create_workspace', { name: 'W' });
+     const wsA = g0.data.id, wsB = m0.id;
+     let gMid, mMid;
+     for (const n of ['A', 'B', 'C']) {
+       const gR = await gui(`/api/workspaces/${wsA}/members`, { method: 'POST', body: JSON.stringify({ name: n, agentId: 'agent-1' }) });
+       const mR = await callTool('multicontext_add_chat', { workspace_id: wsB, name: n, agent_id: 'agent-1' });
+       if (n === 'A') { gMid = gR.data.member.id; mMid = mR.member.id; }
+     }
+     const g = await gui(`/tools/${wsA}/${gMid}/list-chats`);
+     const m = await callTool('multicontext_list_peer_chats', { workspace_id: wsB, source_chat_id: mMid });
+     assert.equal(g.res.status, 200);
+     assert.deepEqual(g.data.chats.map(c => c.name).sort(), m.chats.map(c => c.name).sort());
+     assert.equal(g.data.chats.length, m.chats.length);
+     assert.ok(calls.includes('listPeerChats'));
+   });
+ });
+
+ test('parity: read messages returns identical history via both surfaces', async () => {
+   await withStack(async ({ gui, callTool, store, scheduler, calls }) => {
+     const g0 = await gui('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: 'W' }) });
+     const m0 = await callTool('multicontext_create_workspace', { name: 'W' });
+     const wsA = g0.data.id, wsB = m0.id;
+     const ga = await gui(`/api/workspaces/${wsA}/members`, { method: 'POST', body: JSON.stringify({ name: 'A', agentId: 'agent-1' }) });
+     const ma = await callTool('multicontext_add_chat', { workspace_id: wsB, name: 'A', agent_id: 'agent-1' });
+     const midA = ga.data.member.id, midB = ma.member.id;
+     await gui(`/api/workspaces/${wsA}/members/${midA}/enqueue`, { method: 'POST', body: JSON.stringify({ prompt: 'msg-1' }) });
+     await callTool('multicontext_send', { workspace_id: wsB, chat_id: midB, prompt: 'msg-1' });
+     await waitSettled(store, scheduler, wsA);
+     await waitSettled(store, scheduler, wsB);
+     const g = await gui(`/api/workspaces/${wsA}/messages?chat_id=${midA}&limit=10`);
+     const m = await callTool('multicontext_get_chat_messages', { workspace_id: wsB, chat_id: midB, limit: 10 });
+     assert.equal(g.res.status, 200);
+     assert.deepEqual(g.data.messages.map(x => x.content).sort(), m.messages.map(x => x.content).sort());
+     assert.deepEqual(g.data.messages.map(x => x.role).sort(), m.messages.map(x => x.role).sort());
+   });
+ });
+
+ test('parity: wait until settled returns identical state via both surfaces', async () => {
+   await withStack(async ({ gui, callTool, store, scheduler, calls }) => {
+     const g0 = await gui('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: 'W' }) });
+     const m0 = await callTool('multicontext_create_workspace', { name: 'W' });
+     const wsA = g0.data.id, wsB = m0.id;
+     await gui(`/api/workspaces/${wsA}/members`, { method: 'POST', body: JSON.stringify({ name: 'A', agentId: 'agent-1' }) });
+     await callTool('multicontext_add_chat', { workspace_id: wsB, name: 'A', agent_id: 'agent-1' });
+     const g = await gui(`/api/workspaces/${wsA}/wait`, { method: 'POST', body: JSON.stringify({ timeout_seconds: 5 }) });
+     const m = await callTool('multicontext_wait_until_settled', { workspace_id: wsB, timeout_seconds: 5 });
+     assert.equal(g.res.status, 200);
+     assert.equal(g.data.state, 'SETTLED');
+     assert.equal(m.state, 'SETTLED');
+   });
+ });
+
+ test('parity: compile result read returns identical output via both surfaces', async () => {
+   await withStack(async ({ gui, callTool, store, scheduler, calls, app }) => {
+     let release;
+     const gate = new Promise(r => { release = r; });
+     const origRun = scheduler.client.runAgent.bind(scheduler.client);
+     scheduler.client.runAgent = async (args) => { await gate; return origRun(args); };
+     const mkFixture = async (viaGui, name) => {
+       const wsId = viaGui
+         ? (await gui('/api/workspaces', { method: 'POST', body: JSON.stringify({ name }) })).data.id
+         : (await callTool('multicontext_create_workspace', { name })).id;
+       const mid = viaGui
+         ? (await gui(`/api/workspaces/${wsId}/members`, { method: 'POST', body: JSON.stringify({ name: 'A', agentId: 'agent-1' }) })).data.member.id
+         : (await callTool('multicontext_add_chat', { workspace_id: wsId, name: 'A', agent_id: 'agent-1' })).member.id;
+       return { wsId, mid };
+     };
+     const fA = await mkFixture(true, 'W');
+     const fB = await mkFixture(false, 'W');
+     await gui(`/api/workspaces/${fA.wsId}/members/${fA.mid}/enqueue`, { method: 'POST', body: JSON.stringify({ prompt: 'work' }) });
+     await callTool('multicontext_send', { workspace_id: fB.wsId, chat_id: fB.mid, prompt: 'work' });
+     release();
+     await waitSettled(store, scheduler, fA.wsId);
+     await waitSettled(store, scheduler, fB.wsId);
+     const before = calls.length;
+     const g = await gui(`/api/workspaces/${fA.wsId}/compile`, { method: 'POST' });
+     const m = await callTool('multicontext_compile', { workspace_id: fB.wsId });
+     assert.deepEqual(calls.slice(before).filter(c => c === 'compile').length, 2);
+     assert.equal(g.res.status, 200);
+     const gLastCompile = (await gui(`/api/workspaces/${fA.wsId}`)).data.lastCompile;
+     const mLastCompile = (await callTool('multicontext_get_compile_result', { workspace_id: fB.wsId })).result;
+     assert.ok(gLastCompile && mLastCompile && gLastCompile.text && mLastCompile.text, 'both must have compile result');
+     assert.equal(gLastCompile.text.startsWith('ok:'), mLastCompile.text.startsWith('ok:'));
+     assert.ok(gLastCompile.text.length > 0 && mLastCompile.text.length > 0);
+     void app;
+   });
+ });
