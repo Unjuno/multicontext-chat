@@ -1,4 +1,5 @@
 import { StateStore, publicMember, searchMemberMessages } from './store.js';
+import { createRunEngine, targetFromArgs } from './orchestrator-engine.js';
 
 const AGENT_SELECTION_REQUIRED = 'AGENT_SELECTION_REQUIRED';
 const AGENT_NOT_AVAILABLE = 'AGENT_NOT_AVAILABLE';
@@ -390,7 +391,12 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return { deleted: true, workspace_id: workspaceId, chat_id: chatId };
   }
 
-  async function broadcast(workspaceId, prompt, { orchestratorRunId = null, orchestratorQId = null } = {}) {
+  // Human/agent-originated traffic emits human.* domain events from the
+  // canonical method so GUI and MCP surfaces produce identical activity.
+  // Orchestrator-dispatched work (orchestratorRunId set) emits only the
+  // q.dispatched provenance event. `origin` records the calling surface
+  // ('human' GUI default, 'mcp' agent) as metadata; all else is identical.
+  async function broadcast(workspaceId, prompt, { orchestratorRunId = null, orchestratorQId = null, origin = 'human' } = {}) {
     const text = String(prompt || '').trim();
     if (!text) throw problem('Prompt is required', 400);
     const workspace = store.requireWorkspace(workspaceId);
@@ -434,10 +440,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const items = store.broadcast(workspaceId, text, { orchestratorRunId, orchestratorQId });
     scheduler.kickWorkspace(workspaceId);
     try { store.appendEvent(workspaceId, { type: 'q.dispatched', origin: orchestratorRunId ? 'orchestrator' : 'human', qId: orchestratorQId || null, detail: { broadcast: true, runId: orchestratorRunId } }); } catch {}
+    try { if (!orchestratorRunId) store.appendEvent(workspaceId, { type: 'human.broadcast', origin, detail: { prompt: text.slice(0, 200) } }); } catch {}
     return { items, workspace: await getWorkspace(workspaceId) };
   }
 
-  async function send(workspaceId, chatId, prompt, { orchestratorRunId = null, orchestratorQId = null } = {}) {
+  async function send(workspaceId, chatId, prompt, { orchestratorRunId = null, orchestratorQId = null, origin = 'human' } = {}) {
     const text = String(prompt || '').trim();
     if (!text) throw problem('Prompt is required', 400);
     const workspace = store.requireWorkspace(workspaceId);
@@ -471,6 +478,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const item = store.enqueue(workspaceId, chatId, text, { source: orchestratorRunId ? 'orchestrator' : 'user', orchestratorRunId, orchestratorQId });
     scheduler.kickMember(workspaceId, chatId);
     try { if (orchestratorRunId) store.appendEvent(workspaceId, { type: 'q.dispatched', origin: 'orchestrator', qId: orchestratorQId, memberId: chatId, runId: orchestratorRunId }); } catch {}
+    try { if (!orchestratorRunId) store.appendEvent(workspaceId, { type: 'human.send', origin, memberId: chatId, detail: { prompt: text.slice(0, 200) } }); } catch {}
     return { item, workspace: await getWorkspace(workspaceId) };
   }
 
@@ -499,11 +507,23 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return { target: { id: target.id, name: target.name }, results };
   }
 
-  async function sendToChats(workspaceId, sourceMemberId, targetRefs, prompt, { sourceQueueItemId = null, toolCallId = null } = {}) {
+  async function sendToChats(workspaceId, sourceMemberId, targetRefs, prompt, { sourceQueueItemId = null, toolCallId = null, idempotencyKey = null } = {}) {
     const hasQueue = sourceQueueItemId !== null && sourceQueueItemId !== undefined && String(sourceQueueItemId).trim() !== '';
     const hasCall = toolCallId !== null && toolCallId !== undefined && String(toolCallId).trim() !== '';
     if (hasQueue !== hasCall) throw problem('Invalid idempotency context: both sourceQueueItemId and toolCallId must be provided together', 400);
-    const useAtomic = hasQueue && hasCall;
+    // External callers (MCP peer tool, HTTP Action) have no native queue/call
+    // ids. An explicit idempotency key gives them the same atomic receipt +
+    // replay semantics: retries with the same key return replayed:true with
+    // no duplicate delivery.
+    let key = null;
+    if (idempotencyKey !== null && idempotencyKey !== undefined && String(idempotencyKey) !== '') {
+      key = String(idempotencyKey);
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(key)) throw problem('Invalid idempotency_key: use 1-64 chars of [A-Za-z0-9_-]', 400);
+      if (hasQueue || hasCall) throw problem('idempotency_key cannot be combined with sourceQueueItemId/toolCallId', 400);
+    }
+    const atomicQueueId = hasQueue ? String(sourceQueueItemId) : key;
+    const atomicCallId = hasCall ? String(toolCallId) : key;
+    const useAtomic = Boolean(atomicQueueId && atomicCallId);
     const text = String(prompt || '').trim();
     if (!text) throw problem('Prompt is required', 400);
     const workspace = store.requireWorkspace(workspaceId);
@@ -547,7 +567,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       }
     }
     if (useAtomic) {
-      const result = store.enqueueCrossChatAtomic(workspaceId, sourceMemberId, String(sourceQueueItemId), String(toolCallId), refs, text);
+      const result = store.enqueueCrossChatAtomic(workspaceId, sourceMemberId, atomicQueueId, atomicCallId, refs, text);
       // Only kick targets on first commit, not on replay
       if (!result.replayed) {
         for (const d of result.deliveries) {
@@ -564,13 +584,15 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return { accepted: true, replayed: false, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) };
   }
 
-  function stopWorkspace(workspaceId) {
+  function stopWorkspace(workspaceId, { origin = 'human' } = {}) {
     scheduler.stopWorkspace(workspaceId);
+    try { store.appendEvent(workspaceId, { type: 'human.stop', origin, detail: { workspaceId } }); } catch {}
     return getWorkspace(workspaceId);
   }
 
-  function stopChat(workspaceId, chatId) {
+  function stopChat(workspaceId, chatId, { origin = 'human' } = {}) {
     scheduler.stopMember(workspaceId, chatId);
+    try { store.appendEvent(workspaceId, { type: 'human.stop', origin, memberId: chatId }); } catch {}
     return getWorkspace(workspaceId);
   }
 
@@ -668,6 +690,29 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     }
   }
 
+  // Canonical orchestrator run engine: GUI HTTP routes and MCP tools must
+  // share validation, queue behavior, provenance, events, pause/resume
+  // dispatch, and cancellation. Implemented once in orchestrator-engine.js.
+  const runEngine = createRunEngine({ store, scheduler, invoke: { send, broadcast, waitUntilSettled } });
+
+  // Same single-object call convention as the engine so MCP wrappers and any
+  // future GUI callers share one shape.
+  function startRun({ workspaceId, prompt, priority = 1, target = null, timeoutSeconds = 300, detached = true, origin = 'mcp', actor = 'orchestrator' } = {}) {
+    return runEngine.startRun({ workspaceId, prompt, priority, target, timeoutSeconds, detached, origin, actor });
+  }
+
+  function cancelRun(workspaceId, runId) {
+    return runEngine.cancelRun(workspaceId, runId);
+  }
+
+  function setOrchestratorPaused(workspaceId, paused) {
+    return runEngine.setPaused(workspaceId, paused);
+  }
+
+  function resumeQueuedRun(workspaceId) {
+    return runEngine.resumeQueuedRun(workspaceId);
+  }
+
   async function getChatMessages(workspaceId, chatId, { limit = 50, since = null } = {}) {
     const { member } = store.requireMember(workspaceId, chatId);
     let msgs = member.messages.filter(m => !m.pending);
@@ -709,7 +754,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     waitUntilSettled,
     getChatMessages,
     getCompileResult,
+    startRun,
+    cancelRun,
+    setOrchestratorPaused,
+    resumeQueuedRun,
     // helpers for testing / sharing
-    _internal: { effectiveAgentIdForMember, validateAgentId, getAvailableAgents, getResolvedSingleAgentId, compilingWorkspaces },
+    _internal: { effectiveAgentIdForMember, validateAgentId, getAvailableAgents, getResolvedSingleAgentId, compilingWorkspaces, targetFromArgs },
   };
 }

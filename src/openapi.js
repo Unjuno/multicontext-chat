@@ -11,6 +11,11 @@ export function buildActionSpec({ origin, workspace, member, requireSecret }) {
   const errorResponses = { '400': errorResponse('400', 'Bad request — invalid or missing parameters'), '401': errorResponse('401', 'Unauthorized — missing or invalid X-Multicontext-Key'), '403': errorResponse('403', 'Forbidden — chat not active or access denied'), '404': errorResponse('404', 'Not found — workspace or chat does not exist') };
   const inspectParams = toolParams('inspect_chat');
   const sendParams = toolParams('send_to_chat');
+  // External idempotency key for the HTTP surface only; the native model-facing
+  // tool schema in cross-chat-tools.js intentionally stays clean.
+  const sendParamsHttp = sendParams && sendParams.type === 'object'
+    ? { ...sendParams, properties: { ...(sendParams.properties || {}), idempotency_key: { type: 'string', description: 'Optional idempotency key ([A-Za-z0-9_-], 1-64 chars). Retries with the same key replay without duplicate delivery.' } } }
+    : sendParams;
   return {
     openapi: '3.1.0',
     info: { title: `MultiContext tools — ${workspace.name} / ${member.name}`, version: '1.2.0', description: 'Tools for listing peer chats, reading selected peer history, and queuing prompts to selected peer chats.' },
@@ -21,7 +26,7 @@ export function buildActionSpec({ origin, workspace, member, requireSecret }) {
       [`${base}/inspect-chat`]: { post: { operationId: 'inspect_chat', summary: 'Search selected messages from one peer chat.', security,
         requestBody: { required: true, content: { 'application/json': { schema: inspectParams } } }, responses: { '200': { description: 'Selected peer messages' }, ...errorResponses } } },
       [`${base}/send-to-chat`]: { post: { operationId: 'send_to_chat', summary: 'Queue the same prompt into one or two peer chats.', security,
-        requestBody: { required: true, content: { 'application/json': { schema: sendParams } } }, responses: { '202': { description: 'Prompt accepted into target FIFO queue(s)' }, ...errorResponses, '409': errorResponse('409', 'Conflict — target is inactive or member reference is ambiguous') } } },
+        requestBody: { required: true, content: { 'application/json': { schema: sendParamsHttp } } }, responses: { '202': { description: 'Prompt accepted into target FIFO queue(s)' }, ...errorResponses, '409': errorResponse('409', 'Conflict — target is inactive or member reference is ambiguous') } } },
     },
   };
 }

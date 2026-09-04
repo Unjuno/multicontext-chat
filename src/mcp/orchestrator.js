@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { createRunEngine, targetFromArgs } from '../orchestrator-engine.js';
 
 // In-memory Q fallback for tests without store
 const QStore = new Map();
@@ -61,87 +62,21 @@ Clearly distinguish known results, heuristic reasoning, and unresolved questions
   },
 };
 
-const terminalRunStatuses = new Set(['settled', 'blocked', 'failed', 'cancelled']);
-const targetFromArgs = ({ broadcast, chat_id }) => broadcast ? { type: 'broadcast' } : chat_id ? { type: 'member', memberId: chat_id } : { type: 'broadcast' };
-
 export function registerOrchestratorTools(server, app, store) {
   const hasStore = store && typeof store.createOrchestratorRun === 'function';
-  const scheduler = app?._scheduler || null;
-
-  const createRunRecord = ({ workspaceId, prompt, priority = 1, target }) => {
-    const run = store.createOrchestratorRun(workspaceId, { prompt, priority, origin: 'mcp', actor: 'orchestrator' });
-    const qItem = store.enqueueOrchestrator(workspaceId, prompt, { priority, origin: 'mcp', actor: 'orchestrator', runId: run.id, target });
-    return { run, qItem };
-  };
-
-  const dispatchRun = async ({ workspaceId, run, qItem, timeoutSeconds = 300 }) => {
-    const currentRun = store.getOrchestratorRun(workspaceId, run.id);
-    if (terminalRunStatuses.has(currentRun.status)) return { run: currentRun, qItem, enqueueResult: null, wait: null };
-    if (currentRun.status === 'queued') store.updateOrchestratorRun(workspaceId, run.id, { status: 'running' });
-    const currentQ = store.getWorkspace(workspaceId).orchestratorQueue.find(q => q.id === qItem.id);
-    if (currentQ?.state === 'pending' || currentQ?.state === 'claimed') {
-      store.updateOrchestratorQueueItem(workspaceId, qItem.id, { state: 'dispatched' });
-    }
-
-    let enqueueResult;
-    try {
-      const target = qItem.target || { type: 'broadcast' };
-      const provenance = { orchestratorRunId: run.id, orchestratorQId: qItem.id };
-      if (target.type === 'member') enqueueResult = await app.send(workspaceId, target.memberId, qItem.prompt, provenance);
-      else enqueueResult = await app.broadcast(workspaceId, qItem.prompt, provenance);
-
-      const wait = await app.waitUntilSettled(workspaceId, timeoutSeconds, 500);
-      const latest = store.getOrchestratorRun(workspaceId, run.id);
-      if (terminalRunStatuses.has(latest.status) && latest.status !== 'running') return { run: latest, qItem, enqueueResult, wait };
-
-      const finalStatus = wait.state === 'SETTLED' ? 'settled' : wait.state === 'BLOCKED' ? 'blocked' : 'failed';
-      store.updateOrchestratorRun(workspaceId, run.id, { status: finalStatus });
-      store.markDispatchedQDone(workspaceId, run.id, finalStatus);
-      return { run: store.getOrchestratorRun(workspaceId, run.id), qItem, enqueueResult, wait };
-    } catch (error) {
-      const latest = store.getOrchestratorRun(workspaceId, run.id);
-      if (!terminalRunStatuses.has(latest.status)) {
-        try { store.updateOrchestratorRun(workspaceId, run.id, { status: 'failed', error: String(error.message || error) }); } catch {}
-        try {
-          const q = store.getWorkspace(workspaceId).orchestratorQueue.find(x => x.id === qItem.id);
-          if (q && (q.state === 'pending' || q.state === 'claimed' || q.state === 'dispatched')) {
-            if (q.state === 'pending') store.updateOrchestratorQueueItem(workspaceId, q.id, { state: 'dispatched' });
-            store.updateOrchestratorQueueItem(workspaceId, q.id, { state: 'failed' });
-          }
-        } catch {}
-      }
-      throw error;
-    }
-  };
-
-  const startRun = ({ workspaceId, prompt, priority = 1, target, timeoutSeconds = 300, detached = true }) => {
-    const { run, qItem } = createRunRecord({ workspaceId, prompt, priority, target });
-    const paused = Boolean(store.getWorkspace(workspaceId).orchestratorPaused);
-    if (paused) return { run, qItem, paused: true, execution: null };
-    const execution = dispatchRun({ workspaceId, run, qItem, timeoutSeconds });
-    if (detached) void execution.catch(() => {});
-    return { run, qItem, paused: false, execution };
-  };
-
-  const resumeQueuedRun = (workspaceId) => {
-    if (store.getWorkspace(workspaceId).orchestratorPaused) return null;
-    const run = store.listOrchestratorRuns(workspaceId).filter(r => r.status === 'queued').sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
-    if (!run) return null;
-    const qItem = store.getWorkspace(workspaceId).orchestratorQueue.find(q => q.runId === run.id && q.state === 'pending');
-    if (!qItem) return null;
-    const execution = dispatchRun({ workspaceId, run, qItem, timeoutSeconds: 300 });
-    void execution.catch(() => {});
-    return { run, qItem };
-  };
-
-  const cancelRun = (workspaceId, runId) => {
-    const run = store.getOrchestratorRun(workspaceId, runId);
-    if (run.status !== 'running' && run.status !== 'queued') return { run, aborted: 0, cancelledMemberItems: 0 };
-    const aborted = typeof scheduler?.abortByOrchestratorRun === 'function' ? scheduler.abortByOrchestratorRun(workspaceId, runId) : 0;
-    const cancelledMemberItems = store.cancelOrchestratorRunMembers(workspaceId, runId);
-    store.updateOrchestratorRun(workspaceId, runId, { status: 'cancelled' });
-    return { run: store.getOrchestratorRun(workspaceId, runId), aborted, cancelledMemberItems };
-  };
+  // Single canonical run engine (same module the application API uses), so
+  // MCP-originated runs share validation, queue behavior, provenance, events,
+  // pause/resume dispatch, and cancellation with any other surface.
+  // `invoke: app` works with stub apps in tests: methods are only required
+  // when a run actually dispatches member work.
+  const engine = hasStore ? createRunEngine({ store, scheduler: app?._scheduler || null, invoke: app }) : null;
+  // Prefer the canonical application methods so MCP traffic provably routes
+  // through the same implementation as any other surface; fall back to the
+  // shared engine directly for minimal stub apps used in unit tests.
+  const useApp = (name) => (app && typeof app[name] === 'function' ? app[name].bind(app) : null);
+  const startRun = (args) => (useApp('startRun') || ((a) => engine.startRun(a)))(args);
+  const cancelRun = (workspaceId, runId) => (useApp('cancelRun') || ((w, r) => engine.cancelRun(w, r)))(workspaceId, runId);
+  const setPaused = (workspaceId, paused) => (useApp('setOrchestratorPaused') || ((w, p) => engine.setPaused(w, p)))(workspaceId, paused);
 
   server.registerTool('multicontext_orchestrate_create_session', {
     description: 'Create a workspace with preset personas and seed Q with initial tasks. Returns workspace and member ids. This is the entry point for orchestrated multi-agent sessions.',
@@ -305,8 +240,7 @@ export function registerOrchestratorTools(server, app, store) {
     inputSchema: z.object({ workspace_id: z.string().min(1), paused: z.boolean() }),
   }, async ({ workspace_id, paused }) => {
     if (!hasStore) throw new Error('Orchestrator store not available');
-    const p = store.setOrchestratorPaused(workspace_id, paused);
-    const resumed = p ? null : resumeQueuedRun(workspace_id);
+    const { paused: p, resumed } = setPaused(workspace_id, paused);
     const body = { paused: p, resumed_run_id: resumed?.run.id || null };
     return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], structuredContent: body };
   });

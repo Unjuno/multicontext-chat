@@ -61,14 +61,22 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
         default_agent_id: z.string().optional(),
         compile_agent_id: z.string().optional(),
         compile_prompt: z.string().optional(),
+        allow_cross_chat_inspect: z.boolean().optional(),
+        allow_cross_chat_send: z.boolean().optional(),
       }),
-    }, async ({ workspace_id, name, system_prompt, default_agent_id, compile_agent_id, compile_prompt }) => {
+    }, async ({ workspace_id, name, system_prompt, default_agent_id, compile_agent_id, compile_prompt, allow_cross_chat_inspect, allow_cross_chat_send }) => {
       const patch = {};
       if (name !== undefined) patch.name = name;
       if (system_prompt !== undefined) patch.globalPrompt = system_prompt;
       if (default_agent_id !== undefined) patch.defaultAgentId = default_agent_id;
       if (compile_agent_id !== undefined) patch.compileAgentId = compile_agent_id;
       if (compile_prompt !== undefined) patch.compilePrompt = compile_prompt;
+      if (allow_cross_chat_inspect !== undefined || allow_cross_chat_send !== undefined) {
+        patch.settings = {
+          ...(allow_cross_chat_inspect !== undefined ? { allowCrossChatInspect: allow_cross_chat_inspect } : {}),
+          ...(allow_cross_chat_send !== undefined ? { allowCrossChatSend: allow_cross_chat_send } : {}),
+        };
+      }
       const ws = await app.updateWorkspace(workspace_id, patch);
       return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }], structuredContent: ws };
     });
@@ -136,17 +144,19 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
 
     server.registerTool('multicontext_broadcast', {
       description: 'Broadcast a prompt to all active chats as ordinary user message. Validates config before queue mutation.',
-      inputSchema: z.object({ workspace_id: z.string().min(1), prompt: z.string().min(1).max(100000) }),
+      inputSchema: z.object({ workspace_id: z.string().min(1), prompt: z.string().min(1) }),
     }, async ({ workspace_id, prompt }) => {
-      const res = await app.broadcast(workspace_id, prompt);
+      const res = await app.broadcast(workspace_id, prompt, { origin: 'mcp' });
       return { content: [{ type: 'text', text: JSON.stringify(res, null, 2) }], structuredContent: res };
     });
+    // NOTE: prompt schemas intentionally carry no .max() cap (same as the GUI
+    // route): the 1MB transport body limit bounds both surfaces identically.
 
     server.registerTool('multicontext_send', {
       description: 'Send a prompt to one chat as ordinary user message',
-      inputSchema: z.object({ workspace_id: z.string().min(1), chat_id: z.string().min(1), prompt: z.string().min(1).max(100000) }),
+      inputSchema: z.object({ workspace_id: z.string().min(1), chat_id: z.string().min(1), prompt: z.string().min(1) }),
     }, async ({ workspace_id, chat_id, prompt }) => {
-      const res = await app.send(workspace_id, chat_id, prompt);
+      const res = await app.send(workspace_id, chat_id, prompt, { origin: 'mcp' });
       return { content: [{ type: 'text', text: JSON.stringify(res, null, 2) }], structuredContent: res };
     });
 
@@ -154,7 +164,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       description: 'Stop all chats in a workspace',
       inputSchema: z.object({ workspace_id: z.string().min(1) }),
     }, async ({ workspace_id }) => {
-      const ws = await app.stopWorkspace(workspace_id);
+      const ws = await app.stopWorkspace(workspace_id, { origin: 'mcp' });
       return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }], structuredContent: ws };
     });
 
@@ -162,7 +172,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       description: 'Stop a single chat',
       inputSchema: z.object({ workspace_id: z.string().min(1), chat_id: z.string().min(1) }),
     }, async ({ workspace_id, chat_id }) => {
-      const ws = await app.stopChat(workspace_id, chat_id);
+      const ws = await app.stopChat(workspace_id, chat_id, { origin: 'mcp' });
       return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }], structuredContent: ws };
     });
 
@@ -235,15 +245,15 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       description: 'Search selected messages from one peer chat by UUID or exact name',
       inputSchema: z.object({ workspace_id: z.string().min(1), source_chat_id: z.string().min(1), target: z.string().min(1), query: z.string().optional(), limit: z.number().int().min(1).max(20).optional() }),
     }, async ({ workspace_id, source_chat_id, target, query, limit }) => {
-      const result = await app.inspectPeerChat(workspaceId, source_chat_id, target, query ?? null, limit ?? 8);
+      const result = await app.inspectPeerChat(workspace_id, source_chat_id, target, query ?? null, limit ?? 8);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result };
     });
 
     server.registerTool('multicontext_send_to_peer_chats', {
-      description: 'Queue prompt into one or two peer chats atomically (non-idempotent external call)',
-      inputSchema: z.object({ workspace_id: z.string().min(1), source_chat_id: z.string().min(1), targets: z.array(z.string().min(1)).min(1).max(2), prompt: z.string().min(1) }),
-    }, async ({ workspace_id, source_chat_id, targets, prompt }) => {
-      const result = await app.sendToChats(workspace_id, source_chat_id, targets, prompt);
+      description: 'Queue prompt into one or two peer chats atomically (pass idempotency_key to make retries replay-safe)',
+      inputSchema: z.object({ workspace_id: z.string().min(1), source_chat_id: z.string().min(1), targets: z.array(z.string().min(1)).min(1).max(2), prompt: z.string().min(1), idempotency_key: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional() }),
+    }, async ({ workspace_id, source_chat_id, targets, prompt, idempotency_key }) => {
+      const result = await app.sendToChats(workspace_id, source_chat_id, targets, prompt, { idempotencyKey: idempotency_key ?? null });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result };
     });
 
