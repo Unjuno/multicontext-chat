@@ -8,8 +8,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - run: npm ci
@@ -26,8 +26,8 @@ jobs:
   rust:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - run: npm ci
@@ -43,8 +43,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - run: npm ci
@@ -60,5 +60,5 @@ jobs:
           APP=$(find src-tauri/target -name "MultiContext.app" -type d | head -n 1)
           test -n "$APP" || { echo "MultiContext.app not found"; exit 1; }
           test -f "$APP/Contents/Resources/multicontext/dist/server.bundle.mjs" || { echo "dist/server.bundle.mjs missing in resources"; ls -R "$APP/Contents/Resources/multicontext" || true; exit 1; }
-          ! grep -q "from '@modelcontextprotocol/server'" "$APP/Contents/Resources/multicontext/dist/server.bundle.mjs" || { echo "bare import still present in bundled resources"; exit 1; }
+          ! grep -q "from '@modelcontextprotocol/server'" "$APP/Contents/Resources/multicontext/dist/server.bundle.mjs" || { echo "bare import still present in bundled resources" && exit 1; }
           echo "verified $APP contains self-contained runtime"
