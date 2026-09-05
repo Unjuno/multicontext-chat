@@ -598,6 +598,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
 
   function retryChat(workspaceId, chatId) {
     scheduler.retryMember(workspaceId, chatId);
+    scheduler.kickMember(workspaceId, chatId);
     return getWorkspace(workspaceId);
   }
 
