@@ -963,6 +963,10 @@ function renderOrchestratorDrawer(data) {
     'member.failed': 'メンバーの実行に失敗', 'member.cancelled': 'メンバーをキャンセル',
     'human.retry': '再試行を開始', 'human.stop': '停止', 'human.send': '直接送信',
     'human.broadcast': 'ブロードキャスト送信', 'q.enqueued': 'キューへ追加', 'q.dispatched': 'キューを配信',
+    'tool.list_chats': 'チャット一覧を取得', 'tool.inspect_chat': 'チャットを確認',
+    'tool.send_to_chat': 'チャットへ送信', 'tool.replayed': 'ツールを再生',
+    'mcp.run.started': '実行を開始', 'run.settled': '実行が完了', 'run.blocked': '実行がブロック',
+    'run.failed': '実行に失敗', 'run.cancelled': '実行をキャンセル',
   };
   const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${esc(e.origin)}">${esc(e.ts.slice(11,19))} ${esc(eventLabels[e.type] || e.type)} <span style="color:var(--text-muted)">${esc(e.origin)}${e.actor?'/'+esc(e.actor):''}</span></div>`).join('');
   body.innerHTML = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">ライブ活動</div>${activityHtml}</div>` + pendingHtml + histHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">イベント</div>${evHtml || '<div class="small">イベントはまだありません</div>'}</div>`;
