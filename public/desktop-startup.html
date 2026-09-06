@@ -519,6 +519,12 @@
         const rawKey = document.getElementById("apiKey").value;
         document.getElementById("settingsErr").textContent = "";
         if (!validateSettings(cfg)) return;
+        const actionButtons = [document.getElementById("saveBtn"), document.getElementById("startBtn")].filter(Boolean);
+        if (actionButtons.some((button) => button.disabled)) return;
+        actionButtons.forEach((button) => {
+          button.disabled = true;
+          button.setAttribute("aria-busy", "true");
+        });
         try {
           if (rawKey) {
             await invoke("save_api_key", { key: rawKey });
@@ -539,6 +545,11 @@
         } catch (e) {
           document.getElementById("settingsErr").textContent =
             "保存できません: " + errorMessage(e);
+        } finally {
+          actionButtons.forEach((button) => {
+            button.disabled = false;
+            button.removeAttribute("aria-busy");
+          });
         }
       }
 
