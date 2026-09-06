@@ -146,7 +146,9 @@ async function copyText(text) {
 async function request(url, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token()) headers.Authorization = `Bearer ${token()}`;
-  const response = await fetch(url, { ...options, headers });
+  const apiBase = localStorage.getItem('mcc_api_base') || '';
+  const requestUrl = /^https?:\/\//i.test(url) ? url : `${apiBase}${url}`;
+  const response = await fetch(requestUrl, { ...options, headers });
   if (response.status === 401) {
     $('#tokenDialog').showModal();
     throw new Error('Unauthorized');

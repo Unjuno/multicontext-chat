@@ -336,9 +336,10 @@
         document.getElementById("readyNote").style.display = "block";
         try {
           sessionStorage.setItem('multicontext_runtime', JSON.stringify(statuses));
+          localStorage.setItem('mcc_api_base', `http://127.0.0.1:${state.port}`);
         } catch {}
         setTimeout(() => {
-          window.location.href = `http://127.0.0.1:${state.port}/`;
+          window.location.href = 'index.html';
         }, 900);
       }
 
