@@ -75,8 +75,11 @@ function agentNameForId(id) {
   const found = agents.find(a => String(a.id) === String(id));
   return found ? String(found.name || found.id) : String(id);
 }
-function workspaceUpdatedLabel(updatedAt) {
-  const time = Date.parse(updatedAt || '');
+function workspaceActivityTimestamp(workspace) {
+  return workspace?.updatedAt || workspace?.createdAt || '';
+}
+function workspaceUpdatedLabel(workspace) {
+  const time = Date.parse(workspaceActivityTimestamp(workspace));
   if (!Number.isFinite(time)) return '';
   const diff = Math.max(0, Date.now() - time);
   const minutes = Math.floor(diff / 60000);
@@ -573,7 +576,7 @@ async function refreshList(expectedId = currentId) {
     if (pinOrder) return pinOrder;
     return workspaceSort === 'name'
       ? String(a.name || '').localeCompare(String(b.name || ''), 'ja')
-      : String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+      : String(workspaceActivityTimestamp(b)).localeCompare(String(workspaceActivityTimestamp(a)));
   });
   const count = document.getElementById('workspaceCount');
   if (count) {
@@ -623,7 +626,7 @@ async function refreshList(expectedId = currentId) {
     const pinned = pinnedWorkspaceIds.has(workspace.id);
     const stateLabel = workspace.archived ? 'アーカイブ済み' : sharedWorkspaceLabel(rawState || dot.toUpperCase()).label;
     const workspaceLabel = `${workspace.name}、${stateLabel}、${active}件中${count}件のチャット`;
-    const updatedLabel = workspaceUpdatedLabel(workspace.updatedAt);
+    const updatedLabel = workspaceUpdatedLabel(workspace);
     return `<div class="workspace-item" role="listitem"><button class="workspace-link ${isActive ? 'active' : ''}" data-id="${workspace.id}" title="${esc(workspace.name)} — ${esc(stateLabel)}" aria-current="${isActive ? 'page' : 'false'}" aria-label="${esc(workspaceLabel)}">
       <span class="ws-dot ${esc(dotClass)}" aria-hidden="true"></span>
       <span class="ws-name">${esc(workspace.name)}</span>
@@ -1718,7 +1721,7 @@ if (savedWorkspaceId) {
     if (savedWorkspace) await openLaunchWorkspace(savedWorkspace);
     else {
       localStorage.removeItem('mcc_last_workspace');
-      const fallback = workspaces.filter((workspace) => !workspace.archived).slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
+      const fallback = workspaces.filter((workspace) => !workspace.archived).slice().sort((a, b) => String(workspaceActivityTimestamp(b)).localeCompare(String(workspaceActivityTimestamp(a))))[0];
       if (fallback) await openLaunchWorkspace(fallback);
     }
   } catch {
@@ -1728,7 +1731,7 @@ if (savedWorkspaceId) {
 } else {
   try {
     const { workspaces = [] } = await request('/api/workspaces?include_archived=true');
-    const fallback = workspaces.filter((workspace) => !workspace.archived).slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
+    const fallback = workspaces.filter((workspace) => !workspace.archived).slice().sort((a, b) => String(workspaceActivityTimestamp(b)).localeCompare(String(workspaceActivityTimestamp(a))))[0];
     if (fallback) await openLaunchWorkspace(fallback);
   } catch {
     // The empty state remains available when the workspace list is unavailable.
