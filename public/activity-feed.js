@@ -54,6 +54,7 @@ export function formatActivityEvent(ev, memberNames = {}) {
     case 'tool.replayed': return { ...base, action: `replayed ${detail.tool ? String(detail.tool) : 'tool'}` };
     case 'human.send': return { ...base, action: 'direct send' };
     case 'human.broadcast': return { ...base, action: 'broadcast sent' };
+    case 'human.retry': return { ...base, action: 'retry started' };
     case 'human.stop': return { ...base, action: 'stop' };
     case 'orchestrator.paused': return { ...base, action: 'orchestrator paused' };
     case 'orchestrator.resumed': return { ...base, action: 'orchestrator resumed' };
