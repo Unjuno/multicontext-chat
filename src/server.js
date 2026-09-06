@@ -33,6 +33,10 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
   // experiment start (workspace creation, orchestrator run start), never on
   // routine traffic, so the window is not stolen on every tool call.
   let pendingFocus = null;
+  // REST Broadcast receipts prevent a network retry from enqueuing the same
+  // prompt twice. Keep this scoped to the server instance and expire entries
+  // so it cannot grow without bound.
+  const broadcastReceipts = new Map();
   const authorized = (req) => !config.appToken || req.headers.authorization === `Bearer ${config.appToken}`;
   const toolAuthorized = (req) => !config.toolSecret || req.headers['x-multicontext-key'] === config.toolSecret;
   const mcpAuthorized = (req) => {
@@ -274,7 +278,29 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (parts[3] === 'broadcast' && req.method === 'POST') {
       try {
         const body = await readBody(req);
-        const result = await app.broadcast(workspaceId, body.prompt);
+        const rawKey = body.idempotency_key ?? body.idempotencyKey ?? null;
+        const key = rawKey == null || String(rawKey) === '' ? null : String(rawKey);
+        if (key && !/^[A-Za-z0-9_-]{1,64}$/.test(key)) {
+          return json(res, 400, { error: 'Invalid idempotency_key: use 1-64 chars of [A-Za-z0-9_-]', code: 'INVALID_IDEMPOTENCY_KEY' });
+        }
+        const receiptKey = key ? `${workspaceId}:${key}` : null;
+        let resultPromise = receiptKey ? broadcastReceipts.get(receiptKey)?.promise : null;
+        let replayed = Boolean(resultPromise);
+        if (!resultPromise) {
+          resultPromise = app.broadcast(workspaceId, body.prompt);
+          if (receiptKey) {
+            broadcastReceipts.set(receiptKey, { promise: resultPromise, expiresAt: Date.now() + 10 * 60 * 1000 });
+            resultPromise.finally(() => setTimeout(() => {
+              const receipt = broadcastReceipts.get(receiptKey);
+              if (receipt?.expiresAt <= Date.now()) broadcastReceipts.delete(receiptKey);
+            }, 10 * 60 * 1000)).catch(() => {});
+          }
+        }
+        const result = await resultPromise;
+        if (receiptKey && !replayed) {
+          const receipt = broadcastReceipts.get(receiptKey);
+          if (receipt) receipt.result = result;
+        }
         return json(res, 202, { items: result.items, workspace: enrichView(result.workspace, req) });
       } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }

@@ -1292,7 +1292,8 @@ function wire(workspace) {
     const btn = e.currentTarget;
     if (btn.disabled || btn.classList.contains('is-busy')) return;
     await withBusy(btn, async () => {
-      await request(`/api/workspaces/${workspace.id}/broadcast`, { method: 'POST', body: JSON.stringify({ prompt }) });
+      const idempotencyKey = `gui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await request(`/api/workspaces/${workspace.id}/broadcast`, { method: 'POST', body: JSON.stringify({ prompt, idempotency_key: idempotencyKey }) });
       $('#broadcastPrompt').value = '';
       const ta = $('#broadcastPrompt'); if (ta) autoResize(ta);
       await refreshPreservingDrafts(workspace.id);
