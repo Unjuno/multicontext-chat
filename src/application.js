@@ -362,7 +362,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (runtimeState === 'RUNNING' || runtimeState === 'PENDING') {
       throw problem('実行中またはキュー待ちのワークスペースは、全て停止してから削除してください', 409, 'WORKSPACE_ACTIVE');
     }
-    scheduler.stopWorkspace(workspaceId);
+    await scheduler.stopWorkspace(workspaceId);
     store.deleteWorkspace(workspaceId);
     return { deleted: true, workspace_id: workspaceId };
   }
@@ -632,8 +632,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return { accepted: true, replayed: false, deliveries: items.map(({ target, item }) => ({ target, queue_item_id: item.id })) };
   }
 
-  function stopWorkspace(workspaceId, { origin = 'human' } = {}) {
-    scheduler.stopWorkspace(workspaceId);
+  async function stopWorkspace(workspaceId, { origin = 'human' } = {}) {
+    await scheduler.stopWorkspace(workspaceId);
     try { store.appendEvent(workspaceId, { type: 'human.stop', origin, detail: { workspaceId } }); } catch {}
     return getWorkspace(workspaceId);
   }

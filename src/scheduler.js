@@ -298,9 +298,14 @@ export class Scheduler {
     const key = this.key(workspaceId, memberId); this.running.get(key)?.abort(new Error('Stopped by user'));
     this.store.cancelCurrent(workspaceId, memberId, { clearQueue });
   }
-  stopWorkspace(workspaceId, { clearQueue = true } = {}) {
+  async stopWorkspace(workspaceId, { clearQueue = true } = {}) {
     const workspace = this.store.getWorkspace(workspaceId); if (!workspace) return;
     for (const member of Object.values(workspace.members)) this.stopMember(workspaceId, member.id, { clearQueue });
+    const prefix = `${workspaceId}:`;
+    const deadline = Date.now() + 2000;
+    while ([...this.running.keys()].some((key) => key.startsWith(prefix)) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
   }
   abortByOrchestratorRun(workspaceId, runId) {
     const ws = this.store.getWorkspace(workspaceId);
