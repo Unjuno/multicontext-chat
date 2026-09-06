@@ -813,7 +813,7 @@ async function select(id) {
 
 function workspaceStatusHtml(state) {
   const { label, cls } = sharedWorkspaceLabel(state);
-  return `<span class="status ${esc(cls)}" title="ランタイム状態: ${esc(label)} — 生成中/キュー/ブロックの有無のみを示し、合意や完了を意味しません">${esc(label)}</span>`;
+  return `<span class="status ${esc(cls)}" role="status" aria-label="ワークスペースの状態: ${esc(label)}" title="ランタイム状態: ${esc(label)} — 生成中/キュー/ブロックの有無のみを示し、合意や完了を意味しません">${esc(label)}</span>`;
 }
 function memberStatusHtml(state) {
   const { label, cls } = sharedMemberLabel(state);
