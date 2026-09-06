@@ -767,7 +767,7 @@ aside h3 {
   line-height: 1.4;
 }
 .dev-prompt-text:empty::before {
-  content: "開発者指示なし — このチャットは System Prompt のみで動作します";
+  content: "チャット固有の指示はありません — 全チャット共通の指示で動作します";
   color: #ca8a04;
   opacity: 0.6;
   font-style: italic;

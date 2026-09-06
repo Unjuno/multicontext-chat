@@ -1009,18 +1009,19 @@ function renderOrchestratorDrawer(data) {
   }).join('') || '<div class="small">活動はまだありません</div>';
   const pendingHtml = [0,1,2].map(p=>{
     const items=qPending.filter(x=>x.priority===p);
-    const title = `Q${p} 待機中 (${items.length})`;
+    const priorityLabels = { 0: '優先度 高', 1: '優先度 標準', 2: '優先度 低' };
+    const title = `${priorityLabels[p]}・待機中 (${items.length})`;
     const rows = items.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(queueStateLabels[it.state] || it.state)} ${esc(it.prompt.slice(0,80))} <span style="color:var(--text-muted)">${esc(it.origin)}/${esc(it.runId||'')}</span></div>`).join('') || '<div class="small">空です</div>';
     return `<div class="orchestrator-q-group"><div class="orchestrator-q-title">${esc(title)}</div>${rows}</div>`;
   }).join('');
   const historyItems = qHistory.slice(-10);
   const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">履歴 (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(queueStateLabels[it.state] || it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">空です</div>'}</div>`;
   const eventLabels = {
-    'compile.started': 'Compileを開始', 'compile.completed': 'Compileが完了', 'compile.failed': 'Compileに失敗',
+    'compile.started': '統合レポートの作成を開始', 'compile.completed': '統合レポートを作成', 'compile.failed': '統合レポートの作成に失敗',
     'member.started': 'メンバーの実行を開始', 'member.completed': 'メンバーの実行が完了',
     'member.failed': 'メンバーの実行に失敗', 'member.cancelled': 'メンバーをキャンセル',
     'human.retry': '再試行を開始', 'human.stop': '停止', 'human.send': '直接送信',
-    'human.broadcast': 'ブロードキャスト送信', 'q.enqueued': 'キューへ追加', 'q.dispatched': 'キューを配信',
+    'human.broadcast': '一斉送信', 'q.enqueued': '実行待ちに追加', 'q.dispatched': '実行待ちから開始',
     'tool.list_chats': 'チャット一覧を取得', 'tool.inspect_chat': 'チャットを確認',
     'tool.send_to_chat': 'チャットへ送信', 'tool.replayed': 'ツールを再生',
     'mcp.run.started': '実行を開始', 'run.settled': '実行が完了', 'run.blocked': '実行がブロック',
