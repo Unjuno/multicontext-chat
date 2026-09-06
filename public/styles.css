@@ -927,6 +927,10 @@ dialog menu { display: flex; gap: 6px; justify-content: flex-end; }
 }
 @media (max-width: 560px) {
   header { padding: 0 12px; }
+  header .brand { min-width: 0; }
+  header .brand strong { font-size: 13px; }
+  .runtime-compact { max-width: 26px; padding: 4px 7px; }
+  .runtime-compact .runtime-text { display: none; }
   .header-actions #newWorkspace { font-size: 11px; padding: 5px 8px; }
   #app { padding: 16px 12px 32px; }
   .workspace-head { padding: 14px; }
