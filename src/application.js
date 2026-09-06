@@ -306,6 +306,12 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   async function updateWorkspace(workspaceId, patch = {}) {
+    if (patch.archived === true) {
+      const runtimeState = store.runtimeState(workspaceId, scheduler.runningMemberIds(workspaceId));
+      if (runtimeState === 'RUNNING' || runtimeState === 'PENDING') {
+        throw problem('実行中またはキュー待ちのワークスペースはアーカイブできません', 409, 'WORKSPACE_ACTIVE');
+      }
+    }
     // Validate agent ids if provided
     if (patch.default_agent_id !== undefined) patch.defaultAgentId = patch.default_agent_id;
     if (patch.system_prompt !== undefined) patch.globalPrompt = patch.system_prompt;
