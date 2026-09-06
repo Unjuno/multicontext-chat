@@ -430,5 +430,13 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = createApp();
+  app.server.on('error', (error) => {
+    if (error?.code === 'EADDRINUSE') {
+      console.error(`MultiContext Chat: ポート ${defaultConfig.port} は既に使用されています。既存のアプリを確認するか、MULTICONTEXT_PORT を変更してください。`);
+    } else {
+      console.error(`MultiContext Chat: サーバーを起動できませんでした。${error?.message || error}`);
+    }
+    process.exitCode = 1;
+  });
   app.server.listen(defaultConfig.port, defaultConfig.host, () => { app.scheduler.resumeAll(); console.log(`MultiContext Chat: http://${defaultConfig.host}:${defaultConfig.port}`); if (defaultConfig.mcpEnabled) console.log(`MCP endpoint: http://${defaultConfig.host}:${defaultConfig.port}/mcp`); });
 }
