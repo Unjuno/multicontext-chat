@@ -583,6 +583,18 @@ function initRuntimeStatus() {
         toast('ログはデスクトップアプリで確認できます','');
       }
     });
+    document.getElementById('copyClientDiagnostics')?.addEventListener('click', async (event) => {
+      const diagnostics = (() => {
+        try { return JSON.parse(sessionStorage.getItem('mcc_client_diagnostics') || '[]'); } catch { return []; }
+      })();
+      const text = JSON.stringify({ capturedAt: new Date().toISOString(), runtime: runtimeStatuses, diagnostics }, null, 2);
+      if (!await copyText(text)) { toast('診断情報のコピーに失敗しました', 'error'); return; }
+      const button = event.currentTarget;
+      const previous = button.textContent;
+      button.textContent = 'コピー済み';
+      toast('診断情報をコピーしました（会話内容は含みません）', 'success');
+      setTimeout(() => { if (button.isConnected) button.textContent = previous; }, 1400);
+    });
   }
   // Start polling after a short delay, don't overlap with initial load
   setTimeout(pollRuntime, 2000);
