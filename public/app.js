@@ -548,7 +548,12 @@ async function refreshList(expectedId = currentId) {
       : String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
   });
   const count = document.getElementById('workspaceCount');
-  if (count) count.textContent = (query || workspaceStatusFilter !== 'all') ? `${visibleWorkspaces.length}/${scopedWorkspaces.length}` : `${scopedWorkspaces.length}`;
+  if (count) {
+    count.textContent = (query || workspaceStatusFilter !== 'all')
+      ? `${visibleWorkspaces.length}件 / ${scopedWorkspaces.length}件`
+      : `${scopedWorkspaces.length}件`;
+    count.setAttribute('aria-label', `ワークスペース ${count.textContent}`);
+  }
   const resetView = document.getElementById('resetWorkspaceView');
   if (resetView) {
     const hasViewOverrides = Boolean(query) || workspaceStatusFilter !== 'all' || workspaceSort !== 'recent';
