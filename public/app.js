@@ -9,6 +9,7 @@ let refreshController = null;
 let workspaceSearchTimer = null;
 const openEditors = new Set();
 const openDeveloperPrompts = new Set();
+const collapsedMembers = new Set(JSON.parse(localStorage.getItem('mcc_collapsed_members') || '[]'));
 let workspaceSearchQuery = '';
 let workspaceListExpanded = false;
 const workspaceFilterValues = new Set(['all', 'RUNNING', 'PENDING', 'BLOCKED', 'SETTLED', 'ARCHIVED']);
@@ -1116,6 +1117,7 @@ function renderOrchestratorBar(data) {
 function scheduleOrchestrator() { clearTimeout(orchestratorTimer); orchestratorTimer=setTimeout(()=>{ refreshOrchestrator().finally(scheduleOrchestrator); }, 3000); }
 
 function memberCard(workspace, member) {
+  const isCollapsed = collapsedMembers.has(String(member.id));
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
   const promptOpen = openDeveloperPrompts.has(member.id) ? ' open' : '';
   const canSend = member.active !== false && memberHasResolvedAgent(workspace, member);
@@ -1153,7 +1155,7 @@ function memberCard(workspace, member) {
   })();
   const contextLimitError = /context size|context length|too many tokens/i.test(String(member.lastError || ''));
   return `
-    <article class="member" data-mid="${member.id}">
+    <article class="member${isCollapsed ? ' collapsed' : ''}" data-mid="${member.id}">
       <div class="member-header">
         <div class="member-title">
           <span class="member-name">${esc(member.name)}</span>
@@ -1163,6 +1165,7 @@ function memberCard(workspace, member) {
           ${member.status === 'error' ? `${contextLimitError ? '<button class="sm" data-action="trim-history" title="直近12件だけを残して履歴を整理">履歴を整理</button>' : ''}<button class="sm primary" data-action="retry" title="${contextLimitError ? '履歴を整理してから、キューを保持したまま再試行' : 'キューを保持したまま再試行'}">${contextLimitError ? '整理後に再試行' : '再試行'}</button>` : ''}
           ${member.inFlight ? '<button class="sm danger" data-action="stop" title="実行中の生成を停止">停止</button>' : ''}
           ${member.messages.length ? '<button class="sm" data-action="latest" title="最新のメッセージへ移動">最新へ</button>' : ''}
+          <button class="sm" data-action="toggle-collapse" aria-expanded="${isCollapsed ? 'false' : 'true'}" title="${isCollapsed ? 'チャットを展開' : 'チャットを折りたたむ'}">${isCollapsed ? '展開' : '折りたたむ'}</button>
           <button class="sm" data-action="edit" aria-expanded="${openEditors.has(member.id) ? 'true' : 'false'}" title="設定">設定</button>
           <button class="sm" data-action="copytool" title="外部連携用のURLをコピー">連携URL</button>
         </div>
@@ -1606,6 +1609,12 @@ function wire(workspace) {
       if (!messages) return;
       messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
       $('[data-action=latest]', card).blur();
+    });
+    $('[data-action=toggle-collapse]', card)?.addEventListener('click', () => {
+      if (collapsedMembers.has(String(memberId))) collapsedMembers.delete(String(memberId));
+      else collapsedMembers.add(String(memberId));
+      localStorage.setItem('mcc_collapsed_members', JSON.stringify([...collapsedMembers]));
+      refresh().catch((err) => toast(err.message, 'error'));
     });
     promptDetails?.addEventListener('toggle', () => {
       if (promptDetails.open) openDeveloperPrompts.add(memberId);
