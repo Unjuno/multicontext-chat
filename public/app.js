@@ -1200,9 +1200,9 @@ async function refresh(expectedId = currentId) {
     const compileDisabled = compileStateBlocked || !compileAgentReady;
     const archiveDisabled = !workspace.archived && ['RUNNING', 'PENDING'].includes(String(workspace.runtimeState || '').toUpperCase());
     const compileHint = compileStateBlocked
-      ? `コンパイルは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は利用できません — 完了になるまで待ってください`
+      ? `統合レポートは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は作成できません — 完了になるまで待ってください`
       : !compileAgentReady
-        ? 'Compileに使用するAgentを選択するか、ワークスペース既定Agentを設定してください'
+        ? '統合レポートの作成担当を選択するか、ワークスペース既定Agentを設定してください'
         : '全チャットの直近メッセージを要約';
     $('#app').innerHTML = `
       <datalist id="agentOptions">${agentOptions}</datalist>
@@ -1214,7 +1214,7 @@ async function refresh(expectedId = currentId) {
             ${workspaceStatusHtml(workspace.runtimeState)}${workspace.archived ? '<span class="status archived">アーカイブ済み</span>' : ''}
           </div>
           <div class="workspace-toolbar">
-            <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="refreshWorkspace" class="sm" type="button" title="ワークスペースの状態を更新" aria-label="ワークスペースの状態を更新">↻ 更新</button><button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
+            <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="refreshWorkspace" class="sm" type="button" title="ワークスペースの状態を更新" aria-label="ワークスペースの状態を更新">↻ 更新</button><button id="saveWorkspace" class="sm primary" title="ワークスペース・共通指示・統合レポート設定を保存">ワークスペース設定を保存</button>
             <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
             <button id="stop" class="sm danger" ${hasWorkToStop ? '' : 'disabled'} title="${hasWorkToStop ? `実行中${runningMembers}件・キュー${queuedMessages}件を停止` : '停止する生成やキューはありません'}">全て停止</button>
             <button id="archiveWorkspace" class="sm" ${archiveDisabled ? 'disabled' : ''} title="${archiveDisabled ? '実行中またはキュー待ちのためアーカイブできません' : workspace.archived ? 'ワークスペースを通常一覧へ戻す' : 'ワークスペースをアーカイブ一覧へ移す'}">${workspace.archived ? '復元' : 'アーカイブ'}</button>
@@ -1222,8 +1222,8 @@ async function refresh(expectedId = currentId) {
           </div>
         </div>
         <div class="workspace-fields">
-          <label for="globalPrompt" class="field-label">共有 System Prompt <span class="scope-note">— 全チャットに system role として適用</span></label>
-          <textarea id="globalPrompt" placeholder="全チャット共通の system 指示を入力（例: あなたは簡潔に答えるアシスタントです）" aria-label="共有 System Prompt">${esc(workspace.globalPrompt)}</textarea>
+          <label for="globalPrompt" class="field-label">全チャット共通の指示 <span class="scope-note">— すべてのチャットに適用</span></label>
+          <textarea id="globalPrompt" placeholder="全チャットに共通する指示を入力（例: 回答は簡潔にまとめる）" aria-label="全チャット共通の指示">${esc(workspace.globalPrompt)}</textarea>
           <div class="hint">指示の適用順: ワークスペース共通 → チャット固有 → 送信内容。各チャットの会話履歴は独立して保持されます。 · <span class="small">${activeMembers.length}件アクティブ / 全${members.length}件</span></div>
           <label for="defaultAgentId" class="field-label" style="margin-top:8px">既定エージェント <span class="scope-note">— 新しいチャットや「ワークスペース既定を使用」の解決先</span></label>
           <select id="defaultAgentId" aria-label="既定エージェント">${agentOptionsHtml(workspace.defaultAgentId, false)}</select>
@@ -1246,15 +1246,15 @@ async function refresh(expectedId = currentId) {
 
       <div id="orchestratorBar" class="orchestrator-bar" style="display:none"></div>
       <dialog id="orchestratorDrawer"><div class="orchestrator-drawer-head"><strong>Orchestrator</strong><button id="orchestratorClose" class="sm">閉じる</button></div><div id="orchestratorDrawerBody" class="orchestrator-drawer-body"><div class="small">読み込み中...</div></div></dialog>
-      <div class="section-label">Broadcast <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件へ` : 'アクティブなチャットがありません'}</span></div>
+      <div class="section-label">一斉送信 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件へ` : 'アクティブなチャットがありません'}</span></div>
       <div class="composer ${canBroadcast ? '' : 'disabled'}">
         <div style="flex:1; display:flex; flex-direction:column">
-          <label for="broadcastPrompt" class="composer-label">全アクティブチャットへ <span class="scope-note">— 1つのプロンプトを全チャットへ複製</span></label>
-          <textarea id="broadcastPrompt" placeholder="${canBroadcast ? '全アクティブチャットに同じプロンプトを送信' : activeMembers.length ? '全チャットのAgentを選択してから送信できます' : 'チャットを追加してからブロードキャストできます'}" aria-label="Broadcast プロンプト — 全アクティブチャットへ" ${canBroadcast ? '' : 'disabled'}></textarea>
+          <label for="broadcastPrompt" class="composer-label">全アクティブチャットへ <span class="scope-note">— 同じ問いを全チャットへ送信</span></label>
+          <textarea id="broadcastPrompt" placeholder="${canBroadcast ? '全アクティブチャットに同じ問いを送信' : activeMembers.length ? '全チャットのAgentを選択してから送信できます' : 'チャットを追加してから一斉送信できます'}" aria-label="一斉送信の問い — 全アクティブチャットへ" ${canBroadcast ? '' : 'disabled'}></textarea>
         </div>
         <button class="primary" id="broadcast" ${canBroadcast ? '' : 'disabled'} title="${canBroadcast ? '全アクティブチャットに送信' : activeMembers.length ? '全チャットのAgentを選択してから送信できます' : 'アクティブなチャットがありません'}" aria-label="全アクティブチャットに送信">${canBroadcast ? '全アクティブチャットに送信' : '送信'}</button>
       </div>
-      ${canBroadcast ? '' : `<div class="composer-hint">${activeMembers.length ? 'ヒント: 全チャットのAgentを選択するとBroadcastできます' : 'ヒント: 「+ チャット」でチャットを追加し、エージェントを選択してください'}</div>`}
+      ${canBroadcast ? '' : `<div class="composer-hint">${activeMembers.length ? 'ヒント: 全チャットのAgentを選択すると一斉送信できます' : 'ヒント: 「+ チャット」でチャットを追加し、エージェントを選択してください'}</div>`}
 
       <div class="section-label">独立チャット <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${members.length}件</span></div>
       ${members.length
@@ -1266,25 +1266,25 @@ async function refresh(expectedId = currentId) {
             <div class="onboarding-steps">
               <div><b>1</b><span><strong>チャットを追加</strong><small>役割ごとのコンテキストを作成</small></span></div>
               <div><b>2</b><span><strong>Agentを選択</strong><small>安全のため明示選択を推奨</small></span></div>
-              <div><b>3</b><span><strong>問いをBroadcast</strong><small>全チャットの回答を比較</small></span></div>
+              <div><b>3</b><span><strong>問いを一斉送信</strong><small>全チャットの回答を比較</small></span></div>
             </div>
             <button id="emptyAddChat" class="primary">+ 最初のチャットを追加</button>
           </div>`}
 
-      <div class="section-label">Compile — 手動要約 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">完了時のみ実行 · 履歴には書き込まれません</span></div>
+      <div class="section-label">統合レポート <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">完了時のみ作成 · チャット履歴には影響しません</span></div>
       <div class="compile">
         <div class="compile-head">
-          <strong>Compile（手動）</strong>
+          <strong>回答をまとめる</strong>
           <div class="toolbar">
-            <label for="compileAgentId" class="small" style="display:flex; align-items:center; gap:4px">コンパイルエージェント<select id="compileAgentId" aria-label="コンパイルエージェント">${agentOptionsHtml(workspace.compileAgentId, true)}</select></label>
-            <button id="compile" class="sm" ${compileDisabled ? 'disabled' : ''} title="${esc(compileHint)}">コンパイルを実行</button>
+            <label for="compileAgentId" class="small" style="display:flex; align-items:center; gap:4px">作成担当<select id="compileAgentId" aria-label="統合レポートの作成担当">${agentOptionsHtml(workspace.compileAgentId, true)}</select></label>
+            <button id="compile" class="sm" ${compileDisabled ? 'disabled' : ''} title="${esc(compileHint)}">レポートを作成</button>
           </div>
         </div>
-        <label for="compilePrompt" class="field-label small">Compile Prompt <span class="scope-note">— 要約の指示（保存してから実行）</span></label>
-        <textarea id="compilePrompt" placeholder="コンパイル指示 — 例: 差分を要約し、未解決点を列挙" aria-label="Compile Prompt">${esc(workspace.compilePrompt || '')}</textarea>
+        <label for="compilePrompt" class="field-label small">まとめ方の指示 <span class="scope-note">— レポートの作成方法（保存してから作成）</span></label>
+        <textarea id="compilePrompt" placeholder="まとめ方の指示（例: 主な結論と未解決点を分けて整理）" aria-label="統合レポートのまとめ方の指示">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
           ? `<hr><div class="compile-result-head"><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdown保存</button></div></div><div class="compile-output" id="compileOutput">${esc(workspace.lastCompile.text)}</div>`
-          : `<div class="small">手動のみ。${compileStateBlocked ? `現在は${workspace.runtimeState || '処理中'}のため待機中です。` : !compileAgentReady ? 'コンパイルエージェントを選択してから実行してください。' : 'コンパイル結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">コンパイル</span>を押して要約を生成します。'}</div>`}
+          : `<div class="small">手動のみ。${compileStateBlocked ? `現在は${workspace.runtimeState || '処理中'}のため待機中です。` : !compileAgentReady ? '作成担当を選択してから実行してください。' : '結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">レポートを作成</span>を押して回答をまとめます。'}</div>`}
       </div>
     `;
     wire(workspace);
@@ -1364,7 +1364,7 @@ function wire(workspace) {
     if (saveBtn) {
       saveBtn.textContent = 'ワークスペース設定を保存';
       saveBtn.classList.toggle('needs-save', dirty);
-      saveBtn.title = dirty ? '未保存の変更があります — クリックで保存' : 'ワークスペース・System Prompt・Compile設定を保存';
+      saveBtn.title = dirty ? '未保存の変更があります — クリックで保存' : 'ワークスペース・共通指示・統合レポート設定を保存';
     }
     const saveState = document.getElementById('workspaceSaveState');
     if (saveState) {
@@ -1380,9 +1380,9 @@ function wire(workspace) {
     const blockedByState = workspace.runtimeState !== 'SETTLED';
     compileButton.disabled = blockedByState || !ready;
     compileButton.title = blockedByState
-      ? `コンパイルは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は利用できません — 完了になるまで待ってください`
+      ? `統合レポートは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は作成できません — 完了になるまで待ってください`
       : !ready
-        ? 'Compileに使用するAgentを選択するか、ワークスペース既定Agentを設定してください'
+        ? '統合レポートの作成担当を選択するか、ワークスペース既定Agentを設定してください'
         : '全チャットの直近メッセージを要約';
   }
   ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId','agentSelectionMode'].forEach((id) => {
@@ -1525,9 +1525,9 @@ function wire(workspace) {
       if (!await copyText(output)) throw new Error('copy failed');
       const previous = e.currentTarget.textContent;
       e.currentTarget.textContent = 'コピー済み';
-      toast('Compile結果をコピーしました', 'success');
+      toast('統合レポートをコピーしました', 'success');
       setTimeout(() => { if (e.currentTarget.isConnected) e.currentTarget.textContent = previous; }, 1400);
-    } catch { toast('Compile結果のコピーに失敗しました', 'error'); }
+    } catch { toast('統合レポートのコピーに失敗しました', 'error'); }
   };
   const downloadCompile = $('#downloadCompile');
   if (downloadCompile) downloadCompile.onclick = () => {
@@ -1539,7 +1539,7 @@ function wire(workspace) {
     anchor.download = `${String(workspace.name || 'multicontext-report').replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-|-$/g, '') || 'multicontext-report'}.md`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast('Compile結果をMarkdownで保存しました', 'success');
+    toast('統合レポートをMarkdownで保存しました', 'success');
   };
 
   $$('.member').forEach((card) => {
