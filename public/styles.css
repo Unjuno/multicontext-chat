@@ -321,6 +321,10 @@ aside h3 {
 .help-list kbd { min-width: 42px; text-align: center; }
 .help-note { margin-top: 16px; }
 .workspace-no-results { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 10px; text-align: center; color: var(--text-muted); }
+.workspace-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 4px 10px 10px; padding: 14px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--idle-bg); }
+.workspace-empty strong { font-size: 12px; color: var(--text); }
+.workspace-empty .small { line-height: 1.5; }
+.workspace-empty button { margin-top: 3px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

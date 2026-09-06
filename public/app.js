@@ -590,7 +590,12 @@ async function refreshList(expectedId = currentId) {
     resetView.setAttribute('aria-hidden', String(!hasViewOverrides));
   }
   if (!scopedWorkspaces.length) {
-    $('#workspaces').innerHTML = `<div class="small" style="padding:8px 10px">${workspaceStatusFilter === 'ARCHIVED' ? 'アーカイブ済みのワークスペースはありません' : 'まだワークスペースがありません'}</div>`;
+    $('#workspaces').innerHTML = workspaceStatusFilter === 'ARCHIVED'
+      ? '<div class="workspace-empty"><strong>アーカイブ済みのワークスペースはありません</strong><span class="small">アーカイブしたワークスペースはここに表示されます。</span></div>'
+      : `<div class="workspace-empty"><strong>まだワークスペースがありません</strong><span class="small">チャットとAgentをまとめる場所を作成しましょう。</span><button class="sm" type="button" data-action="new-workspace-from-empty">新しいワークスペースを作成</button></div>`;
+    $('#workspaces [data-action="new-workspace-from-empty"]')?.addEventListener('click', () => {
+      document.getElementById('newWorkspace')?.click();
+    });
     return;
   }
   if (!visibleWorkspaces.length) {
