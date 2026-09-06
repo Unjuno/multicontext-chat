@@ -358,6 +358,16 @@ async function pollRuntime() {
         { name: 'MultiContext', state: mcState, message: mcMsg, ownership: null, attempt_id: 0 },
       ];
     }
+    // A successful desktop startup probe is authoritative for the model.
+    // Do not downgrade it to CHECKING when the browser fallback cannot probe
+    // the local model endpoint directly after navigation.
+    if (Array.isArray(base)) {
+      const cachedModel = runtimeStatuses.find((status) => status.name === 'モデル');
+      const baseModel = base.find((status) => status.name === 'モデル');
+      if (cachedModel?.state === 'ready' && baseModel && baseModel.state !== 'ready') {
+        Object.assign(baseModel, cachedModel);
+      }
+    }
     if (controller.signal.aborted) return;
     // Always attempt to resolve agent availability as 4th row — never conflated with service health
     const agentEntry = await fetchAgentRuntimeEntry(controller.signal);
