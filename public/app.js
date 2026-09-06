@@ -581,7 +581,8 @@ async function refreshList(expectedId = currentId) {
 }
 
 function handleWorkspaceSelect(id) {
-  if (id === currentId) return select(id);
+  // Clicking the already-open workspace must never refresh away unsaved edits.
+  if (id === currentId) return;
   if (isWorkspaceDirty() && currentId) {
     const ok = confirm('未保存の変更があります。破棄して別のワークスペースに移動しますか？');
     if (!ok) return;
