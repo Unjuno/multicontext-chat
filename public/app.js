@@ -1292,15 +1292,18 @@ async function refresh(expectedId = currentId) {
       refreshList();
     } else {
       const banner = document.createElement('div');
-      banner.className = 'error-banner';
-      banner.setAttribute('role', 'alert');
-      banner.innerHTML = `<span>更新失敗: ${esc(error.message)}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`;
+      const hasStaleData = Boolean(lastWorkspace);
+      banner.className = hasStaleData ? 'warning-banner' : 'error-banner';
+      banner.setAttribute('role', hasStaleData ? 'status' : 'alert');
+      banner.innerHTML = hasStaleData
+        ? `<span>最新情報を取得できません。一時的な表示を確認中です。</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`
+        : `<span>更新失敗: ${esc(error.message)}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`;
       banner.querySelector('[data-action="refresh-workspace"]').onclick = () => {
         banner.remove();
         refresh(currentId).catch(() => {});
       };
       if (app && !app.querySelector('.error-banner')) app.prepend(banner);
-      toast(`更新失敗: ${error.message}`, 'error');
+      if (!hasStaleData) toast(`更新失敗: ${error.message}`, 'error');
     }
   } finally {
     app?.setAttribute('aria-busy', 'false');
