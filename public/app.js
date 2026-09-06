@@ -465,6 +465,16 @@ async function refreshList(expectedId = currentId) {
     pinnedWorkspaceIds = new Set(validPinnedIds);
     localStorage.setItem('mcc_pinned_workspaces', JSON.stringify(validPinnedIds));
   }
+  const stateCounts = workspaces.reduce((counts, workspace) => {
+    const state = String(workspace.runtimeState || '').toUpperCase();
+    if (state in counts) counts[state] += 1;
+    return counts;
+  }, { RUNNING: 0, PENDING: 0, BLOCKED: 0, SETTLED: 0 });
+  const filterLabels = { all: 'すべての状態', RUNNING: '実行中', PENDING: 'キューあり', BLOCKED: '要対応', SETTLED: '完了' };
+  $$('#workspaceFilter option').forEach((option) => {
+    const value = option.value;
+    option.textContent = `${filterLabels[value] || value} (${value === 'all' ? workspaces.length : (stateCounts[value] || 0)})`;
+  });
   const query = workspaceSearchQuery.trim().toLowerCase();
   const visibleWorkspaces = workspaces.filter((workspace) => {
     const matchesQuery = !query || String(workspace.name || '').toLowerCase().includes(query);
