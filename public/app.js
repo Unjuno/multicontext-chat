@@ -47,6 +47,10 @@ helpToggle?.addEventListener('click', () => {
 });
 helpClose?.addEventListener('click', closeHelp);
 helpDialog?.addEventListener('click', (event) => { if (event.target === helpDialog) closeHelp(); });
+helpDialog?.addEventListener('close', () => {
+  helpToggle?.setAttribute('aria-expanded', 'false');
+  helpToggle?.focus();
+});
 let lastWorkspace = null; // server snapshot for dirty checks
 
 function agentNameForId(id) {
