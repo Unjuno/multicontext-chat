@@ -8,7 +8,9 @@ let agents = [];
 let refreshController = null;
 const openEditors = new Set();
 let workspaceSearchQuery = '';
-let workspaceStatusFilter = 'all';
+const workspaceFilterValues = new Set(['all', 'RUNNING', 'PENDING', 'BLOCKED', 'SETTLED']);
+const savedWorkspaceFilter = localStorage.getItem('mcc_workspace_filter');
+let workspaceStatusFilter = workspaceFilterValues.has(savedWorkspaceFilter) ? savedWorkspaceFilter : 'all';
 let workspaceSort = localStorage.getItem('mcc_workspace_sort') === 'name' ? 'name' : 'recent';
 let pinnedWorkspaceIds = (() => {
   try { return new Set(JSON.parse(localStorage.getItem('mcc_pinned_workspaces') || '[]')); } catch { return new Set(); }
@@ -1394,8 +1396,10 @@ workspaceSearch?.addEventListener('keydown', (event) => {
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 const workspaceFilter = $('#workspaceFilter');
+if (workspaceFilter) workspaceFilter.value = workspaceStatusFilter;
 workspaceFilter?.addEventListener('change', () => {
   workspaceStatusFilter = workspaceFilter.value;
+  localStorage.setItem('mcc_workspace_filter', workspaceStatusFilter);
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 const workspaceSortSelect = $('#workspaceSort');
