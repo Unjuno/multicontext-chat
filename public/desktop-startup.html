@@ -349,6 +349,10 @@
       }
 
       async function runStartup() {
+        const retryButton = document.getElementById("retryBtn");
+        if (retryButton.disabled) return;
+        retryButton.disabled = true;
+        retryButton.setAttribute("aria-busy", "true");
         hideError();
         buildCards();
         state.statuses = {};
@@ -367,6 +371,9 @@
           maybeNavigate();
         } catch (e) {
           showError("起動に失敗しました: " + errorMessage(e));
+        } finally {
+          retryButton.disabled = false;
+          retryButton.removeAttribute("aria-busy");
         }
       }
 
