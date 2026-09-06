@@ -192,6 +192,8 @@ function toast(message, kind = '') {
   if (!stack) return;
   const el = document.createElement('div');
   el.className = `toast ${kind}`.trim();
+  el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  el.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
   el.innerHTML = `<span>${esc(message)}</span><button class="sm">閉じる</button>`;
   const btn = $('button', el);
   btn.onclick = () => dismiss();
