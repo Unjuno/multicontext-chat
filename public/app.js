@@ -165,7 +165,12 @@ async function request(url, options = {}) {
   if (response.status === 204) return null;
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const err = new Error(data.error || data?.error?.message || `HTTP ${response.status}`);
+    const rawMessage = data.error || data?.error?.message || `HTTP ${response.status}`;
+    const message = {
+      'Prompt is required': 'プロンプトを入力してください',
+      'Unauthorized': '認証が必要です。接続設定を確認してください',
+    }[String(rawMessage)] || rawMessage;
+    const err = new Error(message);
     err.status = response.status;
     throw err;
   }
