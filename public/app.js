@@ -1341,7 +1341,7 @@ async function refresh(expectedId = currentId) {
           ? '履歴がコンテキスト上限を超えています。対象チャットで履歴を整理して再試行してください。'
           : 'キューと履歴は保持されています。対象チャットで原因を確認して再試行できます。';
     const actionLabel = needsTrim ? '履歴整理を開く' : '対象チャットへ移動';
-    return `<div class="attention-banner" role="alert"><span><strong>${blockedMembers.length}件のチャットが対応待ちです</strong><small>${guidance}</small></span><button id="focusBlocked" class="sm" type="button" aria-label="${esc(actionLabel)}: ${esc(firstBlockedMember?.name || '対応待ちチャット')}">${actionLabel}</button></div>`;
+    return `<div class="attention-banner" role="alert"><span><strong>${blockedMembers.length}件のチャットが対応待ちです</strong><small>${guidance}</small></span><button id="focusBlocked" class="sm" type="button">${actionLabel}</button></div>`;
       })() : ''}
 
       <section class="workspace-overview" aria-label="ワークスペース概要">
