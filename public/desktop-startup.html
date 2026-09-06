@@ -477,10 +477,25 @@
           mcp_enabled: document.getElementById("mcpEnabled") ? document.getElementById("mcpEnabled").checked : true,
         };
       }
+      function validateSettings(cfg) {
+        const checks = [
+          [cfg.manage_librechat && !cfg.librechat_path, "librechatPath", "LibreChatをDesktopで管理する場合は、LibreChatディレクトリを選択してください。"],
+          [cfg.manage_model && !cfg.llama_path, "llamaPath", "モデルをDesktopで管理する場合は、llama-server実行ファイルを選択してください。"],
+          [cfg.manage_model && !cfg.model_path, "modelFilePath", "モデルをDesktopで管理する場合は、GGUFモデルファイルを選択してください。"],
+        ];
+        const failure = checks.find(([invalid]) => invalid);
+        if (!failure) return true;
+        const [, fieldId, message] = failure;
+        const field = document.getElementById(fieldId);
+        document.getElementById("settingsErr").textContent = message;
+        field?.focus();
+        return false;
+      }
       async function saveAndMaybeStart(start) {
         const cfg = readSettings();
         const rawKey = document.getElementById("apiKey").value;
         document.getElementById("settingsErr").textContent = "";
+        if (!validateSettings(cfg)) return;
         try {
           if (rawKey) {
             await invoke("save_api_key", { key: rawKey });
