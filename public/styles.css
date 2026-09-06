@@ -366,6 +366,7 @@ aside h3 {
 .workspace-link .ws-dot.blocked { background: var(--blocked); }
 .workspace-link .ws-dot.settled { background: var(--settled); }
 .workspace-link .ws-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-link .ws-updated { font-size: 9px; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
 .workspace-link .ws-count { font-size: 10px; font-family: var(--mono); color: var(--text-muted); flex-shrink: 0; }
 
 /* ── App Content ─────────────────────────────────────────────── */

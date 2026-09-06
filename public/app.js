@@ -74,6 +74,19 @@ function agentNameForId(id) {
   const found = agents.find(a => String(a.id) === String(id));
   return found ? String(found.name || found.id) : String(id);
 }
+function workspaceUpdatedLabel(updatedAt) {
+  const time = Date.parse(updatedAt || '');
+  if (!Number.isFinite(time)) return '';
+  const diff = Math.max(0, Date.now() - time);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'たった今';
+  if (minutes < 60) return `${minutes}分前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}時間前`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}日前`;
+  return new Date(time).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+}
 function agentOptionsHtml(selectedId, includeDefault) {
   const opts = [];
   if (includeDefault) {
@@ -604,9 +617,11 @@ async function refreshList(expectedId = currentId) {
     const pinned = pinnedWorkspaceIds.has(workspace.id);
     const stateLabel = workspace.archived ? 'アーカイブ済み' : sharedWorkspaceLabel(rawState || dot.toUpperCase()).label;
     const workspaceLabel = `${workspace.name}、${stateLabel}、${active}件中${count}件のチャット`;
+    const updatedLabel = workspaceUpdatedLabel(workspace.updatedAt);
     return `<div class="workspace-item" role="listitem"><button class="workspace-link ${isActive ? 'active' : ''}" data-id="${workspace.id}" title="${esc(workspace.name)} — ${esc(stateLabel)}" aria-current="${isActive ? 'page' : 'false'}" aria-label="${esc(workspaceLabel)}">
       <span class="ws-dot ${esc(dotClass)}" aria-hidden="true"></span>
       <span class="ws-name">${esc(workspace.name)}</span>
+      ${updatedLabel ? `<span class="ws-updated" title="最終更新: ${esc(updatedLabel)}">${esc(updatedLabel)}</span>` : ''}
       <span class="ws-count">${active}/${count}</span>
     </button><button class="workspace-pin ${pinned ? 'pinned' : ''}" data-action="toggle-pin" data-id="${workspace.id}" type="button" aria-pressed="${pinned}" aria-label="${pinned ? 'ピン留めを解除' : 'ワークスペースをピン留め'}" title="${pinned ? 'ピン留めを解除' : 'ピン留め'}">★</button></div>`;
   };
