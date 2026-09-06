@@ -108,6 +108,8 @@ builds).
 
 Stop aborts active requests and clears pending work. An interrupted process does not silently lose an in-flight prompt: startup recovery requeues it.
 
+Completed or blocked workspaces can be archived without deleting their history. Archived workspaces are hidden from the default list and can be found through the `アーカイブ済み` filter and restored. Running or queued workspaces cannot be archived, so active work is never hidden accidentally.
+
 ## Cross-chat tools
 
 Each member exposes an OpenAPI Action URL. The Action contains:

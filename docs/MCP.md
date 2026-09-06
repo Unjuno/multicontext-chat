@@ -193,10 +193,10 @@ await mcp.callTool('multicontext_send', { workspace_id: wsId, chat_id: chatIds[1
 
 | Tool | Input | Notes |
 |------|-------|-------|
-| `multicontext_list_workspaces` | — | runtimeState, active/total counts |
+| `multicontext_list_workspaces` | `include_archived?` | runtimeState, active/total counts; archived workspaces are excluded by default |
 | `multicontext_get_workspace` | `workspace_id`, `include_messages?`, `message_limit` | bounded, no secrets |
 | `multicontext_create_workspace` | `name?`, `system_prompt?`, `default_agent_id?`, `initial_chat_count? 0-10` | |
-| `multicontext_update_workspace` | `workspace_id`, `name?`, `system_prompt?`, `default_agent_id?`, `compile_agent_id?`, `compile_prompt?` | |
+| `multicontext_update_workspace` | `workspace_id`, `name?`, `system_prompt?`, `default_agent_id?`, `compile_agent_id?`, `compile_prompt?`, `archived?` | active or queued work cannot be archived |
 | `multicontext_delete_workspace` | `workspace_id` | destructive |
 | `multicontext_list_agents` | — | id,name,provider |
 | `multicontext_add_chat` | `workspace_id`, `name?`, `developer_prompt?`, `agent_id?` | |
