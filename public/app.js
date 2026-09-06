@@ -1168,7 +1168,7 @@ function memberCard(workspace, member) {
           <div class="action-url" title="${esc(member.actionSpecUrl || '')}">${esc(member.actionSpecUrl || '')}</div>
         </div>
         <div class="messages" role="log" aria-live="polite">
-          ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">まだメッセージがありません — ブロードキャストか直接送信で会話を始めましょう</div>' : ''}
+          ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">まだメッセージがありません — 一斉送信か直接送信で会話を始めましょう</div>' : ''}
           ${member.messages.map((message) => `
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
               <div class="msg-head">${esc(messageRoleLabel(message.role))}${message.at ? ` · ${esc(displayTimestamp(message.at))}` : ''}${message.pending ? ' · 処理中' : ''}</div>
@@ -1478,7 +1478,7 @@ function wire(workspace) {
       $('#broadcastPrompt').value = '';
       const ta = $('#broadcastPrompt'); if (ta) autoResize(ta);
       await refreshPreservingDrafts(workspace.id);
-      toast('ブロードキャストを送信しました', 'success');
+      toast('一斉送信しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
   };
 
