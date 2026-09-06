@@ -1290,6 +1290,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSideb
 document.addEventListener('keydown', (e) => {
   const target = e.target;
   const typing = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && currentId) {
+    e.preventDefault();
+    document.getElementById('saveWorkspace')?.click();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
     workspaceSearch?.focus();
