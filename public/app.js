@@ -948,17 +948,17 @@ function renderOrchestratorDrawer(data) {
     const det = row.detail ? ` <span style="color:var(--text-muted)">${esc(row.detail)}</span>` : '';
     const run = row.runId ? ` <span style="color:var(--text-muted)">[${esc(row.runId)}]</span>` : '';
     return `<div class="orchestrator-event ${esc(row.origin || '')}">${esc(row.time)} ${who}${esc(row.action)}${tgt}${det}${run}</div>`;
-  }).join('') || '<div class="small">no activity yet</div>';
+  }).join('') || '<div class="small">活動はまだありません</div>';
   const pendingHtml = [0,1,2].map(p=>{
     const items=qPending.filter(x=>x.priority===p);
-    const title = `Q${p} pending (${items.length})`;
-    const rows = items.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,80))} <span style="color:var(--text-muted)">${esc(it.origin)}/${esc(it.runId||'')}</span></div>`).join('') || '<div class="small">empty</div>';
+    const title = `Q${p} 待機中 (${items.length})`;
+    const rows = items.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,80))} <span style="color:var(--text-muted)">${esc(it.origin)}/${esc(it.runId||'')}</span></div>`).join('') || '<div class="small">空です</div>';
     return `<div class="orchestrator-q-group"><div class="orchestrator-q-title">${esc(title)}</div>${rows}</div>`;
   }).join('');
   const historyItems = qHistory.slice(-10);
-  const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">History (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">empty</div>'}</div>`;
+  const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">履歴 (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">空です</div>'}</div>`;
   const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${esc(e.origin)}">${esc(e.ts.slice(11,19))} ${esc(e.type)} <span style="color:var(--text-muted)">${esc(e.origin)}${e.actor?'/'+esc(e.actor):''}</span></div>`).join('');
-  body.innerHTML = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Live activity</div>${activityHtml}</div>` + pendingHtml + histHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">Events</div>${evHtml || '<div class="small">no events</div>'}</div>`;
+  body.innerHTML = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">ライブ活動</div>${activityHtml}</div>` + pendingHtml + histHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">イベント</div>${evHtml || '<div class="small">イベントはまだありません</div>'}</div>`;
 }
 function renderOrchestratorBar(data) {
   const bar = document.getElementById('orchestratorBar');
