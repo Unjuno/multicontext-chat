@@ -29,6 +29,10 @@ export class StateStore {
     this.state.version = 2;
     for (const workspace of Object.values(this.state.workspaces)) {
       workspace.compilePrompt ??= defaultCompilePrompt();
+      if (workspace.compilePrompt === legacyCompilePrompt()) {
+        workspace.compilePrompt = defaultCompilePrompt();
+        dirty = true;
+      }
       workspace.archived ??= false;
       workspace.defaultAgentId ??= '';
       workspace.settings ??= {};
@@ -604,5 +608,9 @@ export function searchMemberMessages(member, query, limit = 8) {
 }
 
 export function defaultCompilePrompt() {
+  return '独立した各チャットの記録を、ひとつの明確な回答にまとめてください。重要な違いや未解決の点は残し、記録にない情報は追加しないでください。';
+}
+
+function legacyCompilePrompt() {
   return 'Compress the supplied independent chat records into one clear response. Preserve material differences and unresolved points. Do not invent information that is not present in the records.';
 }
