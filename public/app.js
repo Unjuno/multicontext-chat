@@ -8,6 +8,7 @@ let agents = [];
 let refreshController = null;
 let workspaceSearchTimer = null;
 const openEditors = new Set();
+const openDeveloperPrompts = new Set();
 let workspaceSearchQuery = '';
 let workspaceListExpanded = false;
 const workspaceFilterValues = new Set(['all', 'RUNNING', 'PENDING', 'BLOCKED', 'SETTLED', 'ARCHIVED']);
@@ -74,6 +75,10 @@ function agentNameForId(id) {
   if (!id) return '';
   const found = agents.find(a => String(a.id) === String(id));
   return found ? String(found.name || found.id) : String(id);
+}
+function messageRoleLabel(role) {
+  const labels = { user: 'あなた', assistant: 'Agent', system: 'システム', tool: 'ツール' };
+  return labels[String(role || '').toLowerCase()] || String(role || 'メッセージ');
 }
 function workspaceActivityTimestamp(workspace) {
   return workspace?.updatedAt || workspace?.createdAt || '';
@@ -1066,6 +1071,7 @@ function scheduleOrchestrator() { clearTimeout(orchestratorTimer); orchestratorT
 
 function memberCard(workspace, member) {
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
+  const promptOpen = openDeveloperPrompts.has(member.id) ? ' open' : '';
   const canSend = member.active !== false && memberHasResolvedAgent(workspace, member);
   const effectiveAgentId = String(member.agentId || workspace.defaultAgentId || '').trim();
   const isStaleMember = member.agentId && !agents.some(a => String(a.id) === String(member.agentId));
@@ -1122,10 +1128,10 @@ function memberCard(workspace, member) {
       </div>
       ${displayError ? `<div class="member-error" role="alert"><strong>処理を続行できませんでした</strong><span>${esc(displayError)}</span><small>会話の履歴とキューは保持されています。</small></div>` : ''}
       <div class="member-body">
-        <div class="dev-prompt">
-          <div class="dev-prompt-label">Developer Prompt <span class="scope-note">— このチャットのみ</span></div>
+        <details class="dev-prompt" data-action="prompt-details"${promptOpen}>
+          <summary><span class="dev-prompt-label">役割と指示</span><span class="scope-note">Agentへのチャット固有指示</span></summary>
           <div class="dev-prompt-text">${esc(member.developerPrompt) || ''}</div>
-        </div>
+        </details>
         <div class="member-editor${editorOpen}">
           <div class="editor-row">
             <label>名前 <input name="name" value="${esc(member.name)}" autocomplete="off"></label>
@@ -1149,7 +1155,7 @@ function memberCard(workspace, member) {
           ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">まだメッセージがありません — ブロードキャストか直接送信で会話を始めましょう</div>' : ''}
           ${member.messages.map((message) => `
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
-              <div class="msg-head">${esc(message.role)}${message.at ? ` · ${esc(message.at)}` : ''}${message.pending ? ' · 処理中' : ''}</div>
+              <div class="msg-head">${esc(messageRoleLabel(message.role))}${message.at ? ` · ${esc(message.at)}` : ''}${message.pending ? ' · 処理中' : ''}</div>
               ${esc(message.content)}
             </div>
           `).join('')}
@@ -1216,7 +1222,7 @@ async function refresh(expectedId = currentId) {
         <div class="workspace-fields">
           <label for="globalPrompt" class="field-label">共有 System Prompt <span class="scope-note">— 全チャットに system role として適用</span></label>
           <textarea id="globalPrompt" placeholder="全チャット共通の system 指示を入力（例: あなたは簡潔に答えるアシスタントです）" aria-label="共有 System Prompt">${esc(workspace.globalPrompt)}</textarea>
-          <div class="hint">指示階層: System Prompt（共有） → Developer Prompt（チャット固有） → user（Broadcast / Direct）。nativeはLibreChat会話を継続、compatはローカル履歴を再生。 · <span class="small">${activeMembers.length}件アクティブ / 全${members.length}件</span></div>
+          <div class="hint">指示の適用順: ワークスペース共通 → チャット固有 → 送信内容。各チャットの会話履歴は独立して保持されます。 · <span class="small">${activeMembers.length}件アクティブ / 全${members.length}件</span></div>
           <label for="defaultAgentId" class="field-label" style="margin-top:8px">既定エージェント <span class="scope-note">— 新しいチャットや「ワークスペース既定を使用」の解決先</span></label>
           <select id="defaultAgentId" aria-label="既定エージェント">${agentOptionsHtml(workspace.defaultAgentId, false)}</select>
           <label for="agentSelectionMode" class="field-label" style="margin-top:8px">Agent未指定時の動作</label>
@@ -1538,6 +1544,11 @@ function wire(workspace) {
     const memberId = card.dataset.mid;
     const member = workspace.members[memberId];
     const editor = $('.member-editor', card);
+    const promptDetails = $('[data-action=prompt-details]', card);
+    promptDetails?.addEventListener('toggle', () => {
+      if (promptDetails.open) openDeveloperPrompts.add(memberId);
+      else openDeveloperPrompts.delete(memberId);
+    });
     $('[data-action=edit]', card).onclick = () => {
       const willOpen = !openEditors.has(memberId);
       if (willOpen) openEditors.add(memberId); else openEditors.delete(memberId);

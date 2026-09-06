@@ -709,21 +709,39 @@ aside h3 {
   min-height: 0;
 }
 
-/* ── Developer Prompt (visible by default) ───────────────────── */
+/* ── Role and instructions (collapsed by default) ────────────── */
 .dev-prompt {
-  padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   background: #fefce8;
 }
+.dev-prompt > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.dev-prompt > summary::-webkit-details-marker { display: none; }
+.dev-prompt > summary::before {
+  content: "▸";
+  width: 10px;
+  color: #a16207;
+  font-size: 12px;
+  line-height: 1;
+}
+.dev-prompt[open] > summary::before { content: "▾"; }
+.dev-prompt > summary:hover { background: rgba(161,98,7,0.08); }
 .dev-prompt-label {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #854d0e;
-  margin-bottom: 2px;
 }
 .dev-prompt-text {
+  padding: 0 10px 8px 26px;
   font-size: 12px;
   color: #713f12;
   white-space: pre-wrap;
@@ -807,7 +825,6 @@ aside h3 {
 .msg .msg-head {
   font-size: 9px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
   margin-bottom: 2px;
