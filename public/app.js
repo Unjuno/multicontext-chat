@@ -284,6 +284,15 @@ async function request(url, options = {}) {
   return data;
 }
 
+function recordClientDiagnostic(error, context = 'unknown') {
+  try {
+    const key = 'mcc_client_diagnostics';
+    const previous = JSON.parse(sessionStorage.getItem(key) || '[]');
+    previous.push({ at: new Date().toISOString(), context, message: String(error?.message || error || 'Unknown error') });
+    sessionStorage.setItem(key, JSON.stringify(previous.slice(-20)));
+  } catch {}
+}
+
 async function refreshHealth() {
   try {
     const health = await request('/api/health');
@@ -1431,6 +1440,7 @@ async function refresh(expectedId = currentId) {
     if (error.name === 'AbortError') return;
     if (expectedId !== currentId) return;
     console.error(error);
+    recordClientDiagnostic(error, snapshotFetched ? 'workspace-render' : 'workspace-fetch');
     if (error.status === 404) {
       currentId = null;
       lastWorkspace = null;
