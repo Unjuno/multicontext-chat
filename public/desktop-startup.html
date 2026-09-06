@@ -491,6 +491,12 @@
         field?.focus();
         return false;
       }
+      function errorMessage(error) {
+        if (typeof error === "string") return error;
+        if (error && typeof error.message === "string") return error.message;
+        if (error && typeof error.error === "string") return error.error;
+        try { return JSON.stringify(error); } catch (_) { return "不明なエラーです"; }
+      }
       async function saveAndMaybeStart(start) {
         const cfg = readSettings();
         const rawKey = document.getElementById("apiKey").value;
@@ -514,7 +520,7 @@
           }
         } catch (e) {
           document.getElementById("settingsErr").textContent =
-            "保存できません: " + (typeof e === "string" ? e : JSON.stringify(e));
+            "保存できません: " + errorMessage(e);
         }
       }
 
@@ -550,7 +556,7 @@
           await refreshConnState();
         } catch (e) {
           document.getElementById("apiKeyHint").textContent =
-            "保存できません: " + (typeof e === "string" ? e : JSON.stringify(e));
+            "保存できません: " + errorMessage(e);
         }
       };
       document.getElementById("deleteApiKey").onclick = async () => {
