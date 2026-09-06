@@ -1581,7 +1581,8 @@ function wire(workspace) {
   };
   const downloadCompile = $('#downloadCompile');
   if (downloadCompile) downloadCompile.onclick = () => {
-    const output = $('#compileOutput')?.textContent || '';
+    // Keep the original Markdown for export; the rendered HTML is display-only.
+    const output = workspace.lastCompile?.text || $('#compileOutput')?.textContent || '';
     const blob = new Blob([`# ${workspace.name || 'MultiContext Compile'}\n\n${output}\n`], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
