@@ -1004,9 +1004,15 @@ async function refresh(expectedId = currentId) {
     const assistantMessages = members.reduce((sum, member) => sum + (member.messages || []).filter((message) => message.role === 'assistant').length, 0);
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
     const canBroadcast = activeMembers.length > 0;
-    const compileDisabled = workspace.runtimeState !== 'SETTLED';
+    const compileStateBlocked = workspace.runtimeState !== 'SETTLED';
+    const compileAgentReady = Boolean(workspace.compileAgentId || workspace.defaultAgentId || agents.length === 1);
+    const compileDisabled = compileStateBlocked || !compileAgentReady;
     const archiveDisabled = !workspace.archived && ['RUNNING', 'PENDING'].includes(String(workspace.runtimeState || '').toUpperCase());
-    const compileHint = compileDisabled ? `コンパイルは ${workspace.runtimeState} の間は利用できません — SETTLED になるまで待ってください` : '全チャットの直近メッセージを要約';
+    const compileHint = compileStateBlocked
+      ? `コンパイルは ${workspace.runtimeState || '現在の状態'} の間は利用できません — SETTLED になるまで待ってください`
+      : !compileAgentReady
+        ? 'Compileに使用するAgentを選択するか、ワークスペース既定Agentを設定してください'
+        : '全チャットの直近メッセージを要約';
     $('#app').innerHTML = `
       <datalist id="agentOptions">${agentOptions}</datalist>
 
@@ -1086,7 +1092,7 @@ async function refresh(expectedId = currentId) {
         <textarea id="compilePrompt" placeholder="コンパイル指示 — 例: 差分を要約し、未解決点を列挙" aria-label="Compile Prompt">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
           ? `<hr><div class="compile-result-head"><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdown保存</button></div></div><div class="compile-output" id="compileOutput">${esc(workspace.lastCompile.text)}</div>`
-          : `<div class="small">手動のみ。${compileDisabled ? `現在は${workspace.runtimeState}のため待機中です。` : 'コンパイル結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">コンパイル</span>を押して要約を生成します。'}</div>`}
+          : `<div class="small">手動のみ。${compileStateBlocked ? `現在は${workspace.runtimeState || '処理中'}のため待機中です。` : !compileAgentReady ? 'コンパイルエージェントを選択してから実行してください。' : 'コンパイル結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">コンパイル</span>を押して要約を生成します。'}</div>`}
       </div>
     `;
     wire(workspace);
