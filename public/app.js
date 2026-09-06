@@ -1474,7 +1474,7 @@ async function refresh(expectedId = currentId) {
         ? `自動で再試行しています（${workspaceRetryAttempt + 1} / 3）`
         : '再試行ボタンから、いつでも手動で更新できます。';
       const diagnostic = renderFailed
-        ? `<details class="refresh-diagnostic"><summary>詳細</summary><code>${esc(error?.message || '原因を特定できませんでした')}</code></details>`
+        ? `<details class="refresh-diagnostic"><summary>詳細</summary><code>${esc(error?.message || '原因を特定できませんでした')}${error?.stack ? `\n\n${esc(String(error.stack).split('\n').slice(0, 4).join('\n'))}` : ''}</code></details>`
         : '';
       banner.innerHTML = hasStaleData
         ? `<strong>${renderFailed ? '更新を完了できませんでした' : '最新情報を取得できません'}</strong><span>${retryLabel}</span><small>${retryProgress}</small>${diagnostic}<button class="sm" type="button" data-action="refresh-workspace">再試行</button>`
