@@ -539,7 +539,9 @@ async function refreshList(expectedId = currentId) {
     const dotClass = dot === 'error' ? 'blocked' : dot;
     const isActive = workspace.id === currentId;
     const pinned = pinnedWorkspaceIds.has(workspace.id);
-    return `<div class="workspace-item" role="listitem"><button class="workspace-link ${isActive ? 'active' : ''}" data-id="${workspace.id}" title="${esc(workspace.name)} — ${esc(rawState || dot.toUpperCase())}" aria-current="${isActive ? 'page' : 'false'}" aria-label="${esc(workspace.name)}">
+    const stateLabel = workspace.archived ? 'アーカイブ済み' : sharedWorkspaceLabel(rawState || dot.toUpperCase());
+    const workspaceLabel = `${workspace.name}、${stateLabel}、${active}件中${count}件のチャット`;
+    return `<div class="workspace-item" role="listitem"><button class="workspace-link ${isActive ? 'active' : ''}" data-id="${workspace.id}" title="${esc(workspace.name)} — ${esc(stateLabel)}" aria-current="${isActive ? 'page' : 'false'}" aria-label="${esc(workspaceLabel)}">
       <span class="ws-dot ${esc(dotClass)}" aria-hidden="true"></span>
       <span class="ws-name">${esc(workspace.name)}</span>
       <span class="ws-count">${active}/${count}</span>
