@@ -1188,7 +1188,7 @@ async function refresh(expectedId = currentId) {
     const compileDisabled = compileStateBlocked || !compileAgentReady;
     const archiveDisabled = !workspace.archived && ['RUNNING', 'PENDING'].includes(String(workspace.runtimeState || '').toUpperCase());
     const compileHint = compileStateBlocked
-      ? `コンパイルは ${workspace.runtimeState || '現在の状態'} の間は利用できません — SETTLED になるまで待ってください`
+      ? `コンパイルは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は利用できません — 完了になるまで待ってください`
       : !compileAgentReady
         ? 'Compileに使用するAgentを選択するか、ワークスペース既定Agentを設定してください'
         : '全チャットの直近メッセージを要約';
@@ -1259,7 +1259,7 @@ async function refresh(expectedId = currentId) {
             <button id="emptyAddChat" class="primary">+ 最初のチャットを追加</button>
           </div>`}
 
-      <div class="section-label">Compile — 手動要約 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">SETTLED時のみ実行 · 履歴には書き込まれません</span></div>
+      <div class="section-label">Compile — 手動要約 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">完了時のみ実行 · 履歴には書き込まれません</span></div>
       <div class="compile">
         <div class="compile-head">
           <strong>Compile（手動）</strong>
@@ -1362,7 +1362,7 @@ function wire(workspace) {
     const blockedByState = workspace.runtimeState !== 'SETTLED';
     compileButton.disabled = blockedByState || !ready;
     compileButton.title = blockedByState
-      ? `コンパイルは ${workspace.runtimeState || '現在の状態'} の間は利用できません — SETTLED になるまで待ってください`
+      ? `コンパイルは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は利用できません — 完了になるまで待ってください`
       : !ready
         ? 'Compileに使用するAgentを選択するか、ワークスペース既定Agentを設定してください'
         : '全チャットの直近メッセージを要約';

@@ -1,14 +1,14 @@
 export function workspaceStatusLabel(state) {
   const map = {
-    running: 'RUNNING · 実行中',
-    pending: 'PENDING · キューあり',
-    blocked: 'BLOCKED · 要対応',
-    error: 'BLOCKED · 要対応',
-    settled: 'SETTLED · 処理待ちなし',
-    idle: 'SETTLED · 処理待ちなし',
+    running: '実行中',
+    pending: 'キューあり',
+    blocked: '要対応',
+    error: '要対応',
+    settled: '完了',
+    idle: '待機中',
   };
   const normalized = String(state || '').toLowerCase();
-  const label = map[normalized] || String(state || '').toUpperCase() || 'UNKNOWN';
+  const label = map[normalized] || '状態確認中';
   const cls = normalized === 'error' ? 'blocked' : normalized || 'unknown';
   return { label, cls, normalized };
 }
@@ -16,7 +16,7 @@ export function workspaceStatusLabel(state) {
 export function memberStatusLabel(state) {
   const labels = { error: 'ブロック中', running: '実行中', idle: '待機' };
   const normalized = String(state || '').toLowerCase();
-  const label = labels[normalized] || String(state || '').toUpperCase() || 'UNKNOWN';
+  const label = labels[normalized] || '状態確認中';
   const cls = normalized === 'error' ? 'blocked' : normalized || 'unknown';
   return { label, cls, normalized };
 }
