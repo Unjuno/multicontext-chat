@@ -1332,7 +1332,14 @@ async function refresh(expectedId = currentId) {
           ${agents.length ? '' : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
         </div>
       </div>
-      ${blockedMembers.length ? `<div class="attention-banner" role="alert"><span><strong>${blockedMembers.length}件のチャットが対応待ちです</strong><small>キューと履歴は保持されています。原因を確認して再試行できます。</small></span><button id="focusBlocked" class="sm" type="button" aria-label="${esc(firstBlockedMember?.name || '対応待ちチャット')}へ移動">対象チャットへ移動</button></div>` : ''}
+      ${blockedMembers.length ? (() => {
+        const firstError = String(firstBlockedMember?.lastError || '');
+        const needsTrim = /context size|context length|too many tokens/i.test(firstError);
+        const guidance = needsTrim
+          ? '履歴がコンテキスト上限を超えています。対象チャットで履歴を整理して再試行してください。'
+          : 'キューと履歴は保持されています。対象チャットで原因を確認して再試行できます。';
+        return `<div class="attention-banner" role="alert"><span><strong>${blockedMembers.length}件のチャットが対応待ちです</strong><small>${guidance}</small></span><button id="focusBlocked" class="sm" type="button" aria-label="${esc(firstBlockedMember?.name || '対応待ちチャット')}へ移動">${needsTrim ? '履歴整理を開く' : '対象チャットへ移動'}</button></div>`;
+      })() : ''}
 
       <section class="workspace-overview" aria-label="ワークスペース概要">
         <div class="overview-item"><span class="overview-label">アクティブチャット</span><strong>${activeMembers.length}<small> / ${members.length} チャット</small></strong></div>
