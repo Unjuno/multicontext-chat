@@ -478,6 +478,7 @@ async function refreshList(expectedId = currentId) {
   const data = await request('/api/workspaces');
   if (expectedId !== currentId) return;
   const workspaces = data.workspaces || [];
+  if (!currentId) $('#app')?.setAttribute('aria-busy', 'false');
   const workspaceIds = new Set(workspaces.map((workspace) => String(workspace.id)));
   const validPinnedIds = [...pinnedWorkspaceIds].filter((id) => workspaceIds.has(String(id)));
   if (validPinnedIds.length !== pinnedWorkspaceIds.size) {
