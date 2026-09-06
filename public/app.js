@@ -343,10 +343,12 @@ async function pollRuntime() {
       const mcMsg = health.ok ? '準備完了' : (health.librechat && !health.librechat.ok ? 'LibreChat 接続を確認してください' : 'MultiContext が利用できません');
       const lcState = health.librechat && health.librechat.ok ? 'ready' : 'error';
       const lcMsg = health.librechat && health.librechat.ok ? '接続済み' : 'LibreChat 接続を確認';
-      // GPT-OSS: browser cannot verify directly; lack of desktop telemetry is
-      // not itself a service failure. Keep the aggregate status non-error.
-      const modelState = 'checking';
-      const modelMsg = 'デスクトップランタイムで確認中';
+      // GPT-OSS cannot be probed from the browser layer. Preserve a trusted
+      // READY result handed off by the startup screen instead of replacing it
+      // with an endless CHECKING state after navigation.
+      const cachedModel = runtimeStatuses.find((status) => status.name === 'モデル');
+      const modelState = cachedModel?.state === 'ready' ? 'ready' : 'checking';
+      const modelMsg = modelState === 'ready' ? (cachedModel.message || '準備完了') : 'デスクトップランタイムで確認中';
       base = [
         { name: 'モデル', state: modelState, message: modelMsg, ownership: null, attempt_id: 0 },
         { name: 'LibreChat', state: lcState, message: lcMsg, ownership: null, attempt_id: 0 },
