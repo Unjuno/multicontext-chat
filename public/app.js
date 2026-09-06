@@ -6,6 +6,8 @@ let currentId = null;
 let timer = null;
 let agents = [];
 let refreshController = null;
+let workspaceRetryTimer = null;
+let workspaceRetryAttempt = 0;
 let workspaceSearchTimer = null;
 const openEditors = new Set();
 const openDeveloperPrompts = new Set();
@@ -1298,6 +1300,9 @@ async function refresh(expectedId = currentId) {
     // banner before rendering the fresh snapshot so recovered connectivity is
     // visible immediately, including when the DOM was partially preserved.
     app?.querySelectorAll('.warning-banner, .error-banner').forEach((banner) => banner.remove());
+    clearTimeout(workspaceRetryTimer);
+    workspaceRetryTimer = null;
+    workspaceRetryAttempt = 0;
     lastWorkspace = workspace;
     document.title = `${workspace.name || 'ワークスペース'} — MultiContext`;
     const members = Object.values(workspace.members);
@@ -1451,6 +1456,15 @@ async function refresh(expectedId = currentId) {
       // `.error-banner` would stack a new warning on every polling tick.
       if (app && !app.querySelector('.error-banner, .warning-banner')) app.prepend(banner);
       if (!hasStaleData) toast(`更新失敗: ${error.message}`, 'error');
+      if (renderFailed && expectedId === currentId && workspaceRetryAttempt < 3) {
+        const delay = 2000 * (2 ** workspaceRetryAttempt);
+        workspaceRetryAttempt += 1;
+        clearTimeout(workspaceRetryTimer);
+        workspaceRetryTimer = setTimeout(() => {
+          workspaceRetryTimer = null;
+          refresh(expectedId).catch(() => {});
+        }, delay);
+      }
     }
   } finally {
     app?.setAttribute('aria-busy', 'false');
