@@ -1036,7 +1036,11 @@ async function refresh(expectedId = currentId) {
       const banner = document.createElement('div');
       banner.className = 'error-banner';
       banner.setAttribute('role', 'alert');
-      banner.textContent = `更新失敗: ${error.message}`;
+      banner.innerHTML = `<span>更新失敗: ${esc(error.message)}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`;
+      banner.querySelector('[data-action="refresh-workspace"]').onclick = () => {
+        banner.remove();
+        refresh(currentId).catch(() => {});
+      };
       const app = $('#app');
       if (app && !app.querySelector('.error-banner')) app.prepend(banner);
       toast(`更新失敗: ${error.message}`, 'error');

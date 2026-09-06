@@ -486,8 +486,9 @@ aside h3 {
 
 .error-banner {
   background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 6px;
-  padding: 10px 14px; margin: 12px 0; font-size: 0.85rem;
+  padding: 10px 14px; margin: 12px 0; font-size: 0.85rem; display: flex; align-items: center; gap: 10px;
 }
+.error-banner span { flex: 1; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
