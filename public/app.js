@@ -2033,9 +2033,9 @@ $('#resetWorkspaceView')?.addEventListener('click', () => {
   refreshList().then(() => toast('表示条件をリセットしました', 'success')).catch((err) => toast(err.message, 'error'));
 });
 
-async function createWorkspaceFromDialog(name, button) {
+async function createWorkspaceFromDialog(name, button, initialChatCount = 2) {
   await withBusy(button, async () => {
-    const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+    const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: name.trim(), initial_chat_count: initialChatCount }) });
     await select(workspace.id);
     toast('ワークスペースを作成しました', 'success');
     closeSidebar();
@@ -2048,8 +2048,10 @@ $('#newWorkspace').onclick = async (e) => {
   }
   const dialog = $('#newWorkspaceDialog');
   const name = $('#newWorkspaceName');
+  const chatCount = $('#newWorkspaceChatCount');
   if (!dialog || !name) return toast('ワークスペース作成画面を開けませんでした', 'error');
   name.value = '';
+  if (chatCount) chatCount.value = '2';
   updateWorkspaceNameCount();
   if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
   setTimeout(() => name.focus(), 0);
@@ -2082,7 +2084,8 @@ $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
     return;
   }
   try {
-    await createWorkspaceFromDialog(name.value, button);
+    const initialChatCount = Math.max(1, Math.min(4, Number($('#newWorkspaceChatCount')?.value || 2)));
+    await createWorkspaceFromDialog(name.value, button, initialChatCount);
     const dialog = $('#newWorkspaceDialog');
     if (dialog?.close) dialog.close(); else dialog?.removeAttribute('open');
   } catch (err) { toast(err.message, 'error'); }

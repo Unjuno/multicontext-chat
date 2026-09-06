@@ -102,6 +102,13 @@
       <label for="newWorkspaceName" class="field-label">ワークスペース名</label>
       <input id="newWorkspaceName" required maxlength="120" placeholder="例：論文レビュー、製品仕様の検討" autocomplete="off">
       <span id="newWorkspaceNameCount" class="field-hint" aria-live="polite">0 / 120</span>
+      <label for="newWorkspaceChatCount" class="field-label">最初のチャット数</label>
+      <select id="newWorkspaceChatCount" aria-label="最初のチャット数">
+        <option value="1">1件</option>
+        <option value="2" selected>2件（おすすめ）</option>
+        <option value="3">3件</option>
+        <option value="4">4件</option>
+      </select>
       <menu><button id="cancelNewWorkspace" type="button">キャンセル</button><button id="createWorkspace" value="default" class="primary">作成</button></menu>
     </form>
   </dialog>
