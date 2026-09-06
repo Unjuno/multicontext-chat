@@ -1428,7 +1428,8 @@ function wire(workspace) {
   };
   $('#archiveWorkspace').onclick = async (e) => {
     const action = workspace.archived ? '復元' : 'アーカイブ';
-    if (!confirm(`「${workspace.name}」を${action}しますか？`)) return;
+    const unsavedWarning = isWorkspaceDirty() ? '\n未保存の変更は破棄されます。先に保存してください。' : '';
+    if (!confirm(`「${workspace.name}」を${action}しますか？${unsavedWarning}`)) return;
     await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}`, { method: 'PATCH', body: JSON.stringify({ archived: !workspace.archived }) });
       localStorage.setItem('mcc_last_workspace', workspace.id);
@@ -1580,7 +1581,8 @@ function wire(workspace) {
     const memberCount = Object.keys(workspace.members || {}).length;
     const runningCount = Object.values(workspace.members || {}).filter((member) => member.inFlight).length;
     const queuedCount = Object.values(workspace.members || {}).reduce((sum, member) => sum + (member.queue?.length || 0), 0);
-    if (!confirm(`「${name}」を削除しますか？\nチャット${memberCount}件（実行中${runningCount}件、待機中${queuedCount}件）と保存済みの会話が削除されます。\nこの操作は取り消せません。`)) return;
+    const unsavedWarning = isWorkspaceDirty() ? '\n入力中の未保存変更も失われます。' : '';
+    if (!confirm(`「${name}」を削除しますか？\nチャット${memberCount}件（実行中${runningCount}件、待機中${queuedCount}件）と保存済みの会話が削除されます。${unsavedWarning}\nこの操作は取り消せません。`)) return;
     await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}`, { method: 'DELETE' });
       pinnedWorkspaceIds.delete(workspace.id);
