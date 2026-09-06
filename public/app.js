@@ -228,6 +228,7 @@ let runtimeStatuses = [];
 let runtimePollTimer = null;
 let runtimePolling = false;
 let runtimeAbort = null;
+let runtimeVersion = null;
 
 function getTauriInvoke() {
   try {
@@ -282,7 +283,7 @@ function renderRuntime(statuses) {
             ${ownHtml}
           </span>
         </div>`;
-      }).join('');
+      }).join('') + (runtimeVersion ? `<div class="runtime-version">接続先バージョン v${esc(runtimeVersion)}</div>` : '');
     }
   }
 }
@@ -340,6 +341,7 @@ async function pollRuntime() {
     if (!base) {
       // Browser / fallback path: derive from /api/health. GPT-OSS health cannot be verified from browser layer.
       const health = await request('/api/health', { signal: controller.signal });
+      runtimeVersion = health.version || null;
       const mcState = health.ok ? 'ready' : 'error';
       const mcMsg = health.ok ? '準備完了' : (health.librechat && !health.librechat.ok ? 'LibreChat 接続を確認してください' : 'MultiContext が利用できません');
       const lcState = health.librechat && health.librechat.ok ? 'ready' : 'error';

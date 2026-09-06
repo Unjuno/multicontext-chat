@@ -231,6 +231,7 @@ header .brand strong {
 .runtime-row-dot.error { background: var(--blocked); }
 .runtime-row-dot.needs_setup { background: #f59e0b; }
 .runtime-row-own { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+.runtime-version { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 10px; }
 .runtime-actions {
   display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border);
   justify-content: flex-end; background: var(--idle-bg);
