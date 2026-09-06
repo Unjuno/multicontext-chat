@@ -1297,6 +1297,7 @@ async function refresh(expectedId = currentId) {
     const compileHasSource = assistantMessages > 0;
     const compileDisabled = compileStateBlocked || !compileAgentReady || !compileHasSource;
     const archiveDisabled = !workspace.archived && ['RUNNING', 'PENDING'].includes(String(workspace.runtimeState || '').toUpperCase());
+    const deleteDisabled = hasWorkToStop;
     const compileHint = compileStateBlocked
       ? `統合レポートは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は作成できません — 完了になるまで待ってください`
       : !compileAgentReady
@@ -1319,7 +1320,7 @@ async function refresh(expectedId = currentId) {
             <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
             <button id="stop" class="sm danger" ${hasWorkToStop ? '' : 'disabled'} title="${hasWorkToStop ? `実行中${runningMembers}件・キュー${queuedMessages}件を停止` : '停止する生成やキューはありません'}">全て停止</button>
             <button id="archiveWorkspace" class="sm" ${archiveDisabled ? 'disabled' : ''} title="${archiveDisabled ? '実行中またはキュー待ちのためアーカイブできません' : workspace.archived ? 'ワークスペースを通常一覧へ戻す' : 'ワークスペースをアーカイブ一覧へ移す'}">${workspace.archived ? '復元' : 'アーカイブ'}</button>
-            <button id="deleteWorkspace" class="sm danger" title="このワークスペースを削除">削除</button>
+            <button id="deleteWorkspace" class="sm danger" ${deleteDisabled ? 'disabled' : ''} title="${deleteDisabled ? '実行中またはキュー待ちのため、先に全て停止してください' : 'このワークスペースを削除'}">削除</button>
           </div>
         </div>
         <div class="workspace-fields">
@@ -1615,6 +1616,10 @@ function wire(workspace) {
   };
 
   $('#deleteWorkspace').onclick = async (e) => {
+    if (hasWorkToStop) {
+      toast('削除する前に、実行中の生成と待機中のキューを停止してください', 'warn');
+      return;
+    }
     const name = String(workspace.name || 'このワークスペース');
     const memberCount = Object.keys(workspace.members || {}).length;
     const runningCount = Object.values(workspace.members || {}).filter((member) => member.inFlight).length;
