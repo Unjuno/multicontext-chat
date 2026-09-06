@@ -1534,7 +1534,7 @@ const openLaunchWorkspace = async (workspace) => {
     localStorage.setItem('mcc_workspace_filter', 'ARCHIVED');
   }
   const state = String(workspace.runtimeState || '').toUpperCase();
-  if (workspaceStatusFilter !== 'all' && state !== workspaceStatusFilter) {
+  if (!workspace.archived && workspaceStatusFilter !== 'all' && state !== workspaceStatusFilter) {
     workspaceStatusFilter = 'all';
     if (workspaceFilter) workspaceFilter.value = 'all';
     localStorage.setItem('mcc_workspace_filter', 'all');
