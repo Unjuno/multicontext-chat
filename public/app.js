@@ -1661,7 +1661,8 @@ function wire(workspace) {
     autoResize(bp);
   }
 
-  $('#broadcast').onclick = async (e) => {
+  const broadcastButton = $('#broadcast');
+  if (broadcastButton) broadcastButton.onclick = async (e) => {
     const input = $('#broadcastPrompt');
     const prompt = input.value.trim();
     if (!prompt) { toast('プロンプトを入力してください', 'error'); input.focus(); return; }
@@ -1685,7 +1686,8 @@ function wire(workspace) {
     }
   });
 
-  $('#stop').onclick = async (e) => {
+  const stopButton = $('#stop');
+  if (stopButton) stopButton.onclick = async (e) => {
     const activeCount = Object.values(workspace.members || {}).filter((member) => member.active !== false).length;
     const queuedCount = Object.values(workspace.members || {}).reduce((sum, member) => sum + (member.queue?.length || 0), 0);
     if (!confirm(`全ての生成を停止しますか？\nアクティブなチャット${activeCount}件、待機中のキュー${queuedCount}件を停止します。`)) return;
@@ -1696,7 +1698,8 @@ function wire(workspace) {
     }).catch((err) => toast(err.message, 'error'));
   };
 
-  $('#deleteWorkspace').onclick = async (e) => {
+  const deleteButton = $('#deleteWorkspace');
+  if (deleteButton) deleteButton.onclick = async (e) => {
     if (hasWorkToStop) {
       toast('削除する前に、実行中の生成と待機中のキューを停止してください', 'warn');
       return;
@@ -1728,7 +1731,8 @@ function wire(workspace) {
     }).catch((err) => toast(err.message, 'error'));
   };
 
-  $('#compile').onclick = async (e) => {
+  const compileButton = $('#compile');
+  if (compileButton) compileButton.onclick = async (e) => {
     const compileSection = e.currentTarget.closest('.compile');
     await withBusy(e.currentTarget, async () => {
       e.currentTarget.textContent = '生成中…';
