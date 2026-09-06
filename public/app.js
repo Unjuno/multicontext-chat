@@ -1447,9 +1447,19 @@ async function refresh(expectedId = currentId) {
       banner.innerHTML = hasStaleData
         ? `<span>${retryLabel}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`
         : `<span>更新失敗: ${esc(error.message)}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`;
-      banner.querySelector('[data-action="refresh-workspace"]').onclick = () => {
-        banner.remove();
-        refresh(currentId).catch(() => {});
+      banner.querySelector('[data-action="refresh-workspace"]').onclick = (event) => {
+        const retry = event.currentTarget;
+        if (retry.disabled) return;
+        retry.disabled = true;
+        retry.textContent = '再試行中…';
+        retry.setAttribute('aria-busy', 'true');
+        refresh(currentId).catch(() => {
+          if (retry.isConnected) {
+            retry.disabled = false;
+            retry.textContent = '再試行';
+            retry.removeAttribute('aria-busy');
+          }
+        });
       };
       // Keep one connection banner per workspace. The stale-data banner uses a
       // different class from the initial-load error, so checking only
