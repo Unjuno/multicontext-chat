@@ -9,7 +9,7 @@ let refreshController = null;
 const openEditors = new Set();
 let workspaceSearchQuery = '';
 let workspaceStatusFilter = 'all';
-let workspaceSort = 'recent';
+let workspaceSort = localStorage.getItem('mcc_workspace_sort') === 'name' ? 'name' : 'recent';
 let pinnedWorkspaceIds = (() => {
   try { return new Set(JSON.parse(localStorage.getItem('mcc_pinned_workspaces') || '[]')); } catch { return new Set(); }
 })();
@@ -1379,8 +1379,10 @@ workspaceFilter?.addEventListener('change', () => {
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 const workspaceSortSelect = $('#workspaceSort');
+if (workspaceSortSelect) workspaceSortSelect.value = workspaceSort;
 workspaceSortSelect?.addEventListener('change', () => {
   workspaceSort = workspaceSortSelect.value;
+  localStorage.setItem('mcc_workspace_sort', workspaceSort);
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 
