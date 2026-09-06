@@ -1146,7 +1146,9 @@ function wire(workspace) {
   $('#deleteWorkspace').onclick = async (e) => {
     const name = String(workspace.name || 'このワークスペース');
     const memberCount = Object.keys(workspace.members || {}).length;
-    if (!confirm(`「${name}」を削除しますか？\nチャット${memberCount}件と保存済みの会話が削除されます。この操作は取り消せません。`)) return;
+    const runningCount = Object.values(workspace.members || {}).filter((member) => member.inFlight).length;
+    const queuedCount = Object.values(workspace.members || {}).reduce((sum, member) => sum + (member.queue?.length || 0), 0);
+    if (!confirm(`「${name}」を削除しますか？\nチャット${memberCount}件（実行中${runningCount}件、待機中${queuedCount}件）と保存済みの会話が削除されます。\nこの操作は取り消せません。`)) return;
     await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}`, { method: 'DELETE' });
       currentId = null;
