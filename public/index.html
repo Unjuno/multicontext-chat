@@ -57,7 +57,7 @@
 
   <main>
     <aside id="sidebar" aria-label="ワークスペース一覧">
-      <div class="sidebar-heading"><h3>ワークスペース</h3><span class="sidebar-heading-actions"><span id="workspaceCount" class="small" aria-live="polite"></span><button id="attentionWorkspaces" class="attention-link" type="button" hidden>要対応を見る</button></span></div>
+      <div class="sidebar-heading"><h3>ワークスペース</h3><span class="sidebar-heading-actions"><span id="workspaceCount" class="small" aria-live="polite"></span><button id="attentionWorkspaces" class="attention-link" type="button" hidden>要対応を見る</button><button id="archivedWorkspaces" class="archive-link" type="button" hidden>アーカイブを見る</button></span></div>
       <label class="workspace-search"><span class="sr-only">ワークスペースを検索</span><input id="workspaceSearch" type="search" placeholder="ワークスペースを検索" aria-label="ワークスペースを検索"></label>
       <label class="workspace-filter"><span class="sr-only">ワークスペースの状態で絞り込む</span><select id="workspaceFilter" aria-label="ワークスペースの状態で絞り込む"><option value="all">すべての状態</option><option value="RUNNING">実行中</option><option value="PENDING">キューあり</option><option value="BLOCKED">要対応</option><option value="SETTLED">完了</option><option value="ARCHIVED">アーカイブ済み</option></select></label>
       <label class="workspace-filter"><span class="sr-only">ワークスペースの並び順</span><select id="workspaceSort" aria-label="ワークスペースの並び順"><option value="recent">最近更新した順</option><option value="name">名前順</option></select></label>

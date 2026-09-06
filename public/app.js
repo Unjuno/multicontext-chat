@@ -535,6 +535,13 @@ async function refreshList(expectedId = currentId) {
     attention.textContent = `要対応 ${blockedCount}件`;
     attention.setAttribute('aria-label', `要対応のワークスペース ${blockedCount}件を見る`);
   }
+  const archived = document.getElementById('archivedWorkspaces');
+  if (archived) {
+    const archivedCount = stateCounts.ARCHIVED;
+    archived.hidden = archivedCount === 0 || workspaceStatusFilter === 'ARCHIVED';
+    archived.textContent = `アーカイブ ${archivedCount}件`;
+    archived.setAttribute('aria-label', `アーカイブ済みのワークスペース ${archivedCount}件を見る`);
+  }
   const filterLabels = { all: 'すべての状態', RUNNING: '実行中', PENDING: 'キューあり', BLOCKED: '要対応', SETTLED: '完了', ARCHIVED: 'アーカイブ済み' };
   const activeWorkspaceCount = workspaces.filter((workspace) => !workspace.archived).length;
   $$('#workspaceFilter option').forEach((option) => {
@@ -1560,6 +1567,12 @@ const workspaceFilter = $('#workspaceFilter');
 if (workspaceFilter) workspaceFilter.value = workspaceStatusFilter;
 $('#attentionWorkspaces')?.addEventListener('click', () => {
   workspaceStatusFilter = 'BLOCKED';
+  localStorage.setItem('mcc_workspace_filter', workspaceStatusFilter);
+  if (workspaceFilter) workspaceFilter.value = workspaceStatusFilter;
+  refreshList().catch((err) => toast(err.message, 'error'));
+});
+$('#archivedWorkspaces')?.addEventListener('click', () => {
+  workspaceStatusFilter = 'ARCHIVED';
   localStorage.setItem('mcc_workspace_filter', workspaceStatusFilter);
   if (workspaceFilter) workspaceFilter.value = workspaceStatusFilter;
   refreshList().catch((err) => toast(err.message, 'error'));
