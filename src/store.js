@@ -475,7 +475,13 @@ export class StateStore {
   broadcast(workspaceId, prompt, metadata = {}) {
     const workspace = this.requireWorkspace(workspaceId); const text = String(prompt || '').trim(); if (!text) throw problem('Prompt is required');
     const key = metadata.idempotencyKey ? String(metadata.idempotencyKey) : '';
-    if (key && workspace.broadcastReceipts?.[key]) return { items: workspace.broadcastReceipts[key].items, replayed: true };
+    if (key && workspace.broadcastReceipts?.[key]) {
+      const receipt = workspace.broadcastReceipts[key];
+      if (receipt.prompt !== text) {
+        throw Object.assign(problem('Idempotency key was already used for a different prompt', 409), { code: 'IDEMPOTENCY_KEY_REUSED' });
+      }
+      return { items: receipt.items, replayed: true };
+    }
     const items = [];
     const source = metadata.orchestratorRunId ? 'orchestrator' : (metadata.source || 'user');
     for (const member of Object.values(workspace.members)) if (member.active) items.push(this.enqueue(workspaceId, member.id, text, { source, sourceMemberId: metadata.sourceMemberId || null, orchestratorRunId: metadata.orchestratorRunId || null, orchestratorQId: metadata.orchestratorQId || null }));
@@ -483,7 +489,7 @@ export class StateStore {
     workspace.stats.broadcasts += 1;
     if (key) {
       workspace.broadcastReceipts ??= {};
-      workspace.broadcastReceipts[key] = { items, createdAt: now() };
+      workspace.broadcastReceipts[key] = { prompt: text, items, createdAt: now() };
       const keys = Object.keys(workspace.broadcastReceipts);
       for (const oldKey of keys.slice(0, Math.max(0, keys.length - 100))) delete workspace.broadcastReceipts[oldKey];
     }
