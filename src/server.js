@@ -284,12 +284,17 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
           return json(res, 400, { error: 'Invalid idempotency_key: use 1-64 chars of [A-Za-z0-9_-]', code: 'INVALID_IDEMPOTENCY_KEY' });
         }
         const receiptKey = key ? `${workspaceId}:${key}` : null;
-        let resultPromise = receiptKey ? broadcastReceipts.get(receiptKey)?.promise : null;
+        const promptText = String(body.prompt || '').trim();
+        const existingReceipt = receiptKey ? broadcastReceipts.get(receiptKey) : null;
+        if (existingReceipt && existingReceipt.prompt !== promptText) {
+          return json(res, 409, { error: 'Idempotency key was already used for a different prompt', code: 'IDEMPOTENCY_KEY_REUSED' });
+        }
+        let resultPromise = existingReceipt?.promise || null;
         let replayed = Boolean(resultPromise);
         if (!resultPromise) {
           resultPromise = app.broadcast(workspaceId, body.prompt, { idempotencyKey: key });
           if (receiptKey) {
-            broadcastReceipts.set(receiptKey, { promise: resultPromise, expiresAt: Date.now() + 10 * 60 * 1000 });
+            broadcastReceipts.set(receiptKey, { prompt: promptText, promise: resultPromise, expiresAt: Date.now() + 10 * 60 * 1000 });
             resultPromise.catch(() => {
               // A failed attempt must not poison the key; callers may safely retry.
               broadcastReceipts.delete(receiptKey);
