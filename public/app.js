@@ -1162,6 +1162,7 @@ function memberCard(workspace, member) {
         <div class="member-actions">
           ${member.status === 'error' ? `${contextLimitError ? '<button class="sm" data-action="trim-history" title="直近12件だけを残して履歴を整理">履歴を整理</button>' : ''}<button class="sm primary" data-action="retry" title="${contextLimitError ? '履歴を整理してから、キューを保持したまま再試行' : 'キューを保持したまま再試行'}">${contextLimitError ? '整理後に再試行' : '再試行'}</button>` : ''}
           ${member.inFlight ? '<button class="sm danger" data-action="stop" title="実行中の生成を停止">停止</button>' : ''}
+          ${member.messages.length ? '<button class="sm" data-action="latest" title="最新のメッセージへ移動">最新へ</button>' : ''}
           <button class="sm" data-action="edit" aria-expanded="${openEditors.has(member.id) ? 'true' : 'false'}" title="設定">設定</button>
           <button class="sm" data-action="copytool" title="外部連携用のURLをコピー">連携URL</button>
         </div>
@@ -1600,6 +1601,12 @@ function wire(workspace) {
     const member = workspace.members[memberId];
     const editor = $('.member-editor', card);
     const promptDetails = $('[data-action=prompt-details]', card);
+    $('[data-action=latest]', card)?.addEventListener('click', () => {
+      const messages = $('.messages', card);
+      if (!messages) return;
+      messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
+      $('[data-action=latest]', card).blur();
+    });
     promptDetails?.addEventListener('toggle', () => {
       if (promptDetails.open) openDeveloperPrompts.add(memberId);
       else openDeveloperPrompts.delete(memberId);
