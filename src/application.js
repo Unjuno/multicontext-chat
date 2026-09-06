@@ -419,7 +419,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   // Orchestrator-dispatched work (orchestratorRunId set) emits only the
   // q.dispatched provenance event. `origin` records the calling surface
   // ('human' GUI default, 'mcp' agent) as metadata; all else is identical.
-  async function broadcast(workspaceId, prompt, { orchestratorRunId = null, orchestratorQId = null, origin = 'human' } = {}) {
+  async function broadcast(workspaceId, prompt, { orchestratorRunId = null, orchestratorQId = null, origin = 'human', idempotencyKey = null } = {}) {
     const text = String(prompt || '').trim();
     if (!text) throw problem('Prompt is required', 400);
     const workspace = store.requireWorkspace(workspaceId);
@@ -463,7 +463,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
         }
       }
     }
-    const items = store.broadcast(workspaceId, text, { orchestratorRunId, orchestratorQId });
+    const outcome = store.broadcast(workspaceId, text, { orchestratorRunId, orchestratorQId, idempotencyKey });
+    if (outcome.replayed) return { items: outcome.items, workspace: await getWorkspace(workspaceId) };
+    const items = outcome.items;
     scheduler.kickWorkspace(workspaceId);
     try { store.appendEvent(workspaceId, { type: 'q.dispatched', origin: orchestratorRunId ? 'orchestrator' : 'human', qId: orchestratorQId || null, detail: { broadcast: true, runId: orchestratorRunId } }); } catch {}
     try { if (!orchestratorRunId) store.appendEvent(workspaceId, { type: 'human.broadcast', origin, detail: { prompt: text.slice(0, 200) } }); } catch {}

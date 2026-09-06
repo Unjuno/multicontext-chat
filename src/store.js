@@ -35,6 +35,7 @@ export class StateStore {
       workspace.settings.allowCrossChatInspect ??= true;
       workspace.settings.allowCrossChatSend ??= true;
       workspace.settings.agentSelectionMode ??= 'require_selection';
+      workspace.broadcastReceipts ??= {};
       workspace.stats ??= {};
       for (const key of ['broadcasts', 'executions', 'toolEnqueues', 'inspections']) workspace.stats[key] ??= 0;
       workspace.orchestratorQueue ??= [];
@@ -124,7 +125,7 @@ export class StateStore {
       compileAgentId: String(input.compileAgentId || ''), compilePrompt: String(input.compilePrompt || defaultCompilePrompt()),
       defaultAgentId: String(input.defaultAgentId || ''),
       settings: { allowCrossChatInspect: input.settings?.allowCrossChatInspect !== false, allowCrossChatSend: input.settings?.allowCrossChatSend !== false, agentSelectionMode: input.settings?.agentSelectionMode === 'auto_first' ? 'auto_first' : 'require_selection' },
-      crossChatReceipts: {}, members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
+      crossChatReceipts: {}, broadcastReceipts: {}, members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
       stats: { broadcasts: 0, executions: 0, toolEnqueues: 0, inspections: 0 },
       archived: false,
       orchestratorQueue: [], orchestratorRuns: {}, orchestratorEvents: [], orchestratorPaused: false,
@@ -473,11 +474,20 @@ export class StateStore {
 
   broadcast(workspaceId, prompt, metadata = {}) {
     const workspace = this.requireWorkspace(workspaceId); const text = String(prompt || '').trim(); if (!text) throw problem('Prompt is required');
+    const key = metadata.idempotencyKey ? String(metadata.idempotencyKey) : '';
+    if (key && workspace.broadcastReceipts?.[key]) return { items: workspace.broadcastReceipts[key].items, replayed: true };
     const items = [];
     const source = metadata.orchestratorRunId ? 'orchestrator' : (metadata.source || 'user');
     for (const member of Object.values(workspace.members)) if (member.active) items.push(this.enqueue(workspaceId, member.id, text, { source, sourceMemberId: metadata.sourceMemberId || null, orchestratorRunId: metadata.orchestratorRunId || null, orchestratorQId: metadata.orchestratorQId || null }));
     if (!items.length) throw problem('No active members', 409);
-    workspace.stats.broadcasts += 1; this.save(); return items;
+    workspace.stats.broadcasts += 1;
+    if (key) {
+      workspace.broadcastReceipts ??= {};
+      workspace.broadcastReceipts[key] = { items, createdAt: now() };
+      const keys = Object.keys(workspace.broadcastReceipts);
+      for (const oldKey of keys.slice(0, Math.max(0, keys.length - 100))) delete workspace.broadcastReceipts[oldKey];
+    }
+    this.save(); return { items, replayed: false };
   }
 
   beginNext(workspaceId, memberId) {
@@ -554,7 +564,7 @@ export class StateStore {
   }
   isSettled(workspaceId, runningMemberIds = new Set()) { return this.runtimeState(workspaceId, runningMemberIds) === 'SETTLED'; }
   publicWorkspace(workspace, includeMessages = true) {
-    const { crossChatReceipts: _r, orchestratorQueue: _q, orchestratorRuns: _runs, orchestratorEvents: _ev, orchestratorPaused: _p, ...rest } = workspace;
+    const { crossChatReceipts: _r, broadcastReceipts: _br, orchestratorQueue: _q, orchestratorRuns: _runs, orchestratorEvents: _ev, orchestratorPaused: _p, ...rest } = workspace;
     return { ...rest, members: Object.fromEntries(Object.entries(workspace.members).map(([id, m]) => [id, publicMember(m, includeMessages)])) };
   }
 }

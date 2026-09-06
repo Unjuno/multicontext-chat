@@ -287,7 +287,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         let resultPromise = receiptKey ? broadcastReceipts.get(receiptKey)?.promise : null;
         let replayed = Boolean(resultPromise);
         if (!resultPromise) {
-          resultPromise = app.broadcast(workspaceId, body.prompt);
+          resultPromise = app.broadcast(workspaceId, body.prompt, { idempotencyKey: key });
           if (receiptKey) {
             broadcastReceipts.set(receiptKey, { promise: resultPromise, expiresAt: Date.now() + 10 * 60 * 1000 });
             resultPromise.catch(() => {
