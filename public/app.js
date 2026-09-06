@@ -234,6 +234,8 @@ function getTauriInvoke() {
     const t = window.__TAURI__;
     if (t && t.core && t.core.invoke) return t.core.invoke;
     if (t && t.invoke) return t.invoke;
+    const internals = window.__TAURI_INTERNALS__;
+    if (internals && internals.invoke) return internals.invoke;
   } catch {}
   return null;
 }

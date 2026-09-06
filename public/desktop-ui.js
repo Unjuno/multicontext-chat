@@ -140,8 +140,10 @@
   // For browser mode: degrade gracefully when Tauri is absent
   function isTauriAvailable() {
     try {
-      const t = typeof window !== "undefined" ? window.__TAURI__ : null;
-      return !!(t && (t.core || t.invoke));
+      const w = typeof window !== "undefined" ? window : null;
+      const t = w && w.__TAURI__;
+      const internals = w && w.__TAURI_INTERNALS__;
+      return !!((t && (t.core || t.invoke)) || (internals && internals.invoke));
     } catch { return false; }
   }
 
