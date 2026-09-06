@@ -922,6 +922,7 @@ async function refresh(expectedId = currentId) {
             <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
             <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
             <button id="stop" class="sm danger" title="全チャットの生成とキューを停止">全て停止</button>
+            <button id="deleteWorkspace" class="sm danger" title="このワークスペースを削除">削除</button>
           </div>
         </div>
         <div class="workspace-fields">
@@ -1136,6 +1137,22 @@ function wire(workspace) {
       await request(`/api/workspaces/${workspace.id}/stop`, { method: 'POST', body: '{}' });
       await refreshPreservingDrafts(workspace.id);
       toast('全て停止しました', 'success');
+    }).catch((err) => toast(err.message, 'error'));
+  };
+
+  $('#deleteWorkspace').onclick = async (e) => {
+    const name = String(workspace.name || 'このワークスペース');
+    const memberCount = Object.keys(workspace.members || {}).length;
+    if (!confirm(`「${name}」を削除しますか？\nチャット${memberCount}件と保存済みの会話が削除されます。この操作は取り消せません。`)) return;
+    await withBusy(e.currentTarget, async () => {
+      await request(`/api/workspaces/${workspace.id}`, { method: 'DELETE' });
+      currentId = null;
+      lastWorkspace = null;
+      document.title = 'MultiContext Chat';
+      await refreshList(null);
+      $('#app').innerHTML = '<div class="empty"><div class="empty-icon" aria-hidden="true">✦</div><p><strong>ワークスペースを削除しました</strong></p><p class="small">左の一覧から別のワークスペースを選択するか、新規作成してください。</p><button id="emptyNewWorkspace" class="primary">+ 新規ワークスペースを作成</button></div>';
+      document.getElementById('emptyNewWorkspace')?.addEventListener('click', () => $('#newWorkspace').click());
+      toast('ワークスペースを削除しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
   };
 
