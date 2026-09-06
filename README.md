@@ -2,6 +2,11 @@
 
 Parallel isolated LLM chats with per-chat prompts/tools, queued cross-chat messaging, and optional response compression. LibreChat supplies the Agent runtime, model/provider integrations, Web Search, MCP, code execution, knowledge, and other existing tools.
 
+> Release status: macOS internal verification build. Core workspace, queue,
+> Agent selection, retry/stop, Compile, and external MCP flows are usable, but
+> one locked-screen UI pass remains in the runtime record. Do not distribute
+> the unsigned local DMG; Developer ID signing and notarization are required.
+
 ## Core behavior
 
 - One human prompt is broadcast to every active chat.
@@ -68,6 +73,27 @@ npm run desktop:dev   # Tauri dev
 npm run desktop:build # production MultiContext.app
 open src-tauri/target/release/bundle/macos/MultiContext.app
 ```
+
+### Product usage and recovery
+
+1. Launch `MultiContext.app`; it reuses healthy external services or starts the
+   configured managed LibreChat/model services.
+2. On first launch, save the LibreChat Remote Agents connection key in Settings.
+   It is validated against the Remote Agents API and stored only in macOS
+   Keychain, never in `config.json` or logs.
+3. Choose an Agent explicitly in safe mode, or use `auto_first` when first-Agent
+   selection is acceptable. Safe mode rejects an unconfigured broadcast with
+   `AGENT_SELECTION_REQUIRED`.
+4. On service/workspace refresh failure, use `Retry` / `再確認`. The last saved
+   view remains visible, retry progress is shown, and privacy-safe diagnostics
+   can be copied from the AI Stack status dialog.
+5. Archive/delete only inactive workspaces. Deletion requires typing the exact
+   workspace name; state saves retain a `.bak` recovery copy.
+
+The product provides isolated chat contexts with per-chat FIFO queues and
+parallel execution. Compile is allowed only at `SETTLED` and does not write
+back into member histories. REST and external MCP share the same application
+operation layer, while LibreChat Agent tool use remains a separate path.
 
 ## External Control MCP
 
