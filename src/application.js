@@ -624,8 +624,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return getWorkspace(workspaceId);
   }
 
-  function retryChat(workspaceId, chatId) {
+  function retryChat(workspaceId, chatId, { origin = 'human' } = {}) {
     scheduler.retryMember(workspaceId, chatId);
+    try { store.appendEvent(workspaceId, { type: 'human.retry', origin, memberId: chatId }); } catch {}
     scheduler.kickMember(workspaceId, chatId);
     return getWorkspace(workspaceId);
   }
