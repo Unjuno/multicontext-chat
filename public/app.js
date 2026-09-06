@@ -1289,9 +1289,11 @@ async function refresh(expectedId = currentId) {
   refreshController = controller;
   const app = $('#app');
   app?.setAttribute('aria-busy', 'true');
+  let snapshotFetched = false;
   try {
     const workspace = await request(`/api/workspaces/${expectedId}`, { signal: controller.signal });
     if (controller.signal.aborted || expectedId !== currentId) return;
+    snapshotFetched = true;
     // A successful refresh is authoritative: remove any stale connection
     // banner before rendering the fresh snapshot so recovered connectivity is
     // visible immediately, including when the DOM was partially preserved.
@@ -1433,10 +1435,12 @@ async function refresh(expectedId = currentId) {
     } else {
       const banner = document.createElement('div');
       const hasStaleData = Boolean(lastWorkspace);
-      banner.className = hasStaleData ? 'warning-banner' : 'error-banner';
-      banner.setAttribute('role', hasStaleData ? 'status' : 'alert');
+      const renderFailed = snapshotFetched;
+      banner.className = hasStaleData && !renderFailed ? 'warning-banner' : 'error-banner';
+      banner.setAttribute('role', hasStaleData && !renderFailed ? 'status' : 'alert');
+      const retryLabel = renderFailed ? '画面の更新に失敗しました。再試行してください。' : '最新情報を取得できません。一時的な表示を確認中です。';
       banner.innerHTML = hasStaleData
-        ? `<span>最新情報を取得できません。一時的な表示を確認中です。</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`
+        ? `<span>${retryLabel}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`
         : `<span>更新失敗: ${esc(error.message)}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`;
       banner.querySelector('[data-action="refresh-workspace"]').onclick = () => {
         banner.remove();
