@@ -1409,6 +1409,17 @@ workspaceSortSelect?.addEventListener('change', () => {
   localStorage.setItem('mcc_workspace_sort', workspaceSort);
   refreshList().catch((err) => toast(err.message, 'error'));
 });
+$('#resetWorkspaceView')?.addEventListener('click', () => {
+  workspaceSearchQuery = '';
+  workspaceStatusFilter = 'all';
+  workspaceSort = 'recent';
+  if (workspaceSearch) workspaceSearch.value = '';
+  if (workspaceFilter) workspaceFilter.value = 'all';
+  if (workspaceSortSelect) workspaceSortSelect.value = 'recent';
+  localStorage.setItem('mcc_workspace_filter', 'all');
+  localStorage.setItem('mcc_workspace_sort', 'recent');
+  refreshList().then(() => toast('表示条件をリセットしました', 'success')).catch((err) => toast(err.message, 'error'));
+});
 
 async function createWorkspaceFromDialog(name, button) {
   await withBusy(button, async () => {
