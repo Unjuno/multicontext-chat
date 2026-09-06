@@ -42,6 +42,7 @@
     <aside id="sidebar" aria-label="ワークスペース一覧">
       <div class="sidebar-heading"><h3>ワークスペース</h3><span id="workspaceCount" class="small" aria-live="polite"></span></div>
       <label class="workspace-search"><span class="sr-only">ワークスペースを検索</span><input id="workspaceSearch" type="search" placeholder="ワークスペースを検索" aria-label="ワークスペースを検索"></label>
+      <label class="workspace-filter"><span class="sr-only">ワークスペースの状態で絞り込む</span><select id="workspaceFilter" aria-label="ワークスペースの状態で絞り込む"><option value="all">すべての状態</option><option value="RUNNING">実行中</option><option value="PENDING">キューあり</option><option value="BLOCKED">要対応</option><option value="SETTLED">完了</option></select></label>
       <div id="workspaces" role="list"></div>
       <div class="sidebar-foot">
         <span class="small">ヒント: ブロードキャストは全アクティブチャットに同時配信されます</span>

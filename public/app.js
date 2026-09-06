@@ -8,6 +8,7 @@ let agents = [];
 let refreshController = null;
 const openEditors = new Set();
 let workspaceSearchQuery = '';
+let workspaceStatusFilter = 'all';
 
 const savedTheme = localStorage.getItem('mcc_theme');
 if (savedTheme === 'dark' || savedTheme === 'light') document.documentElement.dataset.theme = savedTheme;
@@ -437,9 +438,13 @@ async function refreshList(expectedId = currentId) {
   if (expectedId !== currentId) return;
   const workspaces = data.workspaces || [];
   const query = workspaceSearchQuery.trim().toLowerCase();
-  const visibleWorkspaces = query ? workspaces.filter((workspace) => String(workspace.name || '').toLowerCase().includes(query)) : workspaces;
+  const visibleWorkspaces = workspaces.filter((workspace) => {
+    const matchesQuery = !query || String(workspace.name || '').toLowerCase().includes(query);
+    const matchesStatus = workspaceStatusFilter === 'all' || String(workspace.runtimeState || '').toUpperCase() === workspaceStatusFilter;
+    return matchesQuery && matchesStatus;
+  });
   const count = document.getElementById('workspaceCount');
-  if (count) count.textContent = query ? `${visibleWorkspaces.length}/${workspaces.length}` : `${workspaces.length}`;
+  if (count) count.textContent = (query || workspaceStatusFilter !== 'all') ? `${visibleWorkspaces.length}/${workspaces.length}` : `${workspaces.length}`;
   if (!workspaces.length) {
     $('#workspaces').innerHTML = '<div class="small" style="padding:8px 10px">まだワークスペースがありません</div>';
     return;
@@ -1222,6 +1227,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSideb
 const workspaceSearch = $('#workspaceSearch');
 workspaceSearch?.addEventListener('input', () => {
   workspaceSearchQuery = workspaceSearch.value;
+  refreshList().catch((err) => toast(err.message, 'error'));
+});
+const workspaceFilter = $('#workspaceFilter');
+workspaceFilter?.addEventListener('change', () => {
+  workspaceStatusFilter = workspaceFilter.value;
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 
