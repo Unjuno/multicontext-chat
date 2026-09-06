@@ -1321,9 +1321,6 @@ async function refresh(expectedId = currentId) {
     // banner before rendering the fresh snapshot so recovered connectivity is
     // visible immediately, including when the DOM was partially preserved.
     app?.querySelectorAll('.warning-banner, .error-banner').forEach((banner) => banner.remove());
-    clearTimeout(workspaceRetryTimer);
-    workspaceRetryTimer = null;
-    workspaceRetryAttempt = 0;
     lastWorkspace = workspace;
     document.title = `${workspace.name || 'ワークスペース'} — MultiContext`;
     const members = Object.values(workspace.members);
@@ -1446,6 +1443,11 @@ async function refresh(expectedId = currentId) {
     wire(workspace);
     refreshOrchestrator();
     scheduleOrchestrator();
+    // Count a refresh as successful only after rendering and event wiring have
+    // completed. A fetch can succeed while the UI update still throws.
+    clearTimeout(workspaceRetryTimer);
+    workspaceRetryTimer = null;
+    workspaceRetryAttempt = 0;
     const gp = $('#globalPrompt'); if (gp) autoResize(gp);
     const cp = $('#compilePrompt'); if (cp) autoResize(cp);
   } catch (error) {
