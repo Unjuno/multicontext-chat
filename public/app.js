@@ -95,6 +95,22 @@ function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 160) + 'px';
 }
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const helper = document.createElement('textarea');
+    helper.value = text;
+    helper.setAttribute('readonly', '');
+    helper.style.position = 'fixed'; helper.style.opacity = '0';
+    document.body.appendChild(helper);
+    helper.select();
+    const copied = document.execCommand('copy');
+    helper.remove();
+    return copied;
+  }
+}
 
 async function request(url, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -968,7 +984,7 @@ async function refresh(expectedId = currentId) {
         <label for="compilePrompt" class="field-label small">Compile Prompt <span class="scope-note">— 要約の指示（保存してから実行）</span></label>
         <textarea id="compilePrompt" placeholder="コンパイル指示 — 例: 差分を要約し、未解決点を列挙" aria-label="Compile Prompt">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
-          ? `<hr><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-output">${esc(workspace.lastCompile.text)}</div>`
+          ? `<hr><div class="compile-result-head"><div class="small">${esc(workspace.lastCompile.at)}</div><button id="copyCompile" class="sm" type="button">結果をコピー</button></div><div class="compile-output" id="compileOutput">${esc(workspace.lastCompile.text)}</div>`
           : `<div class="small">手動のみ。${compileDisabled ? `現在は${workspace.runtimeState}のため待機中です。` : 'コンパイル結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">コンパイル</span>を押して要約を生成します。'}</div>`}
       </div>
     `;
@@ -1133,6 +1149,18 @@ function wire(workspace) {
     }).catch((err) => toast(err.message, 'error'));
   };
 
+  const copyCompile = $('#copyCompile');
+  if (copyCompile) copyCompile.onclick = async (e) => {
+    const output = $('#compileOutput')?.textContent || '';
+    try {
+      if (!await copyText(output)) throw new Error('copy failed');
+      const previous = e.currentTarget.textContent;
+      e.currentTarget.textContent = 'コピー済み';
+      toast('Compile結果をコピーしました', 'success');
+      setTimeout(() => { if (e.currentTarget.isConnected) e.currentTarget.textContent = previous; }, 1400);
+    } catch { toast('Compile結果のコピーに失敗しました', 'error'); }
+  };
+
   $$('.member').forEach((card) => {
     const memberId = card.dataset.mid;
     const member = workspace.members[memberId];
@@ -1145,7 +1173,7 @@ function wire(workspace) {
     };
     $('[data-action=copytool]', card).onclick = async (e) => {
       try {
-        await navigator.clipboard.writeText(member.actionSpecUrl);
+        if (!await copyText(member.actionSpecUrl)) throw new Error('copy failed');
         toast('Action URLをコピーしました', 'success');
         const b = e.currentTarget; const prev = b.textContent; b.textContent = 'コピー済み'; setTimeout(() => b.textContent = prev, 1200);
       } catch { toast('コピーに失敗しました', 'error'); }
