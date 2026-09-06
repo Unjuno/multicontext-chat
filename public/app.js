@@ -1118,6 +1118,7 @@ function scheduleOrchestrator() { clearTimeout(orchestratorTimer); orchestratorT
 
 function memberCard(workspace, member) {
   const isCollapsed = collapsedMembers.has(String(member.id));
+  const memberStateClass = member.inFlight ? ' is-processing' : member.status === 'error' ? ' needs-attention' : '';
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
   const promptOpen = openDeveloperPrompts.has(member.id) ? ' open' : '';
   const canSend = member.active !== false && memberHasResolvedAgent(workspace, member);
@@ -1155,7 +1156,7 @@ function memberCard(workspace, member) {
   })();
   const contextLimitError = /context size|context length|too many tokens/i.test(String(member.lastError || ''));
   return `
-    <article class="member${isCollapsed ? ' collapsed' : ''}" data-mid="${member.id}">
+    <article class="member${isCollapsed ? ' collapsed' : ''}${memberStateClass}" data-mid="${member.id}">
       <div class="member-header">
         <div class="member-title">
           <span class="member-name">${esc(member.name)}</span>
