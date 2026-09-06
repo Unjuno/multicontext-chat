@@ -979,6 +979,8 @@ async function refresh(expectedId = currentId) {
   refreshController?.abort();
   const controller = new AbortController();
   refreshController = controller;
+  const app = $('#app');
+  app?.setAttribute('aria-busy', 'true');
   try {
     const workspace = await request(`/api/workspaces/${expectedId}`, { signal: controller.signal });
     if (controller.signal.aborted || expectedId !== currentId) return;
@@ -1097,11 +1099,11 @@ async function refresh(expectedId = currentId) {
         banner.remove();
         refresh(currentId).catch(() => {});
       };
-      const app = $('#app');
       if (app && !app.querySelector('.error-banner')) app.prepend(banner);
       toast(`更新失敗: ${error.message}`, 'error');
     }
   } finally {
+    app?.setAttribute('aria-busy', 'false');
     if (refreshController === controller) refreshController = null;
   }
 }
