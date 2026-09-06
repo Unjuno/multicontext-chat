@@ -133,6 +133,13 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[char]));
+function renderCompileText(value = '') {
+  // Escape first: only the small, intentional Markdown subset below becomes HTML.
+  return esc(value)
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+    .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>')
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+}
 const token = () => localStorage.getItem('mcc_token') || '';
 
 // ── Toast ──────────────────────────────────────────────────────────
@@ -1119,7 +1126,7 @@ function memberCard(workspace, member) {
           ${member.status === 'error' ? `${contextLimitError ? '<button class="sm" data-action="trim-history" title="直近12件だけを残して履歴を整理">履歴を整理</button>' : ''}<button class="sm primary" data-action="retry" title="${contextLimitError ? '履歴を整理してから、キューを保持したまま再試行' : 'キューを保持したまま再試行'}">${contextLimitError ? '整理後に再試行' : '再試行'}</button>` : ''}
           ${member.inFlight ? '<button class="sm danger" data-action="stop" title="実行中の生成を停止">停止</button>' : ''}
           <button class="sm" data-action="edit" aria-expanded="${openEditors.has(member.id) ? 'true' : 'false'}" title="設定">設定</button>
-          <button class="sm" data-action="copytool" title="Action URLをコピー">URL</button>
+          <button class="sm" data-action="copytool" title="外部連携用のURLをコピー">連携URL</button>
         </div>
       </div>
       <div class="member-meta">
@@ -1283,7 +1290,7 @@ async function refresh(expectedId = currentId) {
         <label for="compilePrompt" class="field-label small">まとめ方の指示 <span class="scope-note">— レポートの作成方法（保存してから作成）</span></label>
         <textarea id="compilePrompt" placeholder="まとめ方の指示（例: 主な結論と未解決点を分けて整理）" aria-label="統合レポートのまとめ方の指示">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
-          ? `<hr><div class="compile-result-head"><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdown保存</button></div></div><div class="compile-output" id="compileOutput">${esc(workspace.lastCompile.text)}</div>`
+          ? `<hr><div class="compile-result-head"><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdown保存</button></div></div><div class="compile-output" id="compileOutput">${renderCompileText(workspace.lastCompile.text)}</div>`
           : `<div class="small">手動のみ。${compileStateBlocked ? `現在は${workspace.runtimeState || '処理中'}のため待機中です。` : !compileAgentReady ? '作成担当を選択してから実行してください。' : '結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">レポートを作成</span>を押して回答をまとめます。'}</div>`}
       </div>
     `;
@@ -1560,7 +1567,7 @@ function wire(workspace) {
     $('[data-action=copytool]', card).onclick = async (e) => {
       try {
         if (!await copyText(member.actionSpecUrl)) throw new Error('copy failed');
-        toast('Action URLをコピーしました', 'success');
+        toast('外部連携用のURLをコピーしました', 'success');
         const b = e.currentTarget; const prev = b.textContent; b.textContent = 'コピー済み'; setTimeout(() => b.textContent = prev, 1200);
       } catch { toast('コピーに失敗しました', 'error'); }
     };
