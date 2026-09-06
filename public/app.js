@@ -463,6 +463,12 @@ async function pollRuntime() {
     runtimeStatuses = statuses;
     try { sessionStorage.setItem('multicontext_runtime', JSON.stringify(statuses)); } catch {}
     renderRuntime(statuses);
+    // If the stack has recovered while a workspace warning is visible, retry
+    // that workspace snapshot immediately instead of waiting for the next
+    // independent observer tick.
+    if (health.ok && currentId && document.querySelector('#app .warning-banner')) {
+      refresh(currentId).catch(() => {});
+    }
     pollSucceeded = true;
   } catch (e) {
     if (e && e.name === 'AbortError') return;
