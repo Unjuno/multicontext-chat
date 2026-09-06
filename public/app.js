@@ -1946,7 +1946,11 @@ $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
   event.preventDefault();
   const name = $('#newWorkspaceName');
   const button = $('#createWorkspace');
-  if (!name?.value.trim()) return;
+  if (!name?.value.trim()) {
+    toast('ワークスペース名を入力してください', 'error');
+    name?.focus();
+    return;
+  }
   try {
     await createWorkspaceFromDialog(name.value, button);
     const dialog = $('#newWorkspaceDialog');
