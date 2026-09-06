@@ -995,7 +995,9 @@ function renderOrchestratorBar(data) {
   else if (cur && cur.status==='queued') { barState = 'QUEUED'; dotCls = 'pending'; }
   else if (qPending.length>0) { barState = 'QUEUED'; dotCls = 'pending'; }
   else if (cur && ['blocked','failed'].includes(cur.status)) { barState = cur.status.toUpperCase(); dotCls = 'blocked'; }
-  const curText = cur ? `${esc(cur.id.slice(0,4))}:${esc(cur.status)}` : '—';
+  const runStateLabels = { running: '実行中', queued: '待機中', blocked: '要対応', failed: '失敗', settled: '完了', cancelled: 'キャンセル' };
+  const curText = cur ? `${esc(cur.id.slice(0,4))}:${esc(runStateLabels[cur.status] || '状態確認中')}` : '—';
+  const barStateLabels = { IDLE: '待機中', PAUSED: '一時停止', RUNNING: '実行中', QUEUED: 'キューあり', BLOCKED: '要対応', FAILED: '失敗' };
   const liveMembers = Object.values(lastWorkspace?.members || {}).filter(member => member.active !== false);
   const runningMembers = liveMembers.filter(member => member.status === 'running').length;
   const answeredMembers = liveMembers.filter(member => (member.messages || []).some(message => message.role === 'assistant')).length;
@@ -1003,13 +1005,13 @@ function renderOrchestratorBar(data) {
   const followTag = following && cur ? ` <span class="ob-follow" title="Agent experiment under observation">◎追跡中 ${esc(cur.id.slice(0,8))}</span>` : '';
   bar.innerHTML = `
     <span class="ob-dot ${esc(dotCls)}"></span>
-    <strong>Orchestrator</strong> <span class="ob-sep">·</span> ${esc(barState)}${followTag}
+    <strong>実行管理</strong> <span class="ob-sep">·</span> ${esc(barStateLabels[barState] || '状態確認中')}${followTag}
     <span class="ob-sep">·</span> Q0 ${q0} <span class="ob-sep">|</span> Q1 ${q1} <span class="ob-sep">|</span> Q2 ${q2}
     <span class="ob-sep">·</span> ${curText}
     <span class="ob-progress" title="回答済み ${answeredMembers} / ${liveMembers.length} チャット"><span class="ob-progress-track"><span style="width:${progress}%"></span></span><span>${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
     <span style="flex:1"></span>
-    <button class="sm" id="orchPauseBtn">${data.paused?'Resume':'Pause'}</button>
-    <button class="sm" id="orchQueueBtn">Queue</button>
+    <button class="sm" id="orchPauseBtn">${data.paused?'再開':'一時停止'}</button>
+    <button class="sm" id="orchQueueBtn">キューを見る</button>
   `;
   bar.querySelector('#orchPauseBtn')?.addEventListener('click', async () => {
     await request(`/api/workspaces/${currentId}/orchestrator/pause`, { method:'POST', body: JSON.stringify({ paused: !data.paused }) });
