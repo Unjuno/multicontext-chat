@@ -210,9 +210,21 @@ function withBusy(btn, fn) {
   if (!btn) return fn();
   if (btn.disabled || btn.classList.contains('is-busy')) return Promise.resolve();
   const prev = btn.textContent;
+  const prevAriaBusy = btn.getAttribute('aria-busy');
+  const prevAriaLabel = btn.getAttribute('aria-label');
   btn.classList.add('is-busy');
   btn.disabled = true;
-  const done = () => { btn.classList.remove('is-busy'); btn.disabled = false; btn.textContent = prev; };
+  btn.setAttribute('aria-busy', 'true');
+  btn.setAttribute('aria-label', `${prev} — 処理中`);
+  const done = () => {
+    btn.classList.remove('is-busy');
+    btn.disabled = false;
+    btn.textContent = prev;
+    if (prevAriaBusy === null) btn.removeAttribute('aria-busy');
+    else btn.setAttribute('aria-busy', prevAriaBusy);
+    if (prevAriaLabel === null) btn.removeAttribute('aria-label');
+    else btn.setAttribute('aria-label', prevAriaLabel);
+  };
   return Promise.resolve(fn()).then((v) => { done(); return v; }, (e) => { done(); throw e; });
 }
 
