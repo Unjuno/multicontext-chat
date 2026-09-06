@@ -9,6 +9,7 @@ let refreshController = null;
 let workspaceSearchTimer = null;
 const openEditors = new Set();
 let workspaceSearchQuery = '';
+let workspaceListExpanded = false;
 const workspaceFilterValues = new Set(['all', 'RUNNING', 'PENDING', 'BLOCKED', 'SETTLED', 'ARCHIVED']);
 const savedWorkspaceFilter = localStorage.getItem('mcc_workspace_filter');
 let workspaceStatusFilter = workspaceFilterValues.has(savedWorkspaceFilter) ? savedWorkspaceFilter : 'all';
@@ -627,10 +628,23 @@ async function refreshList(expectedId = currentId) {
   };
   const pinnedWorkspaces = visibleWorkspaces.filter((workspace) => pinnedWorkspaceIds.has(workspace.id));
   const otherWorkspaces = visibleWorkspaces.filter((workspace) => !pinnedWorkspaceIds.has(workspace.id));
+  const isDefaultWorkspaceView = !query && workspaceStatusFilter === 'all' && workspaceSort === 'recent';
+  const workspacePageSize = 12;
+  const shouldCollapseOthers = isDefaultWorkspaceView && !workspaceListExpanded && otherWorkspaces.length > workspacePageSize;
+  let displayedOtherWorkspaces = shouldCollapseOthers
+    ? otherWorkspaces.slice(0, workspacePageSize)
+    : otherWorkspaces;
+  if (shouldCollapseOthers && currentId && otherWorkspaces.some((workspace) => String(workspace.id) === String(currentId)) && !displayedOtherWorkspaces.some((workspace) => String(workspace.id) === String(currentId))) {
+    displayedOtherWorkspaces = [...displayedOtherWorkspaces.slice(0, -1), otherWorkspaces.find((workspace) => String(workspace.id) === String(currentId))];
+  }
   const renderGroup = (label, items) => items.length
     ? `<div class="workspace-group" role="presentation"><div class="workspace-group-label">${esc(label)} <span>${items.length}件</span></div>${items.map(renderWorkspace).join('')}</div>`
     : '';
-  $('#workspaces').innerHTML = renderGroup('ピン留め', pinnedWorkspaces) + renderGroup('その他', otherWorkspaces);
+  const remainingCount = otherWorkspaces.length - displayedOtherWorkspaces.length;
+  const showMore = shouldCollapseOthers
+    ? `<button class="workspace-more" type="button" data-action="expand-workspaces">さらに表示（あと${remainingCount}件）</button>`
+    : '';
+  $('#workspaces').innerHTML = renderGroup('ピン留め', pinnedWorkspaces) + renderGroup('その他', displayedOtherWorkspaces) + showMore;
   $$('[data-action="toggle-pin"]').forEach((button) => {
     button.onclick = (event) => {
       event.stopPropagation();
@@ -641,6 +655,10 @@ async function refreshList(expectedId = currentId) {
       toast(willPin ? 'ワークスペースをピン留めしました' : 'ピン留めを解除しました', 'success');
       refreshList().catch((err) => toast(err.message, 'error'));
     };
+  });
+  $('[data-action="expand-workspaces"]')?.addEventListener('click', () => {
+    workspaceListExpanded = true;
+    refreshList().catch((err) => toast(err.message, 'error'));
   });
   $$('.workspace-link').forEach((button) => {
     button.onclick = () => { closeSidebar(); handleWorkspaceSelect(button.dataset.id); };
@@ -1565,6 +1583,7 @@ document.addEventListener('keydown', (e) => {
 const workspaceSearch = $('#workspaceSearch');
 workspaceSearch?.addEventListener('input', () => {
   workspaceSearchQuery = workspaceSearch.value;
+  workspaceListExpanded = false;
   clearTimeout(workspaceSearchTimer);
   workspaceSearchTimer = setTimeout(() => {
     refreshList().catch((err) => toast(err.message, 'error'));
@@ -1575,6 +1594,7 @@ workspaceSearch?.addEventListener('keydown', (event) => {
   event.preventDefault();
   workspaceSearch.value = '';
   workspaceSearchQuery = '';
+  workspaceListExpanded = false;
   clearTimeout(workspaceSearchTimer);
   refreshList().catch((err) => toast(err.message, 'error'));
 });
@@ -1594,6 +1614,7 @@ $('#archivedWorkspaces')?.addEventListener('click', () => {
 });
 workspaceFilter?.addEventListener('change', () => {
   workspaceStatusFilter = workspaceFilter.value;
+  workspaceListExpanded = false;
   localStorage.setItem('mcc_workspace_filter', workspaceStatusFilter);
   refreshList().catch((err) => toast(err.message, 'error'));
 });
@@ -1601,11 +1622,13 @@ const workspaceSortSelect = $('#workspaceSort');
 if (workspaceSortSelect) workspaceSortSelect.value = workspaceSort;
 workspaceSortSelect?.addEventListener('change', () => {
   workspaceSort = workspaceSortSelect.value;
+  workspaceListExpanded = false;
   localStorage.setItem('mcc_workspace_sort', workspaceSort);
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 $('#resetWorkspaceView')?.addEventListener('click', () => {
   workspaceSearchQuery = '';
+  workspaceListExpanded = false;
   clearTimeout(workspaceSearchTimer);
   workspaceStatusFilter = 'all';
   workspaceSort = 'recent';
