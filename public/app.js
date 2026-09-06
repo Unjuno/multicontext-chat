@@ -1137,10 +1137,12 @@ function renderOrchestratorBar(data) {
     renderOrchestratorDrawer(data);
     if (dlg && typeof dlg.showModal==='function') dlg.showModal(); else dlg?.setAttribute('open','');
   });
-  document.getElementById('orchestratorClose')?.addEventListener('click', ()=>{ const d=document.getElementById('orchestratorDrawer'); if(d.close) d.close(); else d.removeAttribute('open'); });
-  document.getElementById('orchestratorDrawer')?.addEventListener('close', () => {
+  const drawer = document.getElementById('orchestratorDrawer');
+  const closeDrawer = document.getElementById('orchestratorClose');
+  if (closeDrawer) closeDrawer.onclick = () => { if (drawer?.close) drawer.close(); else drawer?.removeAttribute('open'); };
+  if (drawer) drawer.onclose = () => {
     queueBtn?.focus();
-  });
+  };
 }
 function scheduleOrchestrator() { clearTimeout(orchestratorTimer); orchestratorTimer=setTimeout(()=>{ refreshOrchestrator().finally(scheduleOrchestrator); }, 3000); }
 
