@@ -557,6 +557,7 @@ async function refreshList(expectedId = currentId) {
   const resetView = document.getElementById('resetWorkspaceView');
   if (resetView) {
     const hasViewOverrides = Boolean(query) || workspaceStatusFilter !== 'all' || workspaceSort !== 'recent';
+    resetView.classList.toggle('is-visible', hasViewOverrides);
     resetView.hidden = !hasViewOverrides;
     resetView.setAttribute('aria-hidden', String(!hasViewOverrides));
   }
