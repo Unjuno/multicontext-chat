@@ -1153,7 +1153,7 @@ function memberCard(workspace, member) {
             <label>名前 <input name="name" value="${esc(member.name)}" autocomplete="off"></label>
             <label>エージェント <select name="agentId">${agentOptionsHtml(member.agentId, true)}</select></label>
           </div>
-          <label>Developer Prompt<textarea name="developerPrompt" placeholder="このチャットのみに適用される developer role の指示">${esc(member.developerPrompt)}</textarea></label>
+          <label>チャット固有の指示<textarea name="developerPrompt" placeholder="このチャットだけに適用される指示を入力">${esc(member.developerPrompt)}</textarea></label>
           <div class="editor-row">
             <div class="check-row">
               <label><input type="checkbox" name="active" ${member.active ? 'checked' : ''}> 有効</label>
