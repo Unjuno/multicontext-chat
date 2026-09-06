@@ -39,15 +39,7 @@ pub fn set_key(secret: &str) -> Result<(), String> {
 /// Read the LibreChat API key from the login Keychain.
 /// Returns None if absent or the Keychain is unavailable.
 pub fn get_key() -> Option<String> {
-    let out = run(&[
-        "find-generic-password",
-        "-a",
-        ACCOUNT,
-        "-s",
-        SERVICE,
-        "-w",
-    ])
-    .ok()?;
+    let out = run(&["find-generic-password", "-a", ACCOUNT, "-s", SERVICE, "-w"]).ok()?;
     if !out.status.success() {
         return None;
     }
@@ -92,19 +84,49 @@ pub fn set_mcp_token(token: &str) -> Result<(), String> {
         token,
     ])
     .map_err(|e| format!("security add-generic-password failed: {e}"))?;
-    if out.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
 }
 pub fn get_mcp_token() -> Option<String> {
-    let out = run(&["find-generic-password", "-a", MCP_ACCOUNT, "-s", MCP_SERVICE, "-w"]).ok()?;
-    if !out.status.success() { return None; }
+    let out = run(&[
+        "find-generic-password",
+        "-a",
+        MCP_ACCOUNT,
+        "-s",
+        MCP_SERVICE,
+        "-w",
+    ])
+    .ok()?;
+    if !out.status.success() {
+        return None;
+    }
     let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if v.is_empty() { None } else { Some(v) }
+    if v.is_empty() {
+        None
+    } else {
+        Some(v)
+    }
 }
-pub fn has_mcp_token() -> bool { get_mcp_token().is_some() }
+pub fn has_mcp_token() -> bool {
+    get_mcp_token().is_some()
+}
 pub fn delete_mcp_token() -> Result<(), String> {
-    let out = run(&["delete-generic-password", "-a", MCP_ACCOUNT, "-s", MCP_SERVICE])
-        .map_err(|e| format!("security delete-generic-password failed: {e}"))?;
-    if out.status.success() || out.status.code() == Some(44) { Ok(()) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+    let out = run(&[
+        "delete-generic-password",
+        "-a",
+        MCP_ACCOUNT,
+        "-s",
+        MCP_SERVICE,
+    ])
+    .map_err(|e| format!("security delete-generic-password failed: {e}"))?;
+    if out.status.success() || out.status.code() == Some(44) {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
 }
 pub fn generate_mcp_token() -> String {
     // 32 bytes hex = 64 chars, from /dev/urandom with fallback
@@ -114,7 +136,8 @@ pub fn generate_mcp_token() -> String {
         let mut f = std::fs::File::open("/dev/urandom")?;
         f.read_exact(&mut bytes)?;
         Ok(())
-    })().is_ok();
+    })()
+    .is_ok();
     if !read_ok {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -122,7 +145,9 @@ pub fn generate_mcp_token() -> String {
         std::time::SystemTime::now().hash(&mut hasher);
         std::process::id().hash(&mut hasher);
         let h = hasher.finish();
-        for (i, b) in bytes.iter_mut().enumerate() { *b = ((h >> (i % 8)) & 0xff) as u8; }
+        for (i, b) in bytes.iter_mut().enumerate() {
+            *b = ((h >> (i % 8)) & 0xff) as u8;
+        }
     }
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }

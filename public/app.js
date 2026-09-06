@@ -1302,7 +1302,10 @@ async function refresh(expectedId = currentId) {
         banner.remove();
         refresh(currentId).catch(() => {});
       };
-      if (app && !app.querySelector('.error-banner')) app.prepend(banner);
+      // Keep one connection banner per workspace. The stale-data banner uses a
+      // different class from the initial-load error, so checking only
+      // `.error-banner` would stack a new warning on every polling tick.
+      if (app && !app.querySelector('.error-banner, .warning-banner')) app.prepend(banner);
       if (!hasStaleData) toast(`更新失敗: ${error.message}`, 'error');
     }
   } finally {

@@ -111,11 +111,26 @@ mod tests {
 
     #[test]
     fn test_parse_host_port() {
-        assert_eq!(parse_host_port("http://127.0.0.1:8080"), ("127.0.0.1".to_string(), 8080));
-        assert_eq!(parse_host_port("https://example.com:3080/"), ("example.com".to_string(), 3080));
+        assert_eq!(
+            parse_host_port("http://127.0.0.1:8080"),
+            ("127.0.0.1".to_string(), 8080)
+        );
+        assert_eq!(
+            parse_host_port("https://example.com:3080/"),
+            ("example.com".to_string(), 3080)
+        );
         // OpenAI-compatible base URL with /v1 path must not corrupt host/port.
-        assert_eq!(parse_host_port("http://127.0.0.1:8080/v1"), ("127.0.0.1".to_string(), 8080));
-        assert_eq!(parse_host_port("http://127.0.0.1:8080/v1/models"), ("127.0.0.1".to_string(), 8080));
-        assert_eq!(parse_host_port("127.0.0.1:8080"), ("127.0.0.1".to_string(), 8080));
+        assert_eq!(
+            parse_host_port("http://127.0.0.1:8080/v1"),
+            ("127.0.0.1".to_string(), 8080)
+        );
+        assert_eq!(
+            parse_host_port("http://127.0.0.1:8080/v1/models"),
+            ("127.0.0.1".to_string(), 8080)
+        );
+        assert_eq!(
+            parse_host_port("127.0.0.1:8080"),
+            ("127.0.0.1".to_string(), 8080)
+        );
     }
 }

@@ -10,14 +10,25 @@ pub struct Managed {
 
 impl Managed {
     pub fn new() -> Self {
-        Self { children: std::sync::Mutex::new(HashMap::new()) }
+        Self {
+            children: std::sync::Mutex::new(HashMap::new()),
+        }
     }
 }
 
 /// Redact secrets from a command string for logging.
 pub fn redact(cmd: &str) -> String {
     let lowered = cmd.to_lowercase();
-    for key in ["sk-", "bearer ", "token=", "password", "api_key", "authorization", "mcp_token", "multicontext_mcp"] {
+    for key in [
+        "sk-",
+        "bearer ",
+        "token=",
+        "password",
+        "api_key",
+        "authorization",
+        "mcp_token",
+        "multicontext_mcp",
+    ] {
         if lowered.contains(key) {
             return "[REDACTED COMMAND]".to_string();
         }
@@ -34,7 +45,8 @@ pub fn spawn_service(
     envs: &HashMap<String, String>,
     log_path: &PathBuf,
 ) -> Result<(u32, std::process::Child), String> {
-    let file = std::fs::File::create(log_path).map_err(|e| format!("ログファイル作成失敗: {}", e))?;
+    let file =
+        std::fs::File::create(log_path).map_err(|e| format!("ログファイル作成失敗: {}", e))?;
     let err_file = file.try_clone().map_err(|e| e.to_string())?;
     let cmd_str = format!("{} {}", program, args.join(" "));
     let header = format!("[{}] {}\n", chrono_now(), redact(&cmd_str));
@@ -46,7 +58,9 @@ pub fn spawn_service(
         .stderr(Stdio::from(err_file));
     #[cfg(unix)]
     cmd.process_group(0);
-    let child = cmd.spawn().map_err(|e| format!("起動失敗 ({}): {}", program, e))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("起動失敗 ({}): {}", program, e))?;
     let pid = child.id();
     if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(log_path) {
         use std::io::Write;
@@ -79,7 +93,9 @@ pub fn stop_all(managed: &Managed) {
         }
         #[cfg(not(unix))]
         {
-            let _ = std::process::Command::new("kill").arg(pid.to_string()).output();
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .output();
         }
         let start = std::time::Instant::now();
         let grace = std::time::Duration::from_millis(2500);
@@ -121,7 +137,9 @@ pub fn terminate(managed: &Managed, label: &str) {
         }
         #[cfg(not(unix))]
         {
-            let _ = std::process::Command::new("kill").arg(pid.to_string()).output();
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .output();
         }
         let start = std::time::Instant::now();
         let grace = std::time::Duration::from_millis(2500);
@@ -214,7 +232,11 @@ mod tests {
         // The specific pid should be gone (kill -0 fails)
         std::thread::sleep(std::time::Duration::from_millis(300));
         let still_alive = unsafe { libc::kill(pid as i32, 0) == 0 };
-        assert!(!still_alive, "terminated child pid {} should not be alive", pid);
+        assert!(
+            !still_alive,
+            "terminated child pid {} should not be alive",
+            pid
+        );
     }
 
     #[test]
@@ -270,11 +292,19 @@ mod tests {
             &log,
         )
         .expect("spawn sleep");
-        managed.children.lock().unwrap().insert("grace".into(), (_pid, child));
+        managed
+            .children
+            .lock()
+            .unwrap()
+            .insert("grace".into(), (_pid, child));
         let start = std::time::Instant::now();
         terminate(&managed, "grace");
         let elapsed = start.elapsed();
-        assert!(elapsed < std::time::Duration::from_millis(1500), "graceful SIGTERM should exit quickly, elapsed {:?}", elapsed);
+        assert!(
+            elapsed < std::time::Duration::from_millis(1500),
+            "graceful SIGTERM should exit quickly, elapsed {:?}",
+            elapsed
+        );
         assert!(!managed.children.lock().unwrap().contains_key("grace"));
     }
 
@@ -285,21 +315,37 @@ mod tests {
         // Bash that traps TERM, so it should take a bit to exit (at least 50ms) but not require full grace
         let (pid, child) = spawn_service(
             "bash",
-            &["-c".to_string(), "trap 'sleep 0.2' TERM; sleep 10".to_string()],
+            &[
+                "-c".to_string(),
+                "trap 'sleep 0.2' TERM; sleep 10".to_string(),
+            ],
             &std::path::PathBuf::from("/"),
             &HashMap::new(),
             &log,
         )
         .expect("spawn bash");
-        managed.children.lock().unwrap().insert("ignore".into(), (pid, child));
+        managed
+            .children
+            .lock()
+            .unwrap()
+            .insert("ignore".into(), (pid, child));
         let start = std::time::Instant::now();
         terminate(&managed, "ignore");
         let elapsed = start.elapsed();
         // Should have waited a bit for trap, but not necessarily full grace
-        assert!(elapsed >= std::time::Duration::from_millis(50) && elapsed < std::time::Duration::from_millis(3000), "should wait for graceful trap, elapsed {:?}", elapsed);
+        assert!(
+            elapsed >= std::time::Duration::from_millis(50)
+                && elapsed < std::time::Duration::from_millis(3000),
+            "should wait for graceful trap, elapsed {:?}",
+            elapsed
+        );
         assert!(!managed.children.lock().unwrap().contains_key("ignore"));
         let still_alive = unsafe { libc::kill(pid as i32, 0) == 0 };
-        assert!(!still_alive, "ignore pid {} should be killed after grace", pid);
+        assert!(
+            !still_alive,
+            "ignore pid {} should be killed after grace",
+            pid
+        );
     }
 
     #[test]
@@ -319,7 +365,10 @@ mod tests {
         terminate(&managed, "nonexistent");
         // External should still be alive
         std::thread::sleep(std::time::Duration::from_millis(200));
-        assert!(matches!(ext_child.try_wait(), Ok(None)), "external sleep should still be running");
+        assert!(
+            matches!(ext_child.try_wait(), Ok(None)),
+            "external sleep should still be running"
+        );
         // Cleanup
         let _ = ext_child.kill();
         let _ = ext_child.wait();
@@ -332,14 +381,28 @@ mod tests {
             &log,
         )
         .expect("spawn external2");
-        managed.children.lock().unwrap().insert("owned".into(), (ext_pid2, ext_child2));
+        managed
+            .children
+            .lock()
+            .unwrap()
+            .insert("owned".into(), (ext_pid2, ext_child2));
         // Create a separate external not in map
-        let (_ext3_pid, mut ext3) = spawn_service("sleep", &["5".to_string()], &std::path::PathBuf::from("/"), &HashMap::new(), &log).expect("spawn ext3");
+        let (_ext3_pid, mut ext3) = spawn_service(
+            "sleep",
+            &["5".to_string()],
+            &std::path::PathBuf::from("/"),
+            &HashMap::new(),
+            &log,
+        )
+        .expect("spawn ext3");
         stop_all(&managed);
         assert!(managed.children.lock().unwrap().is_empty());
         std::thread::sleep(std::time::Duration::from_millis(200));
         // ext3 should still be alive (not in managed)
-        assert!(matches!(ext3.try_wait(), Ok(None)), "external not in map should survive stop_all");
+        assert!(
+            matches!(ext3.try_wait(), Ok(None)),
+            "external not in map should survive stop_all"
+        );
         let _ = ext3.kill();
         let _ = ext3.wait();
         // ext_pid2 was in managed, so it should be gone (already reaped by stop_all)

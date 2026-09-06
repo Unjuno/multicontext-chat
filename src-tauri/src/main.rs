@@ -39,12 +39,17 @@ impl Drop for StartGuard<'_> {
 }
 
 fn config_path(app: &tauri::AppHandle) -> PathBuf {
-    let dir = app.path().app_config_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let dir = app
+        .path()
+        .app_config_dir()
+        .unwrap_or_else(|_| PathBuf::from("."));
     dir.join("config.json")
 }
 
 fn log_dir(app: &tauri::AppHandle) -> PathBuf {
-    app.path().app_log_dir().unwrap_or_else(|_| PathBuf::from("/tmp"))
+    app.path()
+        .app_log_dir()
+        .unwrap_or_else(|_| PathBuf::from("/tmp"))
 }
 
 fn trace(app: &tauri::AppHandle, msg: &str) {
@@ -52,7 +57,11 @@ fn trace(app: &tauri::AppHandle, msg: &str) {
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("desktop.log");
     let line = format!("[{}] {}\n", now_secs(), msg);
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         use std::io::Write;
         let _ = f.write_all(line.as_bytes());
     }
@@ -96,7 +105,11 @@ fn emit_service(
         attempt_id,
     };
     let _ = app.emit("startup-progress", status.clone());
-    state.services.lock().unwrap().insert(name.to_string(), status);
+    state
+        .services
+        .lock()
+        .unwrap()
+        .insert(name.to_string(), status);
 }
 
 #[tauri::command]
@@ -174,7 +187,12 @@ async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<Service
 
     // GPT-OSS: strict model health (data/models non-empty), not just process exists
     let model_healthy = health::is_model_healthy(&client, &cfg.model_url).await;
-    let model_started = state.children.children.lock().unwrap().contains_key("モデル");
+    let model_started = state
+        .children
+        .children
+        .lock()
+        .unwrap()
+        .contains_key("モデル");
     let model_ownership = ownership_from(model_started, model_healthy);
     let (model_state, model_msg) = if model_healthy {
         (ServiceState::Ready, "準備完了".to_string())
@@ -196,13 +214,28 @@ async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<Service
     });
 
     // LibreChat: Remote Agents key validation (never expose key)
-    let librechat_started = state.children.children.lock().unwrap().contains_key("LibreChat");
+    let librechat_started = state
+        .children
+        .children
+        .lock()
+        .unwrap()
+        .contains_key("LibreChat");
     let (librechat_state, librechat_msg, librechat_healthy) = match keychain::get_key() {
-        Some(key) if !key.is_empty() => match health::librechat_auth(&cfg.librechat_url, &key).await {
-            AuthStatus::Ok => (ServiceState::Ready, "接続済み".to_string(), true),
-            AuthStatus::Forbidden => (ServiceState::Error, "接続キーを確認してください".to_string(), false),
-            AuthStatus::Unreachable => (ServiceState::Error, "LibreChat に接続できません".to_string(), false),
-        },
+        Some(key) if !key.is_empty() => {
+            match health::librechat_auth(&cfg.librechat_url, &key).await {
+                AuthStatus::Ok => (ServiceState::Ready, "接続済み".to_string(), true),
+                AuthStatus::Forbidden => (
+                    ServiceState::Error,
+                    "接続キーを確認してください".to_string(),
+                    false,
+                ),
+                AuthStatus::Unreachable => (
+                    ServiceState::Error,
+                    "LibreChat に接続できません".to_string(),
+                    false,
+                ),
+            }
+        }
         _ => {
             let client2 = health::client();
             let reachable = health::probe(LibreChat, &cfg.librechat_url, &client2).await;
@@ -224,15 +257,28 @@ async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<Service
 
     // MultiContext: strict ok===true, body parsed even on 503
     let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
-    let mc_started = state.children.children.lock().unwrap().contains_key("MultiContext");
+    let mc_started = state
+        .children
+        .children
+        .lock()
+        .unwrap()
+        .contains_key("MultiContext");
     let (mc_state, mc_msg, mc_healthy) = match health::multicontext_health(&client, &mc_url).await {
         McHealth::Ready => (ServiceState::Ready, "準備完了".to_string(), true),
-        McHealth::Unhealthy { kind, librechat_ok: _, detail } => {
+        McHealth::Unhealthy {
+            kind,
+            librechat_ok: _,
+            detail,
+        } => {
             let msg = connection_error_message(kind, None, &detail);
             // Map WrongService/Generic to Error, LibreChat already handled
             (ServiceState::Error, msg, false)
         }
-        McHealth::Unreachable => (ServiceState::Error, "MultiContext が応答しません".to_string(), false),
+        McHealth::Unreachable => (
+            ServiceState::Error,
+            "MultiContext が応答しません".to_string(),
+            false,
+        ),
     };
     let mc_ownership = ownership_from(mc_started, mc_healthy);
     out.push(ServiceStatus {
@@ -304,7 +350,12 @@ fn get_logs(app: tauri::AppHandle) -> String {
                         .lines()
                         .map(|l| {
                             let low = l.to_lowercase();
-                            if low.contains("sk-") || low.contains("bearer") || low.contains("api_key") || low.contains("mcp_token") || low.contains("multicontext_mcp") {
+                            if low.contains("sk-")
+                                || low.contains("bearer")
+                                || low.contains("api_key")
+                                || low.contains("mcp_token")
+                                || low.contains("multicontext_mcp")
+                            {
                                 "[REDACTED LINE]".to_string()
                             } else {
                                 l.to_string()
@@ -332,7 +383,11 @@ fn frontend_ready(app: tauri::AppHandle, marker: String) {
     // Defensively redact any secret-bearing text before writing to logs.
     let safe = process::redact(&marker);
     let line = format!("[{}] {}\n", now_secs(), safe);
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         use std::io::Write;
         let _ = f.write_all(line.as_bytes());
     }
@@ -363,8 +418,14 @@ fn start_model(
     cfg: &DesktopConfig,
 ) -> Result<(), String> {
     let llama = cfg.llama_path.clone().ok_or("llama-server が未設定です")?;
-    let model = cfg.model_path.clone().ok_or("GPT-OSS モデルファイルが未設定です")?;
-    let template = cfg.template_path.clone().ok_or("チャットテンプレートが未設定です")?;
+    let model = cfg
+        .model_path
+        .clone()
+        .ok_or("GPT-OSS モデルファイルが未設定です")?;
+    let template = cfg
+        .template_path
+        .clone()
+        .ok_or("チャットテンプレートが未設定です")?;
     let (host, port) = runtime::parse_host_port(&cfg.model_url);
     let profile = launch::GptOssProfile::default();
     let args = launch::build_model_args(&profile, &model, &template, &host, port);
@@ -387,7 +448,10 @@ fn start_librechat(
     cfg: &DesktopConfig,
     node: &str,
 ) -> Result<(), String> {
-    let lc = cfg.librechat_path.clone().ok_or("LibreChat パスが未設定です")?;
+    let lc = cfg
+        .librechat_path
+        .clone()
+        .ok_or("LibreChat パスが未設定です")?;
     let cwd = PathBuf::from(&lc);
     let args: Vec<String> = vec!["api/server/index.js".into()];
     let mut envs: HashMap<String, String> = HashMap::new();
@@ -425,7 +489,10 @@ fn start_multicontext(
     std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
     let data_file = data_dir.join("state.json");
     let mut envs: HashMap<String, String> = HashMap::new();
-    envs.insert("MULTICONTEXT_PORT".into(), cfg.multicontext_port.to_string());
+    envs.insert(
+        "MULTICONTEXT_PORT".into(),
+        cfg.multicontext_port.to_string(),
+    );
     envs.insert(
         "MULTICONTEXT_DATA_FILE".into(),
         data_file.to_string_lossy().to_string(),
@@ -544,7 +611,12 @@ pub struct McpStatus {
 async fn get_mcp_status(state: tauri::State<'_, AppState>) -> Result<McpStatus, String> {
     let cfg = state.config.lock().unwrap().clone();
     let endpoint = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
-    let is_owned = state.children.children.lock().unwrap().contains_key("MultiContext");
+    let is_owned = state
+        .children
+        .children
+        .lock()
+        .unwrap()
+        .contains_key("MultiContext");
     let is_external = if is_owned {
         false
     } else {
@@ -567,11 +639,15 @@ async fn get_mcp_status(state: tauri::State<'_, AppState>) -> Result<McpStatus, 
             let token = keychain::get_mcp_token().unwrap_or_default();
             if !token.is_empty() {
                 let payload = serde_json::json!({ "jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"health-check","version":"1.0"}}});
-                if let Ok(resp) = client.post(&mcp_url)
+                if let Ok(resp) = client
+                    .post(&mcp_url)
                     .header("Authorization", format!("Bearer {}", token))
-                    .header("Content-Type","application/json")
-                    .header("Accept","application/json, text/event-stream")
-                    .json(&payload).send().await {
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json, text/event-stream")
+                    .json(&payload)
+                    .send()
+                    .await
+                {
                     token_valid = resp.status() == 200;
                 }
             }
@@ -580,11 +656,26 @@ async fn get_mcp_status(state: tauri::State<'_, AppState>) -> Result<McpStatus, 
             token_valid = true;
         }
     }
-    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token, endpoint, is_external, applied, token_valid })
+    Ok(McpStatus {
+        enabled: cfg.mcp_enabled,
+        has_token,
+        endpoint,
+        is_external,
+        applied,
+        token_valid,
+    })
 }
 
-async fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State<'_, AppState>) -> Result<bool, String> {
-    let is_owned = state.children.children.lock().unwrap().contains_key("MultiContext");
+async fn restart_owned_multicontext(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, AppState>,
+) -> Result<bool, String> {
+    let is_owned = state
+        .children
+        .children
+        .lock()
+        .unwrap()
+        .contains_key("MultiContext");
     if !is_owned {
         return Ok(false);
     }
@@ -601,13 +692,27 @@ async fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State
     for _ in 0..20 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         match health::multicontext_health(&client, &mc_url).await {
-            crate::health::McHealth::Ready => { health_ok = true; break; }
-            crate::health::McHealth::Unhealthy { detail, .. } => { last_detail = detail; health_ok = false; break; }
+            crate::health::McHealth::Ready => {
+                health_ok = true;
+                break;
+            }
+            crate::health::McHealth::Unhealthy { detail, .. } => {
+                last_detail = detail;
+                health_ok = false;
+                break;
+            }
             crate::health::McHealth::Unreachable => continue,
         }
     }
     if !health_ok {
-        return Err(format!("MultiContext再起動後に /api/health が Ready になりませんでした: {}", if last_detail.is_empty() { "応答なし".to_string() } else { last_detail }));
+        return Err(format!(
+            "MultiContext再起動後に /api/health が Ready になりませんでした: {}",
+            if last_detail.is_empty() {
+                "応答なし".to_string()
+            } else {
+                last_detail
+            }
+        ));
     }
     // Verify MCP endpoint matches expected enabled/token state
     let mcp_url = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
@@ -618,34 +723,54 @@ async fn restart_owned_multicontext(app: &tauri::AppHandle, state: &tauri::State
         }
         // POST initialize with new token should succeed (200)
         let payload = serde_json::json!({ "jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"health-check","version":"1.0"}}});
-        let resp = client.post(&mcp_url)
+        let resp = client
+            .post(&mcp_url)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type","application/json")
-            .header("Accept","application/json, text/event-stream")
-            .json(&payload).send().await.map_err(|e| format!("MCP verify failed: {}", e))?;
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| format!("MCP verify failed: {}", e))?;
         if resp.status() != 200 {
-            return Err(format!("MCP再起動後に new token での initialize が失敗しました: HTTP {}", resp.status()));
+            return Err(format!(
+                "MCP再起動後に new token での initialize が失敗しました: HTTP {}",
+                resp.status()
+            ));
         }
         // Old token no longer valid is expected, but we don't have it to test; new token success is sufficient
     } else {
         // When disabled, /mcp should return 404 MCP_DISABLED
-        let resp = client.post(&mcp_url)
-            .header("Content-Type","application/json")
-            .body("{}").send().await.map_err(|e| format!("MCP verify failed: {}", e))?;
+        let resp = client
+            .post(&mcp_url)
+            .header("Content-Type", "application/json")
+            .body("{}")
+            .send()
+            .await
+            .map_err(|e| format!("MCP verify failed: {}", e))?;
         if resp.status() != 404 {
-            return Err(format!("MCP無効化後に /mcp が 404 を返しませんでした: HTTP {}", resp.status()));
+            return Err(format!(
+                "MCP無効化後に /mcp が 404 を返しませんでした: HTTP {}",
+                resp.status()
+            ));
         }
     }
     Ok(true)
 }
 
 #[tauri::command]
-async fn set_mcp_enabled(state: tauri::State<'_, AppState>, app: tauri::AppHandle, enabled: bool) -> Result<McpStatus, String> {
+async fn set_mcp_enabled(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<McpStatus, String> {
     let mut cfg = state.config.lock().unwrap().clone();
     cfg.mcp_enabled = enabled;
     // Persist
     let path = config_path(&app);
-    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
     std::fs::write(&path, data).map_err(|e| e.to_string())?;
     *state.config.lock().unwrap() = cfg.clone();
@@ -662,28 +787,60 @@ async fn set_mcp_enabled(state: tauri::State<'_, AppState>, app: tauri::AppHandl
         health::is_listening(&client, &mc_url).await
     };
     if is_external {
-        trace(&app, "set_mcp_enabled external: manual MULTICONTEXT_MCP_TOKEN env and restart required");
+        trace(
+            &app,
+            "set_mcp_enabled external: manual MULTICONTEXT_MCP_TOKEN env and restart required",
+        );
     } else if !restarted {
-        trace(&app, "set_mcp_enabled: no owned MultiContext to restart (will apply on next start)");
+        trace(
+            &app,
+            "set_mcp_enabled: no owned MultiContext to restart (will apply on next start)",
+        );
     }
     let has_token = keychain::has_mcp_token();
-    let token_valid = if !cfg.mcp_enabled { false } else if has_token && !is_external { true } else if has_token && is_external {
+    let token_valid = if !cfg.mcp_enabled {
+        false
+    } else if has_token && !is_external {
+        true
+    } else if has_token && is_external {
         let client = health::client();
         let mcp_url = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
         let token = keychain::get_mcp_token().unwrap_or_default();
-        if token.is_empty() { false } else {
+        if token.is_empty() {
+            false
+        } else {
             let payload = serde_json::json!({ "jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"health-check","version":"1.0"}}});
-            match client.post(&mcp_url).header("Authorization", format!("Bearer {}", token)).header("Content-Type","application/json").header("Accept","application/json, text/event-stream").json(&payload).send().await {
+            match client
+                .post(&mcp_url)
+                .header("Authorization", format!("Bearer {}", token))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/event-stream")
+                .json(&payload)
+                .send()
+                .await
+            {
                 Ok(resp) => resp.status() == 200,
                 Err(_) => false,
             }
         }
-    } else { false };
-    Ok(McpStatus { enabled: cfg.mcp_enabled, has_token, endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port), is_external, applied: !is_external, token_valid })
+    } else {
+        false
+    };
+    Ok(McpStatus {
+        enabled: cfg.mcp_enabled,
+        has_token,
+        endpoint: format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port),
+        is_external,
+        applied: !is_external,
+        token_valid,
+    })
 }
 
 #[tauri::command]
-async fn generate_mcp_token(state: tauri::State<'_, AppState>, app: tauri::AppHandle) -> Result<String, String> {
+async fn generate_mcp_token(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
     let tok = keychain::generate_mcp_token();
     keychain::set_mcp_token(&tok)?;
     let restarted = restart_owned_multicontext(&app, &state).await?;
@@ -707,7 +864,11 @@ fn delete_mcp_token() -> Result<(), String> {
 fn get_opencode_config(state: tauri::State<AppState>) -> Result<String, String> {
     let cfg = state.config.lock().unwrap().clone();
     let token = keychain::get_mcp_token().unwrap_or_default();
-    if token.is_empty() { return Err("MCPトークンが未設定です。先に有効化してトークンを生成してください。".to_string()); }
+    if token.is_empty() {
+        return Err(
+            "MCPトークンが未設定です。先に有効化してトークンを生成してください。".to_string(),
+        );
+    }
     let endpoint = format!("http://127.0.0.1:{}/mcp", cfg.multicontext_port);
     // OpenCode remote MCP format as per 2025-12 docs
     let json = serde_json::json!({
@@ -738,7 +899,11 @@ fn get_mcp_endpoint(state: tauri::State<AppState>) -> String {
 /// * no stored key            -> "LibreChat 接続キーを設定してください"
 /// * Remote Agents key rejected -> "LibreChat 接続キーを確認してください"
 /// * wrong service on port    -> "MultiContext ポートが別のサービスで使用されています"
-fn connection_error_message(kind: McFailureKind, _librechat_ok: Option<bool>, detail: &str) -> String {
+fn connection_error_message(
+    kind: McFailureKind,
+    _librechat_ok: Option<bool>,
+    detail: &str,
+) -> String {
     match kind {
         McFailureKind::WrongService => {
             "MultiContext ポートが別のサービスで使用されています".to_string()
@@ -768,9 +933,25 @@ async fn ensure_model(
     client: &reqwest::Client,
     attempt_id: u64,
 ) -> Result<(), String> {
-    emit_service(app, state, "モデル", ServiceState::Checking, "確認中...", false, attempt_id);
+    emit_service(
+        app,
+        state,
+        "モデル",
+        ServiceState::Checking,
+        "確認中...",
+        false,
+        attempt_id,
+    );
     if health::is_model_healthy(client, &cfg.model_url).await {
-        emit_service(app, state, "モデル", ServiceState::Ready, "準備完了", true, attempt_id);
+        emit_service(
+            app,
+            state,
+            "モデル",
+            ServiceState::Ready,
+            "準備完了",
+            true,
+            attempt_id,
+        );
         return Ok(());
     }
     if !cfg.manage_model {
@@ -788,19 +969,51 @@ async fn ensure_model(
     // Retry safety: drop any stale/failed tracked child before spawning anew.
     process::reap_dead(&state.children);
     process::terminate(&state.children, "モデル");
-    emit_service(app, state, "モデル", ServiceState::Starting, "起動中...", false, attempt_id);
+    emit_service(
+        app,
+        state,
+        "モデル",
+        ServiceState::Starting,
+        "起動中...",
+        false,
+        attempt_id,
+    );
     if let Err(e) = start_model(app, state, cfg) {
-        emit_service(app, state, "モデル", ServiceState::Error, &e, false, attempt_id);
+        emit_service(
+            app,
+            state,
+            "モデル",
+            ServiceState::Error,
+            &e,
+            false,
+            attempt_id,
+        );
         return Err(e);
     }
     if health::wait_model_ready(&cfg.model_url, 40, Duration::from_secs(2)).await {
-        emit_service(app, state, "モデル", ServiceState::Ready, "準備完了 (管理)", true, attempt_id);
+        emit_service(
+            app,
+            state,
+            "モデル",
+            ServiceState::Ready,
+            "準備完了 (管理)",
+            true,
+            attempt_id,
+        );
         Ok(())
     } else {
         // Clean up the managed child we just spawned; never leave it orphaned.
         process::terminate(&state.children, "モデル");
         let msg = "GPT-OSS を起動できません。ログを確認してください。".to_string();
-        emit_service(app, state, "モデル", ServiceState::Error, &msg, false, attempt_id);
+        emit_service(
+            app,
+            state,
+            "モデル",
+            ServiceState::Error,
+            &msg,
+            false,
+            attempt_id,
+        );
         Err("モデルの起動がタイムアウトしました".to_string())
     }
 }
@@ -813,9 +1026,25 @@ async fn ensure_librechat(
     node: &str,
     attempt_id: u64,
 ) -> Result<(), String> {
-    emit_service(app, state, "LibreChat", ServiceState::Checking, "接続中...", false, attempt_id);
+    emit_service(
+        app,
+        state,
+        "LibreChat",
+        ServiceState::Checking,
+        "接続中...",
+        false,
+        attempt_id,
+    );
     if health::probe(LibreChat, &cfg.librechat_url, &client).await {
-        emit_service(app, state, "LibreChat", ServiceState::Ready, "準備完了", true, attempt_id);
+        emit_service(
+            app,
+            state,
+            "LibreChat",
+            ServiceState::Ready,
+            "準備完了",
+            true,
+            attempt_id,
+        );
         return Ok(());
     }
     if !cfg.manage_librechat {
@@ -832,18 +1061,50 @@ async fn ensure_librechat(
     }
     process::reap_dead(&state.children);
     process::terminate(&state.children, "LibreChat");
-    emit_service(app, state, "LibreChat", ServiceState::Starting, "接続中...", false, attempt_id);
+    emit_service(
+        app,
+        state,
+        "LibreChat",
+        ServiceState::Starting,
+        "接続中...",
+        false,
+        attempt_id,
+    );
     if let Err(e) = start_librechat(app, state, cfg, node) {
-        emit_service(app, state, "LibreChat", ServiceState::Error, &e, false, attempt_id);
+        emit_service(
+            app,
+            state,
+            "LibreChat",
+            ServiceState::Error,
+            &e,
+            false,
+            attempt_id,
+        );
         return Err(e);
     }
     if health::wait_ready(LibreChat, &cfg.librechat_url, 30, Duration::from_secs(2)).await {
-        emit_service(app, state, "LibreChat", ServiceState::Ready, "準備完了 (管理)", true, attempt_id);
+        emit_service(
+            app,
+            state,
+            "LibreChat",
+            ServiceState::Ready,
+            "準備完了 (管理)",
+            true,
+            attempt_id,
+        );
         Ok(())
     } else {
         process::terminate(&state.children, "LibreChat");
         let msg = "LibreChat を起動できません。ログを確認してください。".to_string();
-        emit_service(app, state, "LibreChat", ServiceState::Error, &msg, false, attempt_id);
+        emit_service(
+            app,
+            state,
+            "LibreChat",
+            ServiceState::Error,
+            &msg,
+            false,
+            attempt_id,
+        );
         Err("LibreChat の起動がタイムアウトしました".to_string())
     }
 }
@@ -857,49 +1118,129 @@ async fn ensure_multicontext(
     attempt_id: u64,
 ) -> Result<(), String> {
     let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
-    emit_service(app, state, "MultiContext", ServiceState::Checking, "確認中...", false, attempt_id);
+    emit_service(
+        app,
+        state,
+        "MultiContext",
+        ServiceState::Checking,
+        "確認中...",
+        false,
+        attempt_id,
+    );
     match health::multicontext_health(client, &mc_url).await {
         McHealth::Ready => {
-            emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true, attempt_id);
+            emit_service(
+                app,
+                state,
+                "MultiContext",
+                ServiceState::Ready,
+                "準備完了",
+                true,
+                attempt_id,
+            );
             return Ok(());
         }
-        McHealth::Unhealthy { kind, librechat_ok, detail } => {
+        McHealth::Unhealthy {
+            kind,
+            librechat_ok,
+            detail,
+        } => {
             // Already running but not usable (e.g. missing/wrong key). Do NOT
             // restart onto the occupied port; surface the real cause instead.
             let msg = connection_error_message(kind, librechat_ok, &detail);
-            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false, attempt_id);
+            emit_service(
+                app,
+                state,
+                "MultiContext",
+                ServiceState::Error,
+                &msg,
+                false,
+                attempt_id,
+            );
             return Err(msg);
         }
         McHealth::Unreachable => {}
     }
     process::reap_dead(&state.children);
     process::terminate(&state.children, "MultiContext");
-    emit_service(app, state, "MultiContext", ServiceState::Starting, "起動中...", false, attempt_id);
+    emit_service(
+        app,
+        state,
+        "MultiContext",
+        ServiceState::Starting,
+        "起動中...",
+        false,
+        attempt_id,
+    );
     if let Err(e) = start_multicontext(app, state, cfg, node) {
-        emit_service(app, state, "MultiContext", ServiceState::Error, &e, false, attempt_id);
+        emit_service(
+            app,
+            state,
+            "MultiContext",
+            ServiceState::Error,
+            &e,
+            false,
+            attempt_id,
+        );
         return Err(e);
     }
     if !health::wait_listening(&mc_url, 20, Duration::from_secs(2)).await {
         process::terminate(&state.children, "MultiContext");
         let msg = "MultiContext の起動がタイムアウトしました。ログを確認してください。".to_string();
-        emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false, attempt_id);
+        emit_service(
+            app,
+            state,
+            "MultiContext",
+            ServiceState::Error,
+            &msg,
+            false,
+            attempt_id,
+        );
         return Err(msg);
     }
     match health::multicontext_health(client, &mc_url).await {
         McHealth::Ready => {
-            emit_service(app, state, "MultiContext", ServiceState::Ready, "準備完了", true, attempt_id);
+            emit_service(
+                app,
+                state,
+                "MultiContext",
+                ServiceState::Ready,
+                "準備完了",
+                true,
+                attempt_id,
+            );
             Ok(())
         }
-        McHealth::Unhealthy { kind, librechat_ok, detail } => {
+        McHealth::Unhealthy {
+            kind,
+            librechat_ok,
+            detail,
+        } => {
             process::terminate(&state.children, "MultiContext");
             let msg = connection_error_message(kind, librechat_ok, &detail);
-            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false, attempt_id);
+            emit_service(
+                app,
+                state,
+                "MultiContext",
+                ServiceState::Error,
+                &msg,
+                false,
+                attempt_id,
+            );
             Err(msg)
         }
         McHealth::Unreachable => {
             process::terminate(&state.children, "MultiContext");
             let msg = "MultiContext が応答しません。ログを確認してください。".to_string();
-            emit_service(app, state, "MultiContext", ServiceState::Error, &msg, false, attempt_id);
+            emit_service(
+                app,
+                state,
+                "MultiContext",
+                ServiceState::Error,
+                &msg,
+                false,
+                attempt_id,
+            );
             Err(msg)
         }
     }
@@ -931,9 +1272,17 @@ async fn startup(
         };
         *attempt_lock = id;
         run_attempt = id;
-        _guard = StartGuard { flag: &state.starting };
+        _guard = StartGuard {
+            flag: &state.starting,
+        };
     }
-    trace(&app, &format!("startup begin: manage_model={} manage_librechat={} port={}", cfg.manage_model, cfg.manage_librechat, cfg.multicontext_port));
+    trace(
+        &app,
+        &format!(
+            "startup begin: manage_model={} manage_librechat={} port={}",
+            cfg.manage_model, cfg.manage_librechat, cfg.multicontext_port
+        ),
+    );
     cfg.validate()?;
     let node = resolve_node(&state)
         .ok_or("Node.js が見つかりません。設定で Node のパスを指定してください。")?;
@@ -941,11 +1290,32 @@ async fn startup(
 
     let client = health::client();
 
-    ensure_model(&app, &state, &cfg, &client, run_attempt).await?;
+    trace(&app, "startup: checking model");
+    ensure_model(&app, &state, &cfg, &client, run_attempt)
+        .await
+        .map_err(|e| {
+            trace(&app, &format!("startup: model failed: {}", e));
+            e
+        })?;
+    trace(&app, "startup: model ready");
 
-    ensure_librechat(&app, &state, &cfg, &client, &node, run_attempt).await?;
+    trace(&app, "startup: checking LibreChat");
+    ensure_librechat(&app, &state, &cfg, &client, &node, run_attempt)
+        .await
+        .map_err(|e| {
+            trace(&app, &format!("startup: LibreChat failed: {}", e));
+            e
+        })?;
+    trace(&app, "startup: LibreChat ready");
 
-    ensure_multicontext(&app, &state, &cfg, &client, &node, run_attempt).await?;
+    trace(&app, "startup: checking MultiContext");
+    ensure_multicontext(&app, &state, &cfg, &client, &node, run_attempt)
+        .await
+        .map_err(|e| {
+            trace(&app, &format!("startup: MultiContext failed: {}", e));
+            e
+        })?;
+    trace(&app, "startup: all services ready");
 
     Ok(state.services.lock().unwrap().values().cloned().collect())
 }

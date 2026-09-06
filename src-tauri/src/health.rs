@@ -245,9 +245,19 @@ fn classify_mc_failure(v: &serde_json::Value) -> McHealth {
 /// problem (so the UI should ask the user to re-check the Remote Agents key)?
 fn is_auth_like(error: &str) -> bool {
     let e = error.to_lowercase();
-    ["unauthoriz", "forbidden", "401", "403", "auth", "api key", "api_key", "token", "key "]
-        .iter()
-        .any(|k| e.contains(k))
+    [
+        "unauthoriz",
+        "forbidden",
+        "401",
+        "403",
+        "auth",
+        "api key",
+        "api_key",
+        "token",
+        "key ",
+    ]
+    .iter()
+    .any(|k| e.contains(k))
 }
 
 /// Directly test a LibreChat *Remote Agents API* key by calling the authenticated
@@ -342,7 +352,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_200_ok() {
-        let p = serve("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK", None);
+        let p = serve(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK",
+            None,
+        );
         let c = client();
         let r = is_healthy(&c, &format!("http://127.0.0.1:{}/", p)).await;
         assert!(r, "expected 200 to be healthy");
@@ -357,7 +370,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_404_unhealthy() {
-        let p = serve("HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found", None);
+        let p = serve(
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found",
+            None,
+        );
         let c = client();
         assert!(!is_healthy(&c, &format!("http://127.0.0.1:{}/", p)).await);
     }
@@ -445,7 +461,10 @@ mod tests {
     #[tokio::test]
     async fn test_multicontext_503_not_ready() {
         // 503 with no body => a foreign/non-MultiContext service on the port.
-        let p = serve("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n", None);
+        let p = serve(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n",
+            None,
+        );
         let c = client();
         assert_eq!(
             multicontext_health(&c, &format!("http://127.0.0.1:{}", p)).await,
@@ -516,7 +535,10 @@ mod tests {
     #[tokio::test]
     async fn test_multicontext_404_other_service() {
         // A 404 from a foreign service occupying the port.
-        let p = serve("HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found", None);
+        let p = serve(
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found",
+            None,
+        );
         let c = client();
         assert_eq!(
             multicontext_health(&c, &format!("http://127.0.0.1:{}", p)).await,

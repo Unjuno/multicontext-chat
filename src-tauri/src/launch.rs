@@ -75,17 +75,27 @@ mod tests {
         let args = build_model_args(&p, "/m/gpt-oss.gguf", "/t/gpt-oss.jinja", "127.0.0.1", 8080);
         let s: Vec<&str> = args.iter().map(|x| x.as_str()).collect();
         assert!(s.contains(&"-m"));
-        assert_eq!(s[s.iter().position(|x| *x == "-m").unwrap() + 1], "/m/gpt-oss.gguf");
+        assert_eq!(
+            s[s.iter().position(|x| *x == "-m").unwrap() + 1],
+            "/m/gpt-oss.gguf"
+        );
         assert!(s.contains(&"--jinja"));
         assert!(s.contains(&"--chat-template-file"));
         assert!(s.contains(&"--host"));
         assert!(s.contains(&"--port"));
-        assert_eq!(s[s.iter().position(|x| *x == "--port").unwrap() + 1], "8080");
+        assert_eq!(
+            s[s.iter().position(|x| *x == "--port").unwrap() + 1],
+            "8080"
+        );
         let ctx = s[s.iter().position(|x| *x == "--ctx-size").unwrap() + 1];
         assert_eq!(ctx, "65536");
         let par = s[s.iter().position(|x| *x == "--parallel").unwrap() + 1];
         assert_eq!(par, "4");
-        let kwargs = s[s.iter().position(|x| *x == "--chat-template-kwargs").unwrap() + 1];
+        let kwargs = s[s
+            .iter()
+            .position(|x| *x == "--chat-template-kwargs")
+            .unwrap()
+            + 1];
         assert!(kwargs.contains("reasoning_effort"));
         assert!(kwargs.contains("low"));
     }
@@ -99,9 +109,19 @@ mod tests {
         };
         let args = build_model_args(&p, "/m/x.gguf", "/t/x.jinja", "0.0.0.0", 9000);
         let s: Vec<&str> = args.iter().map(|x| x.as_str()).collect();
-        assert_eq!(s[s.iter().position(|x| *x == "--ctx-size").unwrap() + 1], "16384");
-        assert_eq!(s[s.iter().position(|x| *x == "--parallel").unwrap() + 1], "2");
-        let kwargs = s[s.iter().position(|x| *x == "--chat-template-kwargs").unwrap() + 1];
+        assert_eq!(
+            s[s.iter().position(|x| *x == "--ctx-size").unwrap() + 1],
+            "16384"
+        );
+        assert_eq!(
+            s[s.iter().position(|x| *x == "--parallel").unwrap() + 1],
+            "2"
+        );
+        let kwargs = s[s
+            .iter()
+            .position(|x| *x == "--chat-template-kwargs")
+            .unwrap()
+            + 1];
         assert!(kwargs.contains("high"));
     }
 }

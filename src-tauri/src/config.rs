@@ -82,7 +82,8 @@ impl Default for DesktopConfig {
 
 impl DesktopConfig {
     pub fn validate(&self) -> Result<(), String> {
-        if !self.librechat_url.starts_with("http://") && !self.librechat_url.starts_with("https://") {
+        if !self.librechat_url.starts_with("http://") && !self.librechat_url.starts_with("https://")
+        {
             return Err("LibreChat URL は http(s) で指定してください".to_string());
         }
         if !self.model_url.starts_with("http://") && !self.model_url.starts_with("https://") {
@@ -93,9 +94,18 @@ impl DesktopConfig {
         }
         if self.manage_librechat {
             match &self.librechat_path {
-                None => return Err("LibreChat を管理するには LibreChat ディレクトリを指定してください".to_string()),
-                Some(p) if !PathBuf::from(p).join("api/server/index.js").exists() =>
-                    return Err(format!("LibreChat ディレクトリが無効です: {} (api/server/index.js がありません)", p)),
+                None => {
+                    return Err(
+                        "LibreChat を管理するには LibreChat ディレクトリを指定してください"
+                            .to_string(),
+                    )
+                }
+                Some(p) if !PathBuf::from(p).join("api/server/index.js").exists() => {
+                    return Err(format!(
+                        "LibreChat ディレクトリが無効です: {} (api/server/index.js がありません)",
+                        p
+                    ))
+                }
                 _ => {}
             }
         }
@@ -107,8 +117,9 @@ impl DesktopConfig {
             ] {
                 match val {
                     None => return Err(format!("{} を指定してください", field)),
-                    Some(p) if !PathBuf::from(p).exists() =>
-                        return Err(format!("{} が見つかりません: {}", field, p)),
+                    Some(p) if !PathBuf::from(p).exists() => {
+                        return Err(format!("{} が見つかりません: {}", field, p))
+                    }
                     _ => {}
                 }
             }
@@ -136,7 +147,10 @@ mod tests {
 
     #[test]
     fn test_config_validation_bad_url() {
-        let cfg = DesktopConfig { librechat_url: "not-a-url".to_string(), ..Default::default() };
+        let cfg = DesktopConfig {
+            librechat_url: "not-a-url".to_string(),
+            ..Default::default()
+        };
         assert!(cfg.validate().is_err());
     }
 
@@ -188,15 +202,22 @@ mod tests {
     #[test]
     fn test_config_default_managed_true() {
         let cfg = DesktopConfig::default();
-        assert!(cfg.manage_model, "new installs must default to managed GPT-OSS");
-        assert!(cfg.manage_librechat, "new installs must default to managed LibreChat");
+        assert!(
+            cfg.manage_model,
+            "new installs must default to managed GPT-OSS"
+        );
+        assert!(
+            cfg.manage_librechat,
+            "new installs must default to managed LibreChat"
+        );
     }
 
     #[test]
     fn test_config_old_saved_preserved() {
         // Old saved config without managed fields must deserialize to false (serde default),
         // preserving existing behavior; new installs get true via Default::default().
-        let old = r#"{"librechat_url":"http://127.0.0.1:3080","model_url":"http://127.0.0.1:8080/v1"}"#;
+        let old =
+            r#"{"librechat_url":"http://127.0.0.1:3080","model_url":"http://127.0.0.1:8080/v1"}"#;
         let cfg: DesktopConfig = serde_json::from_str(old).unwrap();
         assert!(!cfg.manage_model);
         assert!(!cfg.manage_librechat);
