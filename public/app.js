@@ -1395,9 +1395,15 @@ function wire(workspace) {
       localStorage.setItem('mcc_collapsed_members', JSON.stringify([...collapsedMembers]));
       await refreshPreservingDrafts(workspace.id).catch((err) => toast(err.message, 'error'));
     }
-    const refreshedTarget = document.querySelector(`.member[data-mid="${CSS.escape(String(targetId))}"]`);
+    const refreshedTarget = [...document.querySelectorAll('.member')]
+      .find((card) => String(card.dataset.mid) === String(targetId));
     refreshedTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    refreshedTarget?.querySelector('[data-action="retry"], [data-action="trim-history"]')?.focus();
+    const recoveryAction = refreshedTarget?.querySelector('[data-action="retry"], [data-action="trim-history"]');
+    if (recoveryAction) recoveryAction.focus();
+    else if (refreshedTarget) {
+      refreshedTarget.setAttribute('tabindex', '-1');
+      refreshedTarget.focus({ preventScroll: true });
+    }
   });
   $('#refreshWorkspace').onclick = async (e) => {
     await withBusy(e.currentTarget, async () => {
