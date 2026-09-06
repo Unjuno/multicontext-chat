@@ -1221,7 +1221,7 @@ function memberCard(workspace, member) {
           </div>
           <div class="action-url" title="${esc(member.actionSpecUrl || '')}">${esc(member.actionSpecUrl || '')}</div>
         </div>
-        <div class="messages" role="log" aria-live="polite">
+        <div class="messages" role="log" aria-label="${esc(member.name)}のメッセージ履歴" aria-live="polite">
           ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">まだメッセージがありません — 一斉送信か直接送信で会話を始めましょう</div>' : ''}
           ${member.messages.map((message) => `
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
