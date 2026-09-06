@@ -35,7 +35,10 @@ export class StateStore {
       workspace.settings.allowCrossChatInspect ??= true;
       workspace.settings.allowCrossChatSend ??= true;
       workspace.settings.agentSelectionMode ??= 'require_selection';
-      workspace.broadcastReceipts ??= {};
+      if (!workspace.broadcastReceipts) {
+        workspace.broadcastReceipts = {};
+        dirty = true;
+      }
       workspace.stats ??= {};
       for (const key of ['broadcasts', 'executions', 'toolEnqueues', 'inspections']) workspace.stats[key] ??= 0;
       workspace.orchestratorQueue ??= [];
