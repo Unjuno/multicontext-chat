@@ -902,7 +902,17 @@ async function refresh(expectedId = currentId) {
       <div class="section-label">独立チャット <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${members.length}件</span></div>
       ${members.length
         ? `<div class="members">${members.map((member) => memberCard(workspace, member)).join('')}</div>`
-        : '<div class="empty-inline"><p><strong>まだチャットがありません</strong></p><p class="small" style="margin:6px 0 12px">各チャットは独立したコンテキストとキューを持ち、並列に実行されます</p><button id="emptyAddChat" class="primary sm">+ 最初のチャットを追加</button></div>'}
+        : `<div class="empty-inline onboarding-card">
+            <div class="onboarding-icon" aria-hidden="true">✦</div>
+            <p><strong>最初のワークスペースを準備しましょう</strong></p>
+            <p class="small onboarding-lead">専門Agentをチャットごとに割り当て、同じ問いを並列に考えさせられます。</p>
+            <div class="onboarding-steps">
+              <div><b>1</b><span><strong>チャットを追加</strong><small>役割ごとのコンテキストを作成</small></span></div>
+              <div><b>2</b><span><strong>Agentを選択</strong><small>安全のため明示選択を推奨</small></span></div>
+              <div><b>3</b><span><strong>問いをBroadcast</strong><small>全チャットの回答を比較</small></span></div>
+            </div>
+            <button id="emptyAddChat" class="primary">+ 最初のチャットを追加</button>
+          </div>`}
 
       <div class="section-label">Compile — 手動要約 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">SETTLED時のみ実行 · 履歴には書き込まれません</span></div>
       <div class="compile">
