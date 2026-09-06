@@ -366,7 +366,7 @@
           });
           maybeNavigate();
         } catch (e) {
-          showError(typeof e === "string" ? e : "起動に失敗しました");
+          showError("起動に失敗しました: " + errorMessage(e));
         }
       }
 
@@ -555,7 +555,11 @@
       document.getElementById("startBtn").onclick = () => saveAndMaybeStart(true);
       document.getElementById("retryBtn").onclick = runStartup;
       document.getElementById("logsBtn").onclick = async () => {
-        await invoke("open_logs_dir");
+        try {
+          await invoke("open_logs_dir");
+        } catch (e) {
+          showError("ログフォルダを開けませんでした: " + errorMessage(e));
+        }
       };
       document.getElementById("pickLibrechat").onclick = () => pick("dir", "librechatPath");
       document.getElementById("pickLlama").onclick = () => pick("exe", "llamaPath");
