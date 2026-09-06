@@ -1130,12 +1130,17 @@ function renderOrchestratorBar(data) {
     await request(`/api/workspaces/${currentId}/orchestrator/pause`, { method:'POST', body: JSON.stringify({ paused: !data.paused }) });
     refreshOrchestrator();
   });
-  bar.querySelector('#orchQueueBtn')?.addEventListener('click', () => {
+  const queueBtn = bar.querySelector('#orchQueueBtn');
+  queueBtn?.setAttribute('aria-haspopup', 'dialog');
+  queueBtn?.addEventListener('click', () => {
     const dlg=document.getElementById('orchestratorDrawer');
     renderOrchestratorDrawer(data);
     if (dlg && typeof dlg.showModal==='function') dlg.showModal(); else dlg?.setAttribute('open','');
   });
   document.getElementById('orchestratorClose')?.addEventListener('click', ()=>{ const d=document.getElementById('orchestratorDrawer'); if(d.close) d.close(); else d.removeAttribute('open'); });
+  document.getElementById('orchestratorDrawer')?.addEventListener('close', () => {
+    queueBtn?.focus();
+  });
 }
 function scheduleOrchestrator() { clearTimeout(orchestratorTimer); orchestratorTimer=setTimeout(()=>{ refreshOrchestrator().finally(scheduleOrchestrator); }, 3000); }
 
