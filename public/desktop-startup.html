@@ -145,7 +145,7 @@
             <label style="margin:0">LibreChat を Desktop で管理・起動する</label>
           </div>
           <div class="row" style="margin-top:8px">
-            <input type="text" id="librechatPath" placeholder="LibreChat ディレクトリ" />
+            <input type="text" id="librechatPath" placeholder="LibreChat ディレクトリ" aria-label="LibreChat ディレクトリ" />
             <button id="pickLibrechat">選択</button>
           </div>
         </div>
@@ -157,15 +157,15 @@
             <label style="margin:0">モデルを Desktop で管理・起動する</label>
           </div>
           <div class="row" style="margin-top:8px">
-            <input type="text" id="llamaPath" placeholder="llama-server 実行ファイル" />
+            <input type="text" id="llamaPath" placeholder="llama-server 実行ファイル" aria-label="llama-server 実行ファイル" />
             <button id="pickLlama">選択</button>
           </div>
           <div class="row" style="margin-top:8px">
-            <input type="text" id="modelFilePath" placeholder="モデル (GGUF) ファイル" />
+            <input type="text" id="modelFilePath" placeholder="モデル (GGUF) ファイル" aria-label="モデル (GGUF) ファイル" />
             <button id="pickModel">選択</button>
           </div>
           <div class="row" style="margin-top:8px">
-            <input type="text" id="templatePath" placeholder="チャットテンプレート (.jinja)" />
+            <input type="text" id="templatePath" placeholder="チャットテンプレート (.jinja)" aria-label="チャットテンプレート (.jinja)" />
             <button id="pickTemplate">選択</button>
           </div>
         </div>
@@ -174,7 +174,7 @@
           <label>LibreChat 接続</label>
           <div class="row">
             <span id="connState" class="conn-badge">確認中...</span>
-            <input type="password" id="apiKey" autocomplete="off" placeholder="接続キー" />
+            <input type="password" id="apiKey" autocomplete="off" placeholder="接続キー" aria-label="LibreChat接続キー" />
             <button id="saveApiKey">保存</button>
             <button id="deleteApiKey" class="destructive">保存済みキーを削除</button>
           </div>
@@ -206,22 +206,22 @@
           <summary>詳細設定</summary>
           <div class="field">
             <label>LibreChat URL</label>
-            <input type="text" id="librechatUrl" />
+            <input type="text" id="librechatUrl" aria-label="LibreChat URL" />
             <div class="hint">外部で動作中の LibreChat へ接続する場合はその URL。</div>
           </div>
           <div class="field">
             <label>モデル URL</label>
-            <input type="text" id="modelUrl" />
+            <input type="text" id="modelUrl" aria-label="モデル URL" />
             <div class="hint">gpt-oss / llama.cpp などの OpenAI 互換エンドポイント。</div>
           </div>
           <div class="field">
             <label>MultiContext ポート</label>
-            <input type="number" id="port" />
+            <input type="number" id="port" aria-label="MultiContext ポート" />
           </div>
           <div class="field">
             <label>Node.js 実行ファイル（システム Node を使う場合）</label>
             <div class="row">
-              <input type="text" id="nodePath" placeholder="/opt/homebrew/bin/node" />
+              <input type="text" id="nodePath" placeholder="/opt/homebrew/bin/node" aria-label="Node.js 実行ファイル" />
               <button id="pickNode">選択</button>
             </div>
           </div>
