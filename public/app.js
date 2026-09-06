@@ -614,6 +614,12 @@ function isWorkspaceDirty() {
   return false;
 }
 
+window.addEventListener('beforeunload', (event) => {
+  if (!isWorkspaceDirty()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
+
 async function refreshPreservingDrafts(expectedId = currentId) {
   const snap = snapshotFormState();
   const scrolls = snapshotScrollPositions();
