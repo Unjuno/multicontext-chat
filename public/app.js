@@ -996,6 +996,7 @@ async function refresh(expectedId = currentId) {
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
     const canBroadcast = activeMembers.length > 0;
     const compileDisabled = workspace.runtimeState !== 'SETTLED';
+    const archiveDisabled = !workspace.archived && ['RUNNING', 'PENDING'].includes(String(workspace.runtimeState || '').toUpperCase());
     const compileHint = compileDisabled ? `コンパイルは ${workspace.runtimeState} の間は利用できません — SETTLED になるまで待ってください` : '全チャットの直近メッセージを要約';
     $('#app').innerHTML = `
       <datalist id="agentOptions">${agentOptions}</datalist>
@@ -1010,7 +1011,7 @@ async function refresh(expectedId = currentId) {
             <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="refreshWorkspace" class="sm" type="button" title="ワークスペースの状態を更新" aria-label="ワークスペースの状態を更新">↻ 更新</button><button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
             <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
             <button id="stop" class="sm danger" title="全チャットの生成とキューを停止">全て停止</button>
-            <button id="archiveWorkspace" class="sm" title="${workspace.archived ? 'ワークスペースを通常一覧へ戻す' : 'ワークスペースをアーカイブ一覧へ移す'}">${workspace.archived ? '復元' : 'アーカイブ'}</button>
+            <button id="archiveWorkspace" class="sm" ${archiveDisabled ? 'disabled' : ''} title="${archiveDisabled ? '実行中またはキュー待ちのためアーカイブできません' : workspace.archived ? 'ワークスペースを通常一覧へ戻す' : 'ワークスペースをアーカイブ一覧へ移す'}">${workspace.archived ? '復元' : 'アーカイブ'}</button>
             <button id="deleteWorkspace" class="sm danger" title="このワークスペースを削除">削除</button>
           </div>
         </div>
