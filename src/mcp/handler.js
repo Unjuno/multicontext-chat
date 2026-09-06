@@ -43,7 +43,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
     server.registerTool('multicontext_create_workspace', {
       description: 'Create a new workspace. Optionally create initial chats.',
       inputSchema: z.object({
-        name: z.string().min(1).max(200).optional(),
+        name: z.string().min(1).max(120).optional(),
         system_prompt: z.string().optional(),
         default_agent_id: z.string().optional(),
         initial_chat_count: z.number().int().min(0).max(10).optional(),
