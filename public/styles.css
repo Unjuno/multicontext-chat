@@ -948,6 +948,11 @@ aside h3 {
   max-height: 300px;
   overflow-y: auto;
 }
+.md-heading { display: inline-block; margin: 8px 0 2px; line-height: 1.35; }
+.md-heading-1 { font-size: 16px; }
+.md-heading-2 { font-size: 14px; }
+.md-heading-3 { font-size: 13px; }
+.md-rule { display: block; height: 1px; margin: 8px 0; background: var(--border); }
 .compile-result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .compile-result-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .compile hr {

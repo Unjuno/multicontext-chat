@@ -142,10 +142,14 @@ const esc = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({
 }[char]));
 function renderCompileText(value = '') {
   // Escape first: only the small, intentional Markdown subset below becomes HTML.
-  return esc(value)
-    .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
-    .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>')
-    .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    return esc(value)
+      .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+      .replace(/^###\s+(.+)$/gm, '<strong class="md-heading md-heading-3">$1</strong>')
+      .replace(/^##\s+(.+)$/gm, '<strong class="md-heading md-heading-2">$1</strong>')
+      .replace(/^#\s+(.+)$/gm, '<strong class="md-heading md-heading-1">$1</strong>')
+      .replace(/^---+$/gm, '<span class="md-rule" aria-hidden="true"></span>')
+      .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>')
+      .replace(/`([^`\n]+)`/g, '<code>$1</code>');
 }
 const token = () => localStorage.getItem('mcc_token') || '';
 
