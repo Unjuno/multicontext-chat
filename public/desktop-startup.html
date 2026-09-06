@@ -463,6 +463,10 @@
         document.getElementById("modal").className = "modal open";
       }
       function closeSettings() {
+        if (settingsOnly) {
+          window.location.href = 'index.html';
+          return;
+        }
         document.getElementById("modal").className = "modal";
       }
       function readSettings() {
