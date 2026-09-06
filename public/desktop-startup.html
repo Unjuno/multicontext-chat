@@ -270,6 +270,7 @@
       }
 
       const SERVICES = UI.STARTUP_SERVICES;
+      const settingsOnly = new URLSearchParams(window.location.search).get("settings") === "1";
       const state = { config: null, port: 4317, statuses: {}, attemptId: 0 };
       let navigated = false;
 
@@ -328,6 +329,7 @@
       // READY (MultiContext only reports ready when its usable-stack health is
       // truly satisfied).
       function maybeNavigate() {
+        if (settingsOnly) return;
         if (navigated) return;
         const statuses = SERVICES.map((n) => state.statuses[n]).filter(Boolean);
         if (!UI.shouldNavigate(statuses, navigated)) return;
@@ -519,6 +521,7 @@
           } else {
             closeSettings();
           }
+          if (settingsOnly) window.location.href = 'index.html';
         } catch (e) {
           document.getElementById("settingsErr").textContent =
             "保存できません: " + errorMessage(e);
@@ -636,7 +639,8 @@
         } catch (e) {
           state.config = null;
         }
-        runStartup();
+        if (settingsOnly) openSettings();
+        else runStartup();
       })();
     </script>
   </body>

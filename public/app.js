@@ -33,6 +33,15 @@ themeToggle?.addEventListener('click', () => {
 });
 updateThemeToggle();
 const helpToggle = document.getElementById('helpToggle');
+const desktopSettings = document.getElementById('desktopSettings');
+desktopSettings?.addEventListener('click', () => {
+  if (isWorkspaceDirty() && currentId && !confirm('未保存の変更があります。設定画面へ移動しますか？')) return;
+  if (!window.__TAURI__ && !window.__TAURI_INTERNALS__) {
+    toast('デスクトップアプリでのみ設定を開けます', 'warn');
+    return;
+  }
+  window.location.href = 'desktop-startup.html?settings=1';
+});
 const helpDialog = document.getElementById('helpDialog');
 const helpClose = document.getElementById('helpClose');
 const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
