@@ -305,16 +305,16 @@ function renderRuntime(statuses) {
   const UI = window.DesktopUI || {
     serviceDisplayLabel: (n,s) => s,
     aggregateStatus: (list) => {
-      if (!list || !list.length) return { text: 'AI Stack ● 確認中', cls: 'checking' };
+      if (!list || !list.length) return { text: 'AIスタック ● 確認中', cls: 'checking' };
       const states = list.map(x=>String(x.state).toLowerCase());
       const core = list.filter(x => ['モデル', 'LibreChat', 'MultiContext'].includes(x.name));
       if (core.length === 3 && core.every(x => String(x.state).toLowerCase() === 'ready') && !states.includes('error')) {
-        return { text: 'AI Stack ● 準備完了', cls: 'ready' };
+        return { text: 'AIスタック ● 準備完了', cls: 'ready' };
       }
-      if (states.every(s=>s==='ready')) return { text: 'AI Stack ● 準備完了', cls: 'ready' };
-      if (states.some(s=>s==='error')) return { text: 'AI Stack ● 要確認', cls: 'error' };
-      if (states.some(s=>s==='checking')) return { text: 'AI Stack ● 一部確認中', cls: 'checking' };
-      return { text: 'AI Stack ● 起動中', cls: 'starting' };
+      if (states.every(s=>s==='ready')) return { text: 'AIスタック ● 準備完了', cls: 'ready' };
+      if (states.some(s=>s==='error')) return { text: 'AIスタック ● 要確認', cls: 'error' };
+      if (states.some(s=>s==='checking')) return { text: 'AIスタック ● 一部確認中', cls: 'checking' };
+      return { text: 'AIスタック ● 起動中', cls: 'starting' };
     },
     ownershipText: () => '',
     dotClassForState: (s) => String(s).toLowerCase(),
