@@ -96,6 +96,13 @@ function workspaceUpdatedLabel(workspace) {
   if (days < 7) return `${days}日前`;
   return new Date(time).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
 }
+function displayTimestamp(value) {
+  const time = Date.parse(String(value || ''));
+  if (!Number.isFinite(time)) return String(value || '');
+  return new Date(time).toLocaleString('ja-JP', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+}
 function resetWorkspaceViewState() {
   workspaceSearchQuery = '';
   workspaceListExpanded = false;
@@ -1164,7 +1171,7 @@ function memberCard(workspace, member) {
           ${member.messages.length === 0 ? '<div class="small" style="padding:12px;text-align:center">まだメッセージがありません — ブロードキャストか直接送信で会話を始めましょう</div>' : ''}
           ${member.messages.map((message) => `
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
-              <div class="msg-head">${esc(messageRoleLabel(message.role))}${message.at ? ` · ${esc(message.at)}` : ''}${message.pending ? ' · 処理中' : ''}</div>
+              <div class="msg-head">${esc(messageRoleLabel(message.role))}${message.at ? ` · ${esc(displayTimestamp(message.at))}` : ''}${message.pending ? ' · 処理中' : ''}</div>
               ${esc(message.content)}
             </div>
           `).join('')}
@@ -1290,7 +1297,7 @@ async function refresh(expectedId = currentId) {
         <label for="compilePrompt" class="field-label small">まとめ方の指示 <span class="scope-note">— レポートの作成方法（保存してから作成）</span></label>
         <textarea id="compilePrompt" placeholder="まとめ方の指示（例: 主な結論と未解決点を分けて整理）" aria-label="統合レポートのまとめ方の指示">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
-          ? `<hr><div class="compile-result-head"><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdown保存</button></div></div><div class="compile-output" id="compileOutput">${renderCompileText(workspace.lastCompile.text)}</div>`
+          ? `<hr><div class="compile-result-head"><div class="small">${esc(displayTimestamp(workspace.lastCompile.at))}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdown保存</button></div></div><div class="compile-output" id="compileOutput">${renderCompileText(workspace.lastCompile.text)}</div>`
           : `<div class="small">手動のみ。${compileStateBlocked ? `現在は${workspace.runtimeState || '処理中'}のため待機中です。` : !compileAgentReady ? '作成担当を選択してから実行してください。' : '結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">レポートを作成</span>を押して回答をまとめます。'}</div>`}
       </div>
     `;
