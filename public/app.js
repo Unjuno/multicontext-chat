@@ -999,7 +999,11 @@ let ticking = false;
 function tick() {
   if (ticking) return;
   const active = document.activeElement;
-  if (active && active.closest && active.closest('#app')) { scheduleNext(); return; }
+  // Refreshing while a draft is focused is safe: tick snapshots and restores
+  // form/scroll state below. Skipping forever here meant one transient
+  // failure could leave a stale-data banner visible for the entire session.
+  // Keep the normal cadence while typing to avoid visual churn.
+  const hasFocusedDraft = Boolean(active && active.closest && active.closest('#app'));
   ticking = true;
   const snap = snapshotFormState();
   const scrolls = snapshotScrollPositions();
@@ -1014,7 +1018,10 @@ function tick() {
       if (['name', 'developerPrompt'].includes(el.name)) el.dispatchEvent(new Event('input', { bubbles: true }));
       else if (['agentId', 'active', 'canInspectOthers', 'canSendOthers'].includes(el.name)) el.dispatchEvent(new Event('change', { bubbles: true }));
     });
-  }).finally(() => { ticking = false; scheduleNext(); });
+  }).finally(() => {
+    ticking = false;
+    scheduleNext(hasFocusedDraft ? Math.max(observerDelay(), 5000) : undefined);
+  });
 }
 
 // Observer cadence: fast (1.2s) while attached to a live run or while the
@@ -1030,7 +1037,7 @@ function observerDelay() {
   } catch {}
   return 5000;
 }
-function scheduleNext() { clearTimeout(timer); timer = setTimeout(tick, observerDelay()); }
+function scheduleNext(delay) { clearTimeout(timer); timer = setTimeout(tick, delay ?? observerDelay()); }
 
 // ── Orchestrator Bar ──────────────────────────────────────────
 let orchestratorTimer = null;
