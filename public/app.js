@@ -1767,7 +1767,9 @@ function wire(workspace) {
       }).catch((err) => toast(err.message, 'error'));
     };
     $('[data-action=delete]', card).onclick = async (e) => {
-      if (!confirm(`「${member.name}」を削除しますか？ この操作は取り消せません。`)) return;
+      const memberDraft = memberSave ? updateMemberDirty() : false;
+      const unsavedWarning = memberDraft ? '\n編集中の未保存変更も失われます。先に保存してください。' : '';
+      if (!confirm(`「${member.name}」を削除しますか？${unsavedWarning}\nこの操作は取り消せません。`)) return;
       await withBusy(e.currentTarget, async () => {
         openEditors.delete(memberId);
         await request(`/api/workspaces/${workspace.id}/members/${memberId}`, { method: 'DELETE' });
