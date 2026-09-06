@@ -528,6 +528,14 @@
         const p = await invoke("pick_path", { kind });
         if (p) document.getElementById(targetId).value = p;
       }
+      function updateManagedPathFields() {
+        const librechatManaged = document.getElementById("manageLibrechat").checked;
+        const modelManaged = document.getElementById("manageModel").checked;
+        document.getElementById("librechatPath").disabled = !librechatManaged;
+        for (const id of ["llamaPath", "modelFilePath", "templatePath"]) {
+          document.getElementById(id).disabled = !modelManaged;
+        }
+      }
 
       document.getElementById("settingsBtn").onclick = openSettings;
       document.getElementById("settingsFromErr").onclick = openSettings;
@@ -543,6 +551,9 @@
       document.getElementById("pickModel").onclick = () => pick("file", "modelFilePath");
       document.getElementById("pickTemplate").onclick = () => pick("file", "templatePath");
       document.getElementById("pickNode").onclick = () => pick("exe", "nodePath");
+      document.getElementById("manageLibrechat").onchange = updateManagedPathFields;
+      document.getElementById("manageModel").onchange = updateManagedPathFields;
+      updateManagedPathFields();
       document.getElementById("saveApiKey").onclick = async () => {
         const v = document.getElementById("apiKey").value;
         if (!v) {
