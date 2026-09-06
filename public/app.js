@@ -1386,10 +1386,18 @@ async function refresh(expectedId = currentId) {
 }
 
 function wire(workspace) {
-  $('#focusBlocked')?.addEventListener('click', () => {
+  $('#focusBlocked')?.addEventListener('click', async () => {
     const target = document.querySelector('.member[data-mid] .member-error')?.closest('.member');
-    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    target?.querySelector('[data-action="retry"], [data-action="trim-history"]')?.focus();
+    if (!target) return;
+    const targetId = target.dataset.mid;
+    if (target.classList.contains('collapsed')) {
+      collapsedMembers.delete(String(targetId));
+      localStorage.setItem('mcc_collapsed_members', JSON.stringify([...collapsedMembers]));
+      await refreshPreservingDrafts(workspace.id).catch((err) => toast(err.message, 'error'));
+    }
+    const refreshedTarget = document.querySelector(`.member[data-mid="${CSS.escape(String(targetId))}"]`);
+    refreshedTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    refreshedTarget?.querySelector('[data-action="retry"], [data-action="trim-history"]')?.focus();
   });
   $('#refreshWorkspace').onclick = async (e) => {
     await withBusy(e.currentTarget, async () => {
