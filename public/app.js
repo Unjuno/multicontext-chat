@@ -1363,7 +1363,7 @@ async function refresh(expectedId = currentId) {
           <label for="broadcastPrompt" class="composer-label">全アクティブチャットへ <span class="scope-note">— 同じ問いを全チャットへ送信</span></label>
           <textarea id="broadcastPrompt" placeholder="${canBroadcast ? '全アクティブチャットに同じ問いを送信' : activeMembers.length ? '全チャットのAgentを選択してから送信できます' : 'チャットを追加してから一斉送信できます'}" aria-label="一斉送信の問い — 全アクティブチャットへ" ${canBroadcast ? '' : 'disabled'}></textarea>
         </div>
-        <button class="primary" id="broadcast" ${canBroadcast ? '' : 'disabled'} title="${canBroadcast ? '全アクティブチャットに送信' : activeMembers.length ? '全チャットのAgentを選択してから送信できます' : 'アクティブなチャットがありません'}" aria-label="全アクティブチャットに送信">${canBroadcast ? '全アクティブチャットに送信' : '送信'}</button>
+          <button class="primary" id="broadcast" aria-keyshortcuts="Meta+Enter" ${canBroadcast ? '' : 'disabled'} title="${canBroadcast ? '全アクティブチャットに送信' : activeMembers.length ? '全チャットのAgentを選択してから送信できます' : 'アクティブなチャットがありません'}" aria-label="全アクティブチャットに送信">${canBroadcast ? '全アクティブチャットに送信' : '送信'}</button>
       </div>
       ${canBroadcast ? '' : `<div class="composer-hint">${activeMembers.length ? 'ヒント: 全チャットのAgentを選択すると一斉送信できます' : 'ヒント: 「+ チャット」でチャットを追加し、エージェントを選択してください'}</div>`}
 
