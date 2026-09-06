@@ -953,6 +953,13 @@ async fn startup(
 fn main() {
     let dev_cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
             config: Mutex::new(DesktopConfig::default()),
