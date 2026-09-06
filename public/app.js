@@ -1268,6 +1268,7 @@ async function refresh(expectedId = currentId) {
     const members = Object.values(workspace.members);
     const activeMembers = members.filter((m) => m.active !== false);
     const blockedMembers = members.filter((m) => m.status === 'error');
+    const firstBlockedMember = blockedMembers[0];
     const queuedMessages = members.reduce((sum, member) => sum + (member.queue?.length || 0), 0);
     const runningMembers = members.filter((member) => member.inFlight).length;
     const hasWorkToStop = runningMembers > 0 || queuedMessages > 0;
@@ -1319,7 +1320,7 @@ async function refresh(expectedId = currentId) {
           ${agents.length ? '' : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
         </div>
       </div>
-      ${blockedMembers.length ? `<div class="attention-banner" role="alert"><span><strong>${blockedMembers.length}件のチャットが対応待ちです</strong><small>キューと履歴は保持されています。原因を確認して再試行できます。</small></span><button id="focusBlocked" class="sm" type="button">対象を確認</button></div>` : ''}
+      ${blockedMembers.length ? `<div class="attention-banner" role="alert"><span><strong>${blockedMembers.length}件のチャットが対応待ちです</strong><small>キューと履歴は保持されています。原因を確認して再試行できます。</small></span><button id="focusBlocked" class="sm" type="button" aria-label="${esc(firstBlockedMember?.name || '対応待ちチャット')}へ移動">対象チャットへ移動</button></div>` : ''}
 
       <section class="workspace-overview" aria-label="ワークスペース概要">
         <div class="overview-item"><span class="overview-label">アクティブチャット</span><strong>${activeMembers.length}<small> / ${members.length} チャット</small></strong></div>
