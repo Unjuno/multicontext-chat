@@ -5,6 +5,7 @@ import { selectActivityEvents } from './activity-feed.js';
 let currentId = null;
 let timer = null;
 let agents = [];
+let agentDiscoveryState = 'loading';
 let refreshController = null;
 let workspaceRetryTimer = null;
 let workspaceRetryAttempt = 0;
@@ -673,13 +674,16 @@ function memberHasResolvedAgent(workspace, member) {
 }
 
 async function refreshAgents(expectedId = currentId) {
+  agentDiscoveryState = 'loading';
   try {
     const data = await request('/api/agents');
     if (expectedId !== currentId) return;
     agents = data.agents || [];
+    agentDiscoveryState = 'ready';
   } catch {
     if (expectedId !== currentId) return;
     agents = [];
+    agentDiscoveryState = 'error';
   }
 }
 
@@ -1379,7 +1383,9 @@ async function refresh(expectedId = currentId) {
             <option value="require_selection" ${workspace.settings?.agentSelectionMode !== 'auto_first' ? 'selected' : ''}>明示選択を要求（安全）</option>
             <option value="auto_first" ${workspace.settings?.agentSelectionMode === 'auto_first' ? 'selected' : ''}>先頭Agentを自動選択（簡易）</option>
           </select>
-          ${agents.length ? '' : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
+          ${agents.length ? '' : agentDiscoveryState === 'error'
+            ? '<div class="hint" style="color:var(--danger)">Agent一覧を取得できません。LibreChatの接続を確認して「↻ 更新」を試してください。</div>'
+            : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
         </div>
       </div>
       ${blockedMembers.length ? (() => {
