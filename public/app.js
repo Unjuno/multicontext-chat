@@ -965,6 +965,10 @@ async function refreshPreservingDrafts(expectedId = currentId) {
       const el = document.getElementById(id);
       if (el) el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
     }
+    document.querySelectorAll('.member [name]').forEach((el) => {
+      if (['name', 'developerPrompt'].includes(el.name)) el.dispatchEvent(new Event('input', { bubbles: true }));
+      else if (['agentId', 'active', 'canInspectOthers', 'canSendOthers'].includes(el.name)) el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
   }
 }
 
@@ -984,6 +988,10 @@ function tick() {
       const el = document.getElementById(id);
       if (el) el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
     }
+    document.querySelectorAll('.member [name]').forEach((el) => {
+      if (['name', 'developerPrompt'].includes(el.name)) el.dispatchEvent(new Event('input', { bubbles: true }));
+      else if (['agentId', 'active', 'canInspectOthers', 'canSendOthers'].includes(el.name)) el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
   }).finally(() => { ticking = false; scheduleNext(); });
 }
 
