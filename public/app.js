@@ -1178,6 +1178,7 @@ async function refresh(expectedId = currentId) {
 
       <section class="workspace-overview" aria-label="ワークスペース概要">
         <div class="overview-item"><span class="overview-label">アクティブチャット</span><strong>${activeMembers.length}<small> / ${members.length} チャット</small></strong></div>
+        <div class="overview-item"><span class="overview-label">実行中</span><strong class="${runningMembers ? 'has-work' : ''}">${runningMembers}<small> 件</small></strong></div>
         <div class="overview-item"><span class="overview-label">待機キュー</span><strong class="${queuedMessages ? 'has-work' : ''}">${queuedMessages}<small> 件</small></strong></div>
         <div class="overview-item"><span class="overview-label">回答数</span><strong>${assistantMessages}<small> 件</small></strong></div>
         <div class="overview-item overview-action"><span class="overview-label">統合レポート</span><strong>${workspace.lastCompile ? '利用可能' : '未作成'}</strong></div>
