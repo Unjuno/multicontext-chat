@@ -1175,14 +1175,28 @@ function wire(workspace) {
     }
     return dirty;
   }
+  function updateCompileAvailability() {
+    const compileButton = document.getElementById('compile');
+    if (!compileButton) return;
+    const ready = Boolean($('#compileAgentId')?.value || $('#defaultAgentId')?.value || agents.length === 1);
+    const blockedByState = workspace.runtimeState !== 'SETTLED';
+    compileButton.disabled = blockedByState || !ready;
+    compileButton.title = blockedByState
+      ? `コンパイルは ${workspace.runtimeState || '現在の状態'} の間は利用できません — SETTLED になるまで待ってください`
+      : !ready
+        ? 'Compileに使用するAgentを選択するか、ワークスペース既定Agentを設定してください'
+        : '全チャットの直近メッセージを要約';
+  }
   ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId','agentSelectionMode'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) {
       const ev = el.tagName === 'SELECT' ? 'change' : 'input';
       el.addEventListener(ev, updateDirty);
+      if (id === 'compileAgentId' || id === 'defaultAgentId') el.addEventListener(ev, updateCompileAvailability);
     }
   });
   updateDirty();
+  updateCompileAvailability();
   setTimeout(updateDirty, 60);
   setTimeout(updateDirty, 250);
 
