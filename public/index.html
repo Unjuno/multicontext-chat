@@ -20,6 +20,7 @@
     <div class="header-actions">
       <span class="kbd-hint" aria-hidden="true"><kbd>⌘K</kbd>検索 · <kbd>⌘N</kbd>新規 · <kbd>/</kbd>Broadcast · <kbd>⌘↵</kbd>送信</span>
       <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="ダークモードに切り替え" title="テーマを切り替え">☾</button>
+      <button id="helpToggle" class="icon-btn" type="button" aria-label="ショートカットと使い方" title="ショートカットと使い方">?</button>
       <button id="newWorkspace" class="sm">+ 新規ワークスペース</button>
     </div>
   </header>
@@ -33,6 +34,20 @@
       <button id="runtimeRefresh" class="sm">再確認</button>
       <button id="runtimeLogs" class="sm">ログを見る</button>
     </div>
+  </dialog>
+  <dialog id="helpDialog" aria-labelledby="helpDialogTitle">
+    <div class="runtime-detail-head">
+      <h3 id="helpDialogTitle">ショートカットと使い方</h3>
+      <button id="helpClose" class="sm" aria-label="閉じる">×</button>
+    </div>
+    <div class="help-list">
+      <div><kbd>⌘N</kbd><span>新しいワークスペース</span></div>
+      <div><kbd>⌘K</kbd><span>ワークスペースを検索</span></div>
+      <div><kbd>/</kbd><span>Broadcast入力へ移動</span></div>
+      <div><kbd>⌘↵</kbd><span>Broadcastを送信</span></div>
+      <div><kbd>Esc</kbd><span>検索条件やダイアログを閉じる</span></div>
+    </div>
+    <p class="small help-note">各チャットの入力欄では、そのチャットだけに送信できます。</p>
   </dialog>
 
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>

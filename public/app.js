@@ -32,6 +32,21 @@ themeToggle?.addEventListener('click', () => {
   updateThemeToggle();
 });
 updateThemeToggle();
+const helpToggle = document.getElementById('helpToggle');
+const helpDialog = document.getElementById('helpDialog');
+const helpClose = document.getElementById('helpClose');
+function closeHelp() {
+  if (helpDialog?.close) helpDialog.close(); else helpDialog?.removeAttribute('open');
+  helpToggle?.setAttribute('aria-expanded', 'false');
+  helpToggle?.focus();
+}
+helpToggle?.addEventListener('click', () => {
+  if (typeof helpDialog?.showModal === 'function') helpDialog.showModal(); else helpDialog?.setAttribute('open', '');
+  helpToggle?.setAttribute('aria-expanded', 'true');
+  helpClose?.focus();
+});
+helpClose?.addEventListener('click', closeHelp);
+helpDialog?.addEventListener('click', (event) => { if (event.target === helpDialog) closeHelp(); });
 let lastWorkspace = null; // server snapshot for dirty checks
 
 function agentNameForId(id) {
@@ -1373,6 +1388,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSideb
 document.addEventListener('keydown', (e) => {
   const target = e.target;
   const typing = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+  if (e.key === '?' && !typing && !helpDialog?.open) {
+    e.preventDefault();
+    helpToggle?.click();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && currentId) {
     e.preventDefault();
     document.getElementById('saveWorkspace')?.click();
