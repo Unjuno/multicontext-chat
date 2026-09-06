@@ -141,6 +141,7 @@ header .brand strong {
 .icon-btn:hover { background: var(--idle-bg); border-color: var(--border); }
 .theme-toggle { display: inline-flex; }
 #helpToggle { display: inline-flex; }
+#desktopSettings { display: inline-flex; }
 .kbd-hint { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; color: var(--text-muted); }
 .kbd-hint kbd {
   font-family: var(--mono); font-size: 10px;
