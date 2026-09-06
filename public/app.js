@@ -1561,6 +1561,8 @@ function wire(workspace) {
     defaultAgentId: String(workspace.defaultAgentId || ''),
     agentSelectionMode: String(workspace.settings?.agentSelectionMode || 'require_selection'),
   };
+  const compileHasSource = Object.values(workspace.members || {})
+    .some((member) => (member.messages || []).some((message) => message.role === 'assistant'));
   function updateDirty() {
     const cur = {
       wname: $('#wname')?.value ?? '',
