@@ -1575,8 +1575,9 @@ function wire(workspace) {
   }
 
   $('#broadcast').onclick = async (e) => {
-    const prompt = $('#broadcastPrompt').value.trim();
-    if (!prompt) { toast('プロンプトを入力してください', 'error'); return; }
+    const input = $('#broadcastPrompt');
+    const prompt = input.value.trim();
+    if (!prompt) { toast('プロンプトを入力してください', 'error'); input.focus(); return; }
     const btn = e.currentTarget;
     if (btn.disabled || btn.classList.contains('is-busy')) return;
     await withBusy(btn, async () => {
@@ -1745,7 +1746,7 @@ function wire(workspace) {
       const input = $('input', event.currentTarget);
       const btn = $('button', event.currentTarget);
       if (btn.disabled || btn.classList.contains('is-busy')) return;
-      if (!input.value.trim()) { toast('プロンプトを入力してください', 'error'); return; }
+      if (!input.value.trim()) { toast('プロンプトを入力してください', 'error'); input.focus(); return; }
       await withBusy(btn, async () => {
         await request(`/api/workspaces/${workspace.id}/members/${memberId}/enqueue`, { method: 'POST', body: JSON.stringify({ prompt: input.value }) });
         input.value = '';
