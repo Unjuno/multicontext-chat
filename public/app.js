@@ -817,7 +817,7 @@ function workspaceStatusHtml(state) {
 }
 function memberStatusHtml(state) {
   const { label, cls } = sharedMemberLabel(state);
-  return `<span class="status ${esc(cls)}">${esc(label)}</span>`;
+  return `<span class="status ${esc(cls)}" title="チャットの状態: ${esc(label)}" aria-label="チャットの状態: ${esc(label)}">${esc(label)}</span>`;
 }
 // legacy alias
 function workspaceStatusLabel(state) { return workspaceStatusHtml(state); }
