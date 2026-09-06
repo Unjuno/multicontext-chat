@@ -561,7 +561,15 @@ export class StateStore {
   }
 
   clearQueues(workspaceId) { const w = this.requireWorkspace(workspaceId); for (const m of Object.values(w.members)) m.queue = []; w.updatedAt = now(); this.save(); }
-  trimMessages(workspaceId, memberId, max) { const { member } = this.requireMember(workspaceId, memberId); if (member.messages.length > max) member.messages = member.messages.slice(-max); this.save(); }
+  trimMessages(workspaceId, memberId, max) {
+    const limit = Number(max);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw problem('History limit must be an integer between 1 and 200', 400);
+    const { member } = this.requireMember(workspaceId, memberId);
+    const removed = Math.max(0, member.messages.length - limit);
+    if (removed) member.messages = member.messages.slice(-limit);
+    this.save();
+    return { removed, remaining: member.messages.length };
+  }
   setCompile(workspaceId, result) { const w = this.requireWorkspace(workspaceId); w.lastCompile = { ...result, at: now() }; w.updatedAt = now(); this.save(); }
 
   runtimeState(workspaceId, runningMemberIds = new Set()) {
