@@ -1005,7 +1005,7 @@ async function refresh(expectedId = currentId) {
             ${workspaceStatusHtml(workspace.runtimeState)}
           </div>
           <div class="workspace-toolbar">
-            <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
+            <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="refreshWorkspace" class="sm" type="button" title="ワークスペースの状態を更新" aria-label="ワークスペースの状態を更新">↻ 更新</button><button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
             <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
             <button id="stop" class="sm danger" title="全チャットの生成とキューを停止">全て停止</button>
             <button id="deleteWorkspace" class="sm danger" title="このワークスペースを削除">削除</button>
@@ -1110,6 +1110,12 @@ async function refresh(expectedId = currentId) {
 }
 
 function wire(workspace) {
+  $('#refreshWorkspace').onclick = async (e) => {
+    await withBusy(e.currentTarget, async () => {
+      await refreshPreservingDrafts(workspace.id);
+      toast('ワークスペースを更新しました', 'success');
+    }).catch((err) => toast(err.message, 'error'));
+  };
   const saveBtn = $('#saveWorkspace');
   const serverVals = {
     wname: String(workspace.name || ''),
