@@ -1,6 +1,7 @@
 .env
 data/*.json
 data/*.tmp
+data/*.bak
 .DS_Store
 node_modules/
 coverage/
