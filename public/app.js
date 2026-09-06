@@ -1471,11 +1471,13 @@ function wire(workspace) {
     if (!compileButton) return;
     const ready = Boolean($('#compileAgentId')?.value || $('#defaultAgentId')?.value || agents.length === 1);
     const blockedByState = workspace.runtimeState !== 'SETTLED';
-    compileButton.disabled = blockedByState || !ready;
+    compileButton.disabled = blockedByState || !ready || !compileHasSource;
     compileButton.title = blockedByState
       ? `統合レポートは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は作成できません — 完了になるまで待ってください`
       : !ready
         ? '統合レポートの作成担当を選択するか、ワークスペース既定Agentを設定してください'
+        : !compileHasSource
+          ? '統合レポートを作成するには、先にチャットから回答を取得してください'
         : '全チャットの直近メッセージを要約';
   }
   ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId','agentSelectionMode'].forEach((id) => {
