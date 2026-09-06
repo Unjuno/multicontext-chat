@@ -1315,9 +1315,9 @@ async function refresh(expectedId = currentId) {
       </div>
       ${canBroadcast ? '' : `<div class="composer-hint">${activeMembers.length ? 'ヒント: 全チャットのAgentを選択すると一斉送信できます' : 'ヒント: 「+ チャット」でチャットを追加し、エージェントを選択してください'}</div>`}
 
-      <div class="section-label">独立チャット <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${members.length}件</span>${members.length > 1 ? `<button class="sm section-action" data-action="toggle-all-collapse" aria-label="${allMembersCollapsed ? 'すべてのチャットを展開' : 'すべてのチャットを折りたたむ'}">${allMembersCollapsed ? 'すべて展開' : 'すべて折りたたむ'}</button>` : ''}</div>
+      <div class="section-label" role="heading" aria-level="2">独立チャット <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${members.length}件</span>${members.length > 1 ? `<button class="sm section-action" data-action="toggle-all-collapse" aria-controls="memberGrid" aria-label="${allMembersCollapsed ? 'すべてのチャットを展開' : 'すべてのチャットを折りたたむ'}">${allMembersCollapsed ? 'すべて展開' : 'すべて折りたたむ'}</button>` : ''}</div>
       ${members.length
-        ? `<div class="members">${members.map((member) => memberCard(workspace, member)).join('')}</div>`
+        ? `<div class="members" id="memberGrid">${members.map((member) => memberCard(workspace, member)).join('')}</div>`
         : `<div class="empty-inline onboarding-card">
             <div class="onboarding-icon" aria-hidden="true">✦</div>
             <p><strong>最初のワークスペースを準備しましょう</strong></p>
