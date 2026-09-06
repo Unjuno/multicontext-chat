@@ -878,6 +878,10 @@ function restoreFormState(snap) {
     const direct = card.querySelector('[data-action=direct] input');
     if (direct && snap[`direct:${mid}`] !== undefined) direct.value = snap[`direct:${mid}`];
   });
+  ['globalPrompt', 'compilePrompt', 'broadcastPrompt'].forEach((id) => {
+    const textarea = document.getElementById(id);
+    if (textarea) autoResize(textarea);
+  });
 }
 
 // ── Snapshot / restore scroll positions across refresh ───────────
