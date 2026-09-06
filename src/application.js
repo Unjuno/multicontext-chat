@@ -276,6 +276,12 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   async function createWorkspace(input = {}) {
+    if (Object.prototype.hasOwnProperty.call(input, 'name')) {
+      const name = String(input.name ?? '').trim();
+      if (!name) throw problem('ワークスペース名を入力してください', 400);
+      if (name.length > 120) throw problem('ワークスペース名は120文字以内で入力してください', 400);
+      input = { ...input, name };
+    }
     // Validate supplied Agent IDs before persisting
     const suppliedDefault = String(input.defaultAgentId || input.default_agent_id || '').trim();
     if (suppliedDefault) {
