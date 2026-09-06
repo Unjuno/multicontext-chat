@@ -62,7 +62,7 @@ export function formatActivityEvent(ev, memberNames = {}) {
     case 'compile.completed': return { ...base, action: 'Compileが完了' };
     case 'compile.failed': return { ...base, action: 'Compileに失敗' };
     default:
-      if (ev.type.startsWith('tool.')) return { ...base, action: ev.type };
+      if (ev.type.startsWith('tool.')) return { ...base, action: 'ツールを実行' };
       return null;
   }
 }
