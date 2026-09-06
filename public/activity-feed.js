@@ -52,15 +52,15 @@ export function formatActivityEvent(ev, memberNames = {}) {
         target: Array.isArray(detail.targets) && detail.targets.length ? detail.targets.map(String).join(', ') : null,
       };
     case 'tool.replayed': return { ...base, action: `replayed ${detail.tool ? String(detail.tool) : 'tool'}` };
-    case 'human.send': return { ...base, action: 'direct send' };
-    case 'human.broadcast': return { ...base, action: 'broadcast sent' };
-    case 'human.retry': return { ...base, action: 'retry started' };
-    case 'human.stop': return { ...base, action: 'stop' };
-    case 'orchestrator.paused': return { ...base, action: 'orchestrator paused' };
-    case 'orchestrator.resumed': return { ...base, action: 'orchestrator resumed' };
-    case 'compile.started': return { ...base, action: 'compile started' };
-    case 'compile.completed': return { ...base, action: 'compile completed' };
-    case 'compile.failed': return { ...base, action: 'compile failed' };
+    case 'human.send': return { ...base, action: '直接送信' };
+    case 'human.broadcast': return { ...base, action: 'ブロードキャスト送信' };
+    case 'human.retry': return { ...base, action: '再試行を開始' };
+    case 'human.stop': return { ...base, action: '停止' };
+    case 'orchestrator.paused': return { ...base, action: 'オーケストレーターを一時停止' };
+    case 'orchestrator.resumed': return { ...base, action: 'オーケストレーターを再開' };
+    case 'compile.started': return { ...base, action: 'Compileを開始' };
+    case 'compile.completed': return { ...base, action: 'Compileが完了' };
+    case 'compile.failed': return { ...base, action: 'Compileに失敗' };
     default:
       if (ev.type.startsWith('tool.')) return { ...base, action: ev.type };
       return null;
