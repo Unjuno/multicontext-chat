@@ -252,6 +252,7 @@ function renderRuntime(statuses) {
       const states = list.map(x=>String(x.state).toLowerCase());
       if (states.every(s=>s==='ready')) return { text: 'AI Stack ● 準備完了', cls: 'ready' };
       if (states.some(s=>s==='error')) return { text: 'AI Stack ● 要確認', cls: 'error' };
+      if (states.some(s=>s==='checking')) return { text: 'AI Stack ● 一部確認中', cls: 'checking' };
       return { text: 'AI Stack ● 起動中', cls: 'starting' };
     },
     ownershipText: () => '',

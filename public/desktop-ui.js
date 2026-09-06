@@ -134,6 +134,7 @@
     if (states.every((s) => s === "ready")) return { label: "準備完了", cls: "ready", text: "AI Stack ● 準備完了" };
     if (states.some((s) => s === "error")) return { label: "要確認", cls: "error", text: "AI Stack ● 要確認" };
     if (states.some((s) => s === "needs_setup")) return { label: "要設定", cls: "needs_setup", text: "AI Stack ● 要設定" };
+    if (states.some((s) => s === "checking")) return { label: "一部確認中", cls: "checking", text: "AI Stack ● 一部確認中" };
     return { label: "起動中", cls: "starting", text: "AI Stack ● 起動中" };
   }
 
