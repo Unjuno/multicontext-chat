@@ -14,10 +14,10 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
     // Register tools
     server.registerTool('multicontext_list_workspaces', {
       description: 'List all MultiContext workspaces with runtime state and chat counts',
-      inputSchema: z.object({}),
-    }, async () => {
+      inputSchema: z.object({ include_archived: z.boolean().optional() }),
+    }, async ({ include_archived }) => {
       if (!config.mcpEnabled) throw new Error('MCP disabled');
-      const workspaces = await app.listWorkspaces();
+      const workspaces = await app.listWorkspaces({ includeArchived: include_archived === true });
       const sanitized = workspaces.map(w => ({
         id: w.id,
         name: w.name,
