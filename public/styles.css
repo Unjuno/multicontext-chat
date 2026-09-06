@@ -953,6 +953,11 @@ aside h3 {
 .md-heading-2 { font-size: 14px; }
 .md-heading-3 { font-size: 13px; }
 .md-rule { display: block; height: 1px; margin: 8px 0; background: var(--border); }
+.md-table-wrap { max-width: 100%; overflow-x: auto; margin: 8px 0; }
+.md-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.45; }
+.md-table th, .md-table td { padding: 6px 8px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+.md-table th { background: var(--idle-bg); color: var(--text-secondary); font-weight: 700; }
+.md-table td { background: var(--surface); }
 .compile-result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .compile-result-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .compile hr {

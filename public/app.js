@@ -142,14 +142,38 @@ const esc = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({
 }[char]));
 function renderCompileText(value = '') {
   // Escape first: only the small, intentional Markdown subset below becomes HTML.
-    return esc(value)
+  const inline = (text) => text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  const lines = esc(value).split('\n');
+  const output = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const next = lines[index + 1] || '';
+    const isTableRow = /^\s*\|.*\|\s*$/.test(line);
+    const isSeparator = /^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$/.test(next);
+    if (isTableRow && isSeparator) {
+      const headers = line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => inline(cell.trim()));
+      const rows = [];
+      index += 2;
+      while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) {
+        rows.push(lines[index].trim().replace(/^\||\|$/g, '').split('|').map((cell) => inline(cell.trim())));
+        index += 1;
+      }
+      output.push(`<div class="md-table-wrap"><table class="md-table"><thead><tr>${headers.map((cell) => `<th scope="col">${cell}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${headers.map((_, cellIndex) => `<td>${row[cellIndex] || ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+      index -= 1;
+      continue;
+    }
+    output.push(line
       .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
-      .replace(/^###\s+(.+)$/gm, '<strong class="md-heading md-heading-3">$1</strong>')
-      .replace(/^##\s+(.+)$/gm, '<strong class="md-heading md-heading-2">$1</strong>')
-      .replace(/^#\s+(.+)$/gm, '<strong class="md-heading md-heading-1">$1</strong>')
-      .replace(/^---+$/gm, '<span class="md-rule" aria-hidden="true"></span>')
-      .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>')
-      .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+      .replace(/^###\s+(.+)$/g, '<strong class="md-heading md-heading-3">$1</strong>')
+      .replace(/^##\s+(.+)$/g, '<strong class="md-heading md-heading-2">$1</strong>')
+      .replace(/^#\s+(.+)$/g, '<strong class="md-heading md-heading-1">$1</strong>')
+      .replace(/^---+$/g, '<span class="md-rule" aria-hidden="true"></span>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`\n]+)`/g, '<code>$1</code>'));
+  }
+  return output.join('\n');
 }
 const token = () => localStorage.getItem('mcc_token') || '';
 
