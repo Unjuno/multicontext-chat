@@ -1166,6 +1166,9 @@ function renderOrchestratorBar(data) {
   const answeredMembers = liveMembers.filter(member => (member.messages || []).some(message => message.role === 'assistant')).length;
   const progress = liveMembers.length ? Math.round((answeredMembers / liveMembers.length) * 100) : 0;
   const followTag = following && cur ? ` <span class="ob-follow" title="この実行の進行状況を表示中">◎追跡中 ${esc(cur.id.slice(0,8))}</span>` : '';
+  const canPause = Boolean(data.paused || qPending.length || (cur && ['running', 'queued'].includes(cur.status)));
+  const pauseLabel = data.paused ? '再開' : '一時停止';
+  const pauseTitle = data.paused ? '実行キューを再開' : canPause ? '実行中の処理とキューを一時停止' : '実行中または待機中の処理はありません';
   bar.innerHTML = `
     <span class="ob-dot ${esc(dotCls)}"></span>
     <strong>実行管理</strong> <span class="ob-sep">·</span> ${esc(barStateLabels[barState] || '状態確認中')}${followTag}
@@ -1173,7 +1176,7 @@ function renderOrchestratorBar(data) {
     <span class="ob-sep">·</span> ${curText}
     <span class="ob-progress" title="回答済み ${answeredMembers} / ${liveMembers.length} チャット"><span class="ob-progress-track"><span style="width:${progress}%"></span></span><span>${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
     <span style="flex:1"></span>
-    <button class="sm" id="orchPauseBtn">${data.paused?'再開':'一時停止'}</button>
+    <button class="sm" id="orchPauseBtn" ${canPause ? '' : 'disabled'} title="${esc(pauseTitle)}">${pauseLabel}</button>
     <button class="sm" id="orchQueueBtn">キューを見る</button>
   `;
   bar.querySelector('#orchPauseBtn')?.addEventListener('click', async () => {
