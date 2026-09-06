@@ -457,6 +457,12 @@ async function refreshList(expectedId = currentId) {
   const data = await request('/api/workspaces');
   if (expectedId !== currentId) return;
   const workspaces = data.workspaces || [];
+  const workspaceIds = new Set(workspaces.map((workspace) => String(workspace.id)));
+  const validPinnedIds = [...pinnedWorkspaceIds].filter((id) => workspaceIds.has(String(id)));
+  if (validPinnedIds.length !== pinnedWorkspaceIds.size) {
+    pinnedWorkspaceIds = new Set(validPinnedIds);
+    localStorage.setItem('mcc_pinned_workspaces', JSON.stringify(validPinnedIds));
+  }
   const query = workspaceSearchQuery.trim().toLowerCase();
   const visibleWorkspaces = workspaces.filter((workspace) => {
     const matchesQuery = !query || String(workspace.name || '').toLowerCase().includes(query);
