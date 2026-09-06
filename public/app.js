@@ -1932,6 +1932,7 @@ $('#newWorkspace').onclick = async (e) => {
   const name = $('#newWorkspaceName');
   if (!dialog || !name) return toast('ワークスペース作成画面を開けませんでした', 'error');
   name.value = '';
+  updateWorkspaceNameCount();
   if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
   setTimeout(() => name.focus(), 0);
 };
@@ -1940,6 +1941,11 @@ if (emptyNew) emptyNew.onclick = () => $('#newWorkspace').click();
 $('#cancelNewWorkspace')?.addEventListener('click', () => {
   const dialog = $('#newWorkspaceDialog');
   if (dialog?.close) dialog.close(); else dialog?.removeAttribute('open');
+});
+$('#newWorkspaceDialog')?.addEventListener('click', (event) => {
+  if (event.target !== event.currentTarget) return;
+  const dialog = event.currentTarget;
+  if (dialog.close) dialog.close(); else dialog.removeAttribute('open');
 });
 const newWorkspaceName = $('#newWorkspaceName');
 const newWorkspaceNameCount = $('#newWorkspaceNameCount');
