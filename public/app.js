@@ -933,6 +933,7 @@ async function refreshOrchestrator() {
 function renderOrchestratorDrawer(data) {
   const body = document.getElementById('orchestratorDrawerBody');
   if (!body || !data) return;
+  const queueStateLabels = { pending: '待機中', queued: '待機中', running: '実行中', done: '完了', failed: '失敗', cancelled: 'キャンセル' };
   const qPending = data.queue || [];
   const qHistory = data.queueHistory || [];
   const memberNames = {};
@@ -952,11 +953,11 @@ function renderOrchestratorDrawer(data) {
   const pendingHtml = [0,1,2].map(p=>{
     const items=qPending.filter(x=>x.priority===p);
     const title = `Q${p} 待機中 (${items.length})`;
-    const rows = items.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,80))} <span style="color:var(--text-muted)">${esc(it.origin)}/${esc(it.runId||'')}</span></div>`).join('') || '<div class="small">空です</div>';
+    const rows = items.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(queueStateLabels[it.state] || it.state)} ${esc(it.prompt.slice(0,80))} <span style="color:var(--text-muted)">${esc(it.origin)}/${esc(it.runId||'')}</span></div>`).join('') || '<div class="small">空です</div>';
     return `<div class="orchestrator-q-group"><div class="orchestrator-q-title">${esc(title)}</div>${rows}</div>`;
   }).join('');
   const historyItems = qHistory.slice(-10);
-  const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">履歴 (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">空です</div>'}</div>`;
+  const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">履歴 (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(queueStateLabels[it.state] || it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">空です</div>'}</div>`;
   const eventLabels = {
     'compile.started': 'Compileを開始', 'compile.completed': 'Compileが完了', 'compile.failed': 'Compileに失敗',
     'member.started': 'メンバーの実行を開始', 'member.completed': 'メンバーの実行が完了',
