@@ -8,6 +8,23 @@ let agents = [];
 let refreshController = null;
 const openEditors = new Set();
 let workspaceSearchQuery = '';
+
+const savedTheme = localStorage.getItem('mcc_theme');
+if (savedTheme === 'dark' || savedTheme === 'light') document.documentElement.dataset.theme = savedTheme;
+const themeToggle = document.getElementById('themeToggle');
+function updateThemeToggle() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  themeToggle?.setAttribute('aria-label', dark ? 'ライトモードに切り替え' : 'ダークモードに切り替え');
+  themeToggle?.setAttribute('title', dark ? 'ライトモードに切り替え' : 'ダークモードに切り替え');
+  if (themeToggle) themeToggle.textContent = dark ? '☀' : '☾';
+}
+themeToggle?.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('mcc_theme', next);
+  updateThemeToggle();
+});
+updateThemeToggle();
 let lastWorkspace = null; // server snapshot for dirty checks
 
 function agentNameForId(id) {
