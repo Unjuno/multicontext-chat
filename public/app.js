@@ -1470,9 +1470,21 @@ if (savedWorkspaceId) {
   try {
     const { workspaces = [] } = await request('/api/workspaces');
     if (workspaces.some((workspace) => String(workspace.id) === savedWorkspaceId)) await select(savedWorkspaceId);
-    else localStorage.removeItem('mcc_last_workspace');
+    else {
+      localStorage.removeItem('mcc_last_workspace');
+      const fallback = workspaces.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
+      if (fallback) await select(fallback.id);
+    }
   } catch {
     // Keep the last selection across transient startup/API failures.
     // It can be validated again on the next successful launch.
+  }
+} else {
+  try {
+    const { workspaces = [] } = await request('/api/workspaces');
+    const fallback = workspaces.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
+    if (fallback) await select(fallback.id);
+  } catch {
+    // The empty state remains available when the workspace list is unavailable.
   }
 }
