@@ -315,6 +315,7 @@ aside h3 {
   flex: 1;
   overflow-y: auto;
 }
+.workspace-item { display: flex; align-items: stretch; }
 .workspace-link {
   display: flex;
   align-items: center;
@@ -330,6 +331,8 @@ aside h3 {
   border: 1px solid transparent;
   transition: all 0.12s;
 }
+.workspace-pin { width: 28px; border: 0; background: transparent; color: var(--border-strong); cursor: pointer; font-size: 12px; opacity: .55; }
+.workspace-pin:hover, .workspace-pin.pinned { color: var(--accent); opacity: 1; }
 .workspace-link:hover { background: var(--idle-bg); }
 .workspace-link.active {
   background: var(--accent-light);

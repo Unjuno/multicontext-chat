@@ -10,6 +10,9 @@ const openEditors = new Set();
 let workspaceSearchQuery = '';
 let workspaceStatusFilter = 'all';
 let workspaceSort = 'recent';
+let pinnedWorkspaceIds = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem('mcc_pinned_workspaces') || '[]')); } catch { return new Set(); }
+})();
 
 const savedTheme = localStorage.getItem('mcc_theme');
 if (savedTheme === 'dark' || savedTheme === 'light') document.documentElement.dataset.theme = savedTheme;
@@ -459,9 +462,13 @@ async function refreshList(expectedId = currentId) {
     const matchesQuery = !query || String(workspace.name || '').toLowerCase().includes(query);
     const matchesStatus = workspaceStatusFilter === 'all' || String(workspace.runtimeState || '').toUpperCase() === workspaceStatusFilter;
     return matchesQuery && matchesStatus;
-  }).sort((a, b) => workspaceSort === 'name'
-    ? String(a.name || '').localeCompare(String(b.name || ''), 'ja')
-    : String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  }).sort((a, b) => {
+    const pinOrder = Number(pinnedWorkspaceIds.has(b.id)) - Number(pinnedWorkspaceIds.has(a.id));
+    if (pinOrder) return pinOrder;
+    return workspaceSort === 'name'
+      ? String(a.name || '').localeCompare(String(b.name || ''), 'ja')
+      : String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+  });
   const count = document.getElementById('workspaceCount');
   if (count) count.textContent = (query || workspaceStatusFilter !== 'all') ? `${visibleWorkspaces.length}/${workspaces.length}` : `${workspaces.length}`;
   if (!workspaces.length) {
@@ -490,12 +497,22 @@ async function refreshList(expectedId = currentId) {
     const dot = rawState ? String(rawState).toLowerCase() : workspaceDot(members);
     const dotClass = dot === 'error' ? 'blocked' : dot;
     const isActive = workspace.id === currentId;
-    return `<div role="listitem"><button class="workspace-link ${isActive ? 'active' : ''}" data-id="${workspace.id}" title="${esc(workspace.name)} — ${esc(rawState || dot.toUpperCase())}" aria-current="${isActive ? 'page' : 'false'}" aria-label="${esc(workspace.name)}">
+    const pinned = pinnedWorkspaceIds.has(workspace.id);
+    return `<div class="workspace-item" role="listitem"><button class="workspace-link ${isActive ? 'active' : ''}" data-id="${workspace.id}" title="${esc(workspace.name)} — ${esc(rawState || dot.toUpperCase())}" aria-current="${isActive ? 'page' : 'false'}" aria-label="${esc(workspace.name)}">
       <span class="ws-dot ${esc(dotClass)}" aria-hidden="true"></span>
       <span class="ws-name">${esc(workspace.name)}</span>
       <span class="ws-count">${active}/${count}</span>
-    </button></div>`;
+    </button><button class="workspace-pin ${pinned ? 'pinned' : ''}" data-action="toggle-pin" data-id="${workspace.id}" type="button" aria-pressed="${pinned}" aria-label="${pinned ? 'ピン留めを解除' : 'ワークスペースをピン留め'}" title="${pinned ? 'ピン留めを解除' : 'ピン留め'}">★</button></div>`;
   }).join('');
+  $$('[data-action="toggle-pin"]').forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      const id = button.dataset.id;
+      if (pinnedWorkspaceIds.has(id)) pinnedWorkspaceIds.delete(id); else pinnedWorkspaceIds.add(id);
+      localStorage.setItem('mcc_pinned_workspaces', JSON.stringify([...pinnedWorkspaceIds]));
+      refreshList().catch((err) => toast(err.message, 'error'));
+    };
+  });
   $$('.workspace-link').forEach((button) => {
     button.onclick = () => { closeSidebar(); handleWorkspaceSelect(button.dataset.id); };
     button.onkeydown = (event) => {
