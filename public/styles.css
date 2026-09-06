@@ -47,6 +47,12 @@
   --blocked-bg: #450a0a;
   --settled-bg: #052e16;
 }
+:root[data-theme="dark"] .dev-prompt { background: #3b3212; }
+:root[data-theme="dark"] .dev-prompt-label { color: #fde68a; }
+:root[data-theme="dark"] .dev-prompt-text { color: #fef3c7; }
+:root[data-theme="dark"] .member-error,
+:root[data-theme="dark"] .error-banner { background: #3b1616; border-color: #7f1d1d; color: #fecaca; }
+:root[data-theme="dark"] .member-error small { color: #fbbf24; }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { height: 100%; }
