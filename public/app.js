@@ -492,9 +492,10 @@ async function refreshList(expectedId = currentId) {
     return counts;
   }, { RUNNING: 0, PENDING: 0, BLOCKED: 0, SETTLED: 0, ARCHIVED: 0 });
   const filterLabels = { all: 'すべての状態', RUNNING: '実行中', PENDING: 'キューあり', BLOCKED: '要対応', SETTLED: '完了', ARCHIVED: 'アーカイブ済み' };
+  const activeWorkspaceCount = workspaces.filter((workspace) => !workspace.archived).length;
   $$('#workspaceFilter option').forEach((option) => {
     const value = option.value;
-    option.textContent = `${filterLabels[value] || value} (${value === 'all' ? workspaces.length : (stateCounts[value] || 0)})`;
+    option.textContent = `${filterLabels[value] || value} (${value === 'all' ? activeWorkspaceCount : (stateCounts[value] || 0)})`;
   });
   const scopedWorkspaces = workspaceStatusFilter === 'ARCHIVED' ? workspaces.filter((workspace) => workspace.archived) : workspaces.filter((workspace) => !workspace.archived);
   const query = workspaceSearchQuery.trim().toLowerCase();
