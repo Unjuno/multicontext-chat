@@ -475,7 +475,7 @@ async function refreshAgents(expectedId = currentId) {
 }
 
 async function refreshList(expectedId = currentId) {
-  const data = await request(workspaceStatusFilter === 'ARCHIVED' ? '/api/workspaces?include_archived=true' : '/api/workspaces');
+  const data = await request('/api/workspaces?include_archived=true');
   if (expectedId !== currentId) return;
   const workspaces = data.workspaces || [];
   if (!currentId) $('#app')?.setAttribute('aria-busy', 'false');
@@ -496,8 +496,9 @@ async function refreshList(expectedId = currentId) {
     const value = option.value;
     option.textContent = `${filterLabels[value] || value} (${value === 'all' ? workspaces.length : (stateCounts[value] || 0)})`;
   });
+  const scopedWorkspaces = workspaceStatusFilter === 'ARCHIVED' ? workspaces.filter((workspace) => workspace.archived) : workspaces.filter((workspace) => !workspace.archived);
   const query = workspaceSearchQuery.trim().toLowerCase();
-  const visibleWorkspaces = workspaces.filter((workspace) => {
+  const visibleWorkspaces = scopedWorkspaces.filter((workspace) => {
     const matchesQuery = !query || String(workspace.name || '').toLowerCase().includes(query);
     const matchesStatus = workspaceStatusFilter === 'ARCHIVED' ? Boolean(workspace.archived) : !workspace.archived && (workspaceStatusFilter === 'all' || String(workspace.runtimeState || '').toUpperCase() === workspaceStatusFilter);
     return matchesQuery && matchesStatus;
@@ -509,9 +510,9 @@ async function refreshList(expectedId = currentId) {
       : String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
   });
   const count = document.getElementById('workspaceCount');
-  if (count) count.textContent = (query || workspaceStatusFilter !== 'all') ? `${visibleWorkspaces.length}/${workspaces.length}` : `${workspaces.length}`;
-  if (!workspaces.length) {
-    $('#workspaces').innerHTML = '<div class="small" style="padding:8px 10px">まだワークスペースがありません</div>';
+  if (count) count.textContent = (query || workspaceStatusFilter !== 'all') ? `${visibleWorkspaces.length}/${scopedWorkspaces.length}` : `${scopedWorkspaces.length}`;
+  if (!scopedWorkspaces.length) {
+    $('#workspaces').innerHTML = `<div class="small" style="padding:8px 10px">${workspaceStatusFilter === 'ARCHIVED' ? 'アーカイブ済みのワークスペースはありません' : 'まだワークスペースがありません'}</div>`;
     return;
   }
   if (!visibleWorkspaces.length) {
@@ -1548,7 +1549,7 @@ if (savedWorkspaceId) {
     if (savedWorkspace) await openLaunchWorkspace(savedWorkspace);
     else {
       localStorage.removeItem('mcc_last_workspace');
-      const fallback = workspaces.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
+      const fallback = workspaces.filter((workspace) => !workspace.archived).slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
       if (fallback) await openLaunchWorkspace(fallback);
     }
   } catch {
@@ -1558,7 +1559,7 @@ if (savedWorkspaceId) {
 } else {
   try {
     const { workspaces = [] } = await request('/api/workspaces?include_archived=true');
-    const fallback = workspaces.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
+    const fallback = workspaces.filter((workspace) => !workspace.archived).slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
     if (fallback) await openLaunchWorkspace(fallback);
   } catch {
     // The empty state remains available when the workspace list is unavailable.
