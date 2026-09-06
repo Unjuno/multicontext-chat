@@ -1804,13 +1804,15 @@ function wire(workspace) {
       if (promptDetails.open) openDeveloperPrompts.add(memberId);
       else openDeveloperPrompts.delete(memberId);
     });
-    $('[data-action=edit]', card).onclick = () => {
+    const editButton = $('[data-action=edit]', card);
+    if (editButton) editButton.onclick = () => {
       const willOpen = !openEditors.has(memberId);
       if (willOpen) openEditors.add(memberId); else openEditors.delete(memberId);
       editor.classList.toggle('open', willOpen);
       card.querySelector('[data-action=edit]').setAttribute('aria-expanded', String(willOpen));
     };
-    $('[data-action=copytool]', card).onclick = async (e) => {
+    const copyToolButton = $('[data-action=copytool]', card);
+    if (copyToolButton) copyToolButton.onclick = async (e) => {
       try {
         if (!await copyText(member.actionSpecUrl)) throw new Error('copy failed');
         toast('外部連携用のURLをコピーしました', 'success');
@@ -1842,7 +1844,8 @@ function wire(workspace) {
         toast(`${member.name || 'チャット'} の再試行を開始しました（キューは保持されています）`, 'success');
       }).catch((err) => toast(err.message, 'error'));
     };
-    $('[data-action=direct]', card).onsubmit = async (event) => {
+    const directForm = $('[data-action=direct]', card);
+    if (directForm) directForm.onsubmit = async (event) => {
       event.preventDefault();
       const input = $('input', event.currentTarget);
       const btn = $('button', event.currentTarget);
