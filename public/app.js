@@ -1360,6 +1360,11 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('saveWorkspace')?.click();
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n' && !typing) {
+    e.preventDefault();
+    document.getElementById('newWorkspace')?.click();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
     workspaceSearch?.focus();
