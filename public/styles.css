@@ -959,8 +959,8 @@ dialog menu { display: flex; gap: 6px; justify-content: flex-end; }
   .header-actions #newWorkspace { font-size: 11px; padding: 5px 8px; }
   #app { padding: 16px 12px 32px; }
   .workspace-head { padding: 14px; }
-  .workspace-toolbar { width: 100%; }
-  .workspace-toolbar button { flex: 1; }
+  .workspace-toolbar { width: 100%; flex-wrap: wrap; }
+  .workspace-toolbar button { flex: 1 1 auto; }
   .composer { position: static; margin-bottom: 20px; padding: 10px; }
   .composer button.primary { max-width: 34%; }
   .member { min-height: 240px; max-height: none; }
