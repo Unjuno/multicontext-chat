@@ -585,6 +585,9 @@ aside h3 {
   border-bottom: 1px solid #fecaca;
   word-break: break-word;
 }
+.member-error strong, .member-error span, .member-error small { display: block; }
+.member-error strong { margin-bottom: 2px; font-size: 12px; }
+.member-error small { margin-top: 4px; color: #b45309; }
 
 /* ── Member Body ─────────────────────────────────────────────── */
 .member-body {

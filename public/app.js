@@ -764,6 +764,7 @@ function memberCard(workspace, member) {
     if (!member.lastError) return '';
     const m = String(member.lastError);
     if (m.includes('LibreChat agentId is required')) return '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
+    if (m.includes('peg-native format')) return 'Agentの応答形式を確認できませんでした。キューは保持されています。もう一度実行してください。';
     return m;
   })();
   return `
@@ -774,7 +775,7 @@ function memberCard(workspace, member) {
           ${memberStatusHtml(member.status)}
         </div>
         <div class="member-actions">
-          ${member.status === 'error' ? '<button class="sm" data-action="retry" title="ブロックを解除して再試行">リトライ</button>' : ''}
+          ${member.status === 'error' ? '<button class="sm primary" data-action="retry" title="キューを保持したまま再試行">再試行</button>' : ''}
           ${member.inFlight ? '<button class="sm danger" data-action="stop" title="実行中の生成を停止">停止</button>' : ''}
           <button class="sm" data-action="edit" aria-expanded="${openEditors.has(member.id) ? 'true' : 'false'}" title="設定">設定</button>
           <button class="sm" data-action="copytool" title="Action URLをコピー">URL</button>
@@ -786,7 +787,7 @@ function memberCard(workspace, member) {
         ${queueInfo(member)}
         ${member.active === false ? '<span class="sep">·</span><span style="color:var(--text-muted)">無効</span>' : ''}
       </div>
-      ${displayError ? `<div class="member-error" role="alert">${esc(displayError)}</div>` : ''}
+      ${displayError ? `<div class="member-error" role="alert"><strong>処理を続行できませんでした</strong><span>${esc(displayError)}</span><small>会話の履歴とキューは保持されています。</small></div>` : ''}
       <div class="member-body">
         <div class="dev-prompt">
           <div class="dev-prompt-label">Developer Prompt <span class="scope-note">— このチャットのみ</span></div>
