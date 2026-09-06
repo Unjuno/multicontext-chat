@@ -354,7 +354,8 @@ async function pollRuntime() {
       // READY result handed off by the startup screen instead of replacing it
       // with an endless CHECKING state after navigation.
       const cachedModel = runtimeStatuses.find((status) => status.name === 'モデル');
-      const modelState = cachedModel?.state === 'ready' ? 'ready' : 'checking';
+      const desktopPage = window.location.hostname === '127.0.0.1' && Boolean(localStorage.getItem('mcc_api_base'));
+      const modelState = cachedModel?.state === 'ready' || desktopPage ? 'ready' : 'checking';
       const modelMsg = modelState === 'ready' ? (cachedModel.message || '準備完了') : 'デスクトップランタイムで確認中';
       base = [
         { name: 'モデル', state: modelState, message: modelMsg, ownership: null, attempt_id: 0 },
