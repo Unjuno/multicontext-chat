@@ -251,6 +251,10 @@ function renderRuntime(statuses) {
     aggregateStatus: (list) => {
       if (!list || !list.length) return { text: 'AI Stack ● 確認中', cls: 'checking' };
       const states = list.map(x=>String(x.state).toLowerCase());
+      const core = list.filter(x => ['モデル', 'LibreChat', 'MultiContext'].includes(x.name));
+      if (core.length === 3 && core.every(x => String(x.state).toLowerCase() === 'ready') && !states.includes('error')) {
+        return { text: 'AI Stack ● 準備完了', cls: 'ready' };
+      }
       if (states.every(s=>s==='ready')) return { text: 'AI Stack ● 準備完了', cls: 'ready' };
       if (states.some(s=>s==='error')) return { text: 'AI Stack ● 要確認', cls: 'error' };
       if (states.some(s=>s==='checking')) return { text: 'AI Stack ● 一部確認中', cls: 'checking' };

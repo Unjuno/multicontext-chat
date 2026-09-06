@@ -131,6 +131,11 @@
     const list = (statuses || []).filter(s => !String(s.name || '').toLowerCase().includes('mcp') && !String(s.name || '').includes('外部'));
     if (!list.length) return { label: "確認中", cls: "checking", text: "AI Stack ● 確認中" };
     const states = list.map((s) => normalizeState(s.state));
+    const coreNames = new Set(["モデル", "LibreChat", "MultiContext"]);
+    const core = list.filter((s) => coreNames.has(s.name));
+    if (core.length === 3 && core.every((s) => normalizeState(s.state) === "ready") && !states.includes("error")) {
+      return { label: "準備完了", cls: "ready", text: "AI Stack ● 準備完了" };
+    }
     if (states.every((s) => s === "ready")) return { label: "準備完了", cls: "ready", text: "AI Stack ● 準備完了" };
     if (states.some((s) => s === "error")) return { label: "要確認", cls: "error", text: "AI Stack ● 要確認" };
     if (states.some((s) => s === "needs_setup")) return { label: "要設定", cls: "needs_setup", text: "AI Stack ● 要設定" };
