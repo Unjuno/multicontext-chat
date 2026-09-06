@@ -548,6 +548,12 @@ async function refreshList(expectedId = currentId) {
   });
   const count = document.getElementById('workspaceCount');
   if (count) count.textContent = (query || workspaceStatusFilter !== 'all') ? `${visibleWorkspaces.length}/${scopedWorkspaces.length}` : `${scopedWorkspaces.length}`;
+  const resetView = document.getElementById('resetWorkspaceView');
+  if (resetView) {
+    const hasViewOverrides = Boolean(query) || workspaceStatusFilter !== 'all' || workspaceSort !== 'recent';
+    resetView.hidden = !hasViewOverrides;
+    resetView.setAttribute('aria-hidden', String(!hasViewOverrides));
+  }
   if (!scopedWorkspaces.length) {
     $('#workspaces').innerHTML = `<div class="small" style="padding:8px 10px">${workspaceStatusFilter === 'ARCHIVED' ? 'アーカイブ済みのワークスペースはありません' : 'まだワークスペースがありません'}</div>`;
     return;
