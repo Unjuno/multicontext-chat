@@ -1289,20 +1289,39 @@ workspaceFilter?.addEventListener('change', () => {
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 
+async function createWorkspaceFromDialog(name, button) {
+  await withBusy(button, async () => {
+    const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+    await select(workspace.id);
+    toast('ワークスペースを作成しました', 'success');
+    closeSidebar();
+  });
+}
 $('#newWorkspace').onclick = async (e) => {
   if (isWorkspaceDirty() && currentId) {
     const ok = confirm('未保存の変更があります。破棄して新しいワークスペースを作成しますか？');
     if (!ok) return;
   }
-  await withBusy(e.currentTarget, async () => {
-    const workspace = await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: '新しいワークスペース' }) });
-    await select(workspace.id);
-    toast('ワークスペースを作成しました', 'success');
-    closeSidebar();
-  }).catch((err) => toast(err.message, 'error'));
+  const dialog = $('#newWorkspaceDialog');
+  const name = $('#newWorkspaceName');
+  if (!dialog || !name) return toast('ワークスペース作成画面を開けませんでした', 'error');
+  name.value = '';
+  if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+  setTimeout(() => name.focus(), 0);
 };
 const emptyNew = $('#emptyNewWorkspace');
 if (emptyNew) emptyNew.onclick = () => $('#newWorkspace').click();
+$('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const name = $('#newWorkspaceName');
+  const button = $('#createWorkspace');
+  if (!name?.value.trim()) return;
+  try {
+    await createWorkspaceFromDialog(name.value, button);
+    const dialog = $('#newWorkspaceDialog');
+    if (dialog?.close) dialog.close(); else dialog?.removeAttribute('open');
+  } catch (err) { toast(err.message, 'error'); }
+});
 $('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInput').value); toast('トークンを保存しました', 'success'); setTimeout(() => { refreshHealth(); refreshList(); }, 0); };
 
 initRuntimeStatus();

@@ -75,6 +75,15 @@
       </menu>
     </form>
   </dialog>
+  <dialog id="newWorkspaceDialog" aria-labelledby="newWorkspaceDialogTitle">
+    <form id="newWorkspaceForm" method="dialog">
+      <h3 id="newWorkspaceDialogTitle">新しいワークスペース</h3>
+      <p>用途が分かる名前を付けると、後からすぐ見つけられます。</p>
+      <label for="newWorkspaceName" class="field-label">ワークスペース名</label>
+      <input id="newWorkspaceName" required maxlength="120" placeholder="例：論文レビュー、製品仕様の検討" autocomplete="off">
+      <menu><button value="cancel">キャンセル</button><button id="createWorkspace" value="default" class="primary">作成</button></menu>
+    </form>
+  </dialog>
 
   <script src="/desktop-ui.js"></script>
   <script type="module" src="/app.js"></script>
