@@ -354,7 +354,7 @@ async function pollRuntime() {
       // READY result handed off by the startup screen instead of replacing it
       // with an endless CHECKING state after navigation.
       const cachedModel = runtimeStatuses.find((status) => status.name === 'モデル');
-      const desktopPage = window.location.hostname === '127.0.0.1' && Boolean(localStorage.getItem('mcc_api_base'));
+      const desktopPage = window.location.hostname === '127.0.0.1' && (Boolean(localStorage.getItem('mcc_api_base')) || new URLSearchParams(window.location.search).get('desktop_ready') === '1');
       const modelState = cachedModel?.state === 'ready' || desktopPage ? 'ready' : 'checking';
       const modelMsg = modelState === 'ready' ? (cachedModel.message || '準備完了') : 'デスクトップランタイムで確認中';
       base = [
@@ -376,7 +376,7 @@ async function pollRuntime() {
       // gate accepted the model. A later browser-side re-probe cannot inspect
       // the managed/external model reliably, so it must not downgrade that
       // already-approved state to CHECKING.
-      const desktopStartupApproved = window.location.hostname === '127.0.0.1' && Boolean(localStorage.getItem('mcc_api_base'));
+      const desktopStartupApproved = window.location.hostname === '127.0.0.1' && (Boolean(localStorage.getItem('mcc_api_base')) || new URLSearchParams(window.location.search).get('desktop_ready') === '1');
       const desktopFallbackModel = baseModel?.message === 'デスクトップランタイムで確認中';
       if ((desktopStartupApproved || desktopFallbackModel) && baseModel && baseModel.state !== 'error') {
         baseModel.state = 'ready';
