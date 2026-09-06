@@ -469,7 +469,17 @@ async function refreshList(expectedId = currentId) {
     return;
   }
   if (!visibleWorkspaces.length) {
-    $('#workspaces').innerHTML = '<div class="small workspace-no-results">一致するワークスペースがありません</div>';
+    $('#workspaces').innerHTML = `<div class="workspace-no-results">
+      <span class="small">一致するワークスペースがありません</span>
+      <button class="sm" type="button" data-action="clear-workspace-filters">条件をクリア</button>
+    </div>`;
+    $('#workspaces [data-action="clear-workspace-filters"]').onclick = () => {
+      workspaceSearchQuery = '';
+      workspaceStatusFilter = 'all';
+      if (workspaceSearch) workspaceSearch.value = '';
+      if (workspaceFilter) workspaceFilter.value = 'all';
+      refreshList().catch((err) => toast(err.message, 'error'));
+    };
     return;
   }
   $('#workspaces').innerHTML = visibleWorkspaces.map((workspace) => {
