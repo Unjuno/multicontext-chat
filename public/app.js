@@ -1133,6 +1133,9 @@ function wire(workspace) {
   });
 
   $('#stop').onclick = async (e) => {
+    const activeCount = Object.values(workspace.members || {}).filter((member) => member.active !== false).length;
+    const queuedCount = Object.values(workspace.members || {}).reduce((sum, member) => sum + (member.queue?.length || 0), 0);
+    if (!confirm(`全ての生成を停止しますか？\nアクティブなチャット${activeCount}件、待機中のキュー${queuedCount}件を停止します。`)) return;
     await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}/stop`, { method: 'POST', body: '{}' });
       await refreshPreservingDrafts(workspace.id);
