@@ -158,6 +158,33 @@ xattr -d com.apple.quarantine "src-tauri/target/release/bundle/macos/MultiContex
 # or System Settings -> Privacy -> Open Anyway
 ```
 
+Release signing gate:
+
+The local `tauri build` output is suitable for development and internal
+verification, but an adhoc signature is not a distributable macOS release.
+Before sharing a DMG outside the development machine, configure a Developer
+ID Application certificate and Apple notarization credentials in the release
+environment, then verify the exact artifact:
+
+```bash
+npm run desktop:build
+codesign --verify --deep --strict --verbose=2 \
+  src-tauri/target/release/bundle/macos/MultiContext.app
+codesign -dv --verbose=4 \
+  src-tauri/target/release/bundle/macos/MultiContext.app 2>&1 \
+  | grep -E 'Authority=Developer ID Application|Signature=adhoc' \
+  | grep -v 'Signature=adhoc'
+xcrun stapler validate \
+  src-tauri/target/release/bundle/macos/MultiContext.app
+spctl --assess --type execute --verbose=4 \
+  src-tauri/target/release/bundle/macos/MultiContext.app
+```
+
+If the `codesign` check reports `Signature=adhoc`, or `spctl` rejects the
+bundle, classify the build as internal-only and do not publish it. Keep
+signing identities and notarization credentials in the CI secret store; never
+commit them to this repository.
+
 ## Configuration (external vs managed)
 
 - **External (reused first):** If LibreChat/model already healthy at configured URLs, Desktop reuses them (`ownership: EXTERNAL`) and does **not** terminate them on quit.
