@@ -1935,6 +1935,10 @@ $('#newWorkspace').onclick = async (e) => {
 };
 const emptyNew = $('#emptyNewWorkspace');
 if (emptyNew) emptyNew.onclick = () => $('#newWorkspace').click();
+$('#cancelNewWorkspace')?.addEventListener('click', () => {
+  const dialog = $('#newWorkspaceDialog');
+  if (dialog?.close) dialog.close(); else dialog?.removeAttribute('open');
+});
 const newWorkspaceName = $('#newWorkspaceName');
 const newWorkspaceNameCount = $('#newWorkspaceNameCount');
 const updateWorkspaceNameCount = () => {
