@@ -1443,6 +1443,12 @@ $('#newWorkspace').onclick = async (e) => {
 };
 const emptyNew = $('#emptyNewWorkspace');
 if (emptyNew) emptyNew.onclick = () => $('#newWorkspace').click();
+const newWorkspaceName = $('#newWorkspaceName');
+const newWorkspaceNameCount = $('#newWorkspaceNameCount');
+const updateWorkspaceNameCount = () => {
+  if (newWorkspaceNameCount && newWorkspaceName) newWorkspaceNameCount.textContent = `${newWorkspaceName.value.length} / 120`;
+};
+newWorkspaceName?.addEventListener('input', updateWorkspaceNameCount);
 $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
   event.preventDefault();
   const name = $('#newWorkspaceName');
