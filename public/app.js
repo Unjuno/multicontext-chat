@@ -480,6 +480,15 @@ function workspaceDot(members) {
   return arr.some((m) => m.messages && m.messages.length) ? 'settled' : 'idle';
 }
 
+function memberHasResolvedAgent(workspace, member) {
+  const memberAgent = String(member.agentId || '').trim();
+  const defaultAgent = String(workspace.defaultAgentId || '').trim();
+  if (memberAgent) return agents.some((agent) => String(agent.id) === memberAgent);
+  if (defaultAgent) return agents.some((agent) => String(agent.id) === defaultAgent);
+  if (agents.length === 1) return true;
+  return workspace.settings?.agentSelectionMode === 'auto_first' && agents.length > 0;
+}
+
 async function refreshAgents(expectedId = currentId) {
   try {
     const data = await request('/api/agents');
@@ -906,6 +915,7 @@ function scheduleOrchestrator() { clearTimeout(orchestratorTimer); orchestratorT
 
 function memberCard(workspace, member) {
   const editorOpen = openEditors.has(member.id) ? ' open' : '';
+  const canSend = member.active !== false && memberHasResolvedAgent(workspace, member);
   const effectiveAgentId = String(member.agentId || workspace.defaultAgentId || '').trim();
   const isStaleMember = member.agentId && !agents.some(a => String(a.id) === String(member.agentId));
   const isStaleWorkspace = workspace.defaultAgentId && !agents.some(a => String(a.id) === String(workspace.defaultAgentId));
@@ -994,8 +1004,8 @@ function memberCard(workspace, member) {
         <div class="member-footer">
           <div class="small" style="font-size:10px; color:var(--text-muted); margin-bottom:4px; letter-spacing:0.02em">このチャットだけに送信</div>
           <form data-action="direct">
-            <input placeholder="プロンプトを入力 — ${shortcutModifier}↵" aria-label="このチャットだけに送信するプロンプト" ${member.active ? '' : 'disabled'}>
-            <button class="sm primary" ${member.active ? '' : 'disabled'} title="このチャットだけに送信" aria-label="このチャットだけに送信">送信</button>
+            <input placeholder="${canSend ? `プロンプトを入力 — ${shortcutModifier}↵` : 'Agentを選択してから送信できます'}" aria-label="このチャットだけに送信するプロンプト" ${canSend ? '' : 'disabled'}>
+            <button class="sm primary" ${canSend ? '' : 'disabled'} title="${canSend ? 'このチャットだけに送信' : 'Agentを選択してから送信できます'}" aria-label="このチャットだけに送信">送信</button>
           </form>
         </div>
       </div>
@@ -1022,7 +1032,8 @@ async function refresh(expectedId = currentId) {
     const hasWorkToStop = runningMembers > 0 || queuedMessages > 0;
     const assistantMessages = members.reduce((sum, member) => sum + (member.messages || []).filter((message) => message.role === 'assistant').length, 0);
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
-    const canBroadcast = activeMembers.length > 0;
+    const allAgentsReady = activeMembers.every((member) => memberHasResolvedAgent(workspace, member));
+    const canBroadcast = activeMembers.length > 0 && allAgentsReady;
     const compileStateBlocked = workspace.runtimeState !== 'SETTLED';
     const compileAgentReady = Boolean(workspace.compileAgentId || workspace.defaultAgentId || agents.length === 1);
     const compileDisabled = compileStateBlocked || !compileAgentReady;
@@ -1077,11 +1088,11 @@ async function refresh(expectedId = currentId) {
       <div class="composer ${canBroadcast ? '' : 'disabled'}">
         <div style="flex:1; display:flex; flex-direction:column">
           <label for="broadcastPrompt" class="composer-label">全アクティブチャットへ <span class="scope-note">— 1つのプロンプトを全チャットへ複製</span></label>
-          <textarea id="broadcastPrompt" placeholder="${canBroadcast ? '全アクティブチャットに同じプロンプトを送信' : 'チャットを追加してからブロードキャストできます'}" aria-label="Broadcast プロンプト — 全アクティブチャットへ" ${canBroadcast ? '' : 'disabled'}></textarea>
+          <textarea id="broadcastPrompt" placeholder="${canBroadcast ? '全アクティブチャットに同じプロンプトを送信' : activeMembers.length ? '全チャットのAgentを選択してから送信できます' : 'チャットを追加してからブロードキャストできます'}" aria-label="Broadcast プロンプト — 全アクティブチャットへ" ${canBroadcast ? '' : 'disabled'}></textarea>
         </div>
-        <button class="primary" id="broadcast" ${canBroadcast ? '' : 'disabled'} title="${canBroadcast ? '全アクティブチャットに送信' : 'アクティブなチャットがありません'}" aria-label="全アクティブチャットに送信">${canBroadcast ? '全アクティブチャットに送信' : '送信'}</button>
+        <button class="primary" id="broadcast" ${canBroadcast ? '' : 'disabled'} title="${canBroadcast ? '全アクティブチャットに送信' : activeMembers.length ? '全チャットのAgentを選択してから送信できます' : 'アクティブなチャットがありません'}" aria-label="全アクティブチャットに送信">${canBroadcast ? '全アクティブチャットに送信' : '送信'}</button>
       </div>
-      ${canBroadcast ? '' : '<div class="composer-hint">ヒント: 「+ チャット」でチャットを追加し、エージェントを選択してください</div>'}
+      ${canBroadcast ? '' : `<div class="composer-hint">${activeMembers.length ? 'ヒント: 全チャットのAgentを選択するとBroadcastできます' : 'ヒント: 「+ チャット」でチャットを追加し、エージェントを選択してください'}</div>`}
 
       <div class="section-label">独立チャット <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${members.length}件</span></div>
       ${members.length
