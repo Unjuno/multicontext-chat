@@ -397,7 +397,7 @@ function scheduleRuntimePoll(delay = 10000) {
 function initRuntimeStatus() {
   // Try to restore transferred startup state for immediate READY display
   try {
-    const raw = sessionStorage.getItem('multicontext_runtime');
+    const raw = sessionStorage.getItem('multicontext_runtime') || localStorage.getItem('multicontext_runtime');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length >= 3) {

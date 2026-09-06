@@ -242,6 +242,8 @@
         const t = window.__TAURI__;
         if (t && t.core && t.core.invoke) return t.core.invoke;
         if (t && t.invoke) return t.invoke;
+        const internals = window.__TAURI_INTERNALS__;
+        if (internals && internals.invoke) return internals.invoke;
         return null;
       }
       function getListen() {
@@ -338,6 +340,7 @@
         document.getElementById("readyNote").style.display = "block";
         try {
           sessionStorage.setItem('multicontext_runtime', JSON.stringify(statuses));
+          localStorage.setItem('multicontext_runtime', JSON.stringify(statuses));
           localStorage.setItem('mcc_api_base', `http://127.0.0.1:${state.port}`);
         } catch {}
         setTimeout(() => {
