@@ -1380,6 +1380,13 @@ workspaceSearch?.addEventListener('input', () => {
   workspaceSearchQuery = workspaceSearch.value;
   refreshList().catch((err) => toast(err.message, 'error'));
 });
+workspaceSearch?.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !workspaceSearch.value) return;
+  event.preventDefault();
+  workspaceSearch.value = '';
+  workspaceSearchQuery = '';
+  refreshList().catch((err) => toast(err.message, 'error'));
+});
 const workspaceFilter = $('#workspaceFilter');
 workspaceFilter?.addEventListener('change', () => {
   workspaceStatusFilter = workspaceFilter.value;
