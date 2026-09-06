@@ -1055,6 +1055,7 @@ dialog menu { display: flex; gap: 6px; justify-content: flex-end; }
   #app { padding: 16px 12px 32px; }
   .workspace-head { padding: 14px; }
   .workspace-toolbar { width: 100%; flex-wrap: wrap; }
+  .workspace-toolbar .save-state { flex: 1 0 100%; }
   .workspace-toolbar button { flex: 1 1 auto; }
   .composer { position: static; margin-bottom: 20px; padding: 10px; }
   .composer button.primary { max-width: 34%; }
