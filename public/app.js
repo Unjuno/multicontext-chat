@@ -711,12 +711,17 @@ function renderOrchestratorBar(data) {
   else if (qPending.length>0) { barState = 'QUEUED'; dotCls = 'pending'; }
   else if (cur && ['blocked','failed'].includes(cur.status)) { barState = cur.status.toUpperCase(); dotCls = 'blocked'; }
   const curText = cur ? `${esc(cur.id.slice(0,4))}:${esc(cur.status)}` : '—';
+  const liveMembers = Object.values(lastWorkspace?.members || {}).filter(member => member.active !== false);
+  const runningMembers = liveMembers.filter(member => member.status === 'running').length;
+  const answeredMembers = liveMembers.filter(member => (member.messages || []).some(message => message.role === 'assistant')).length;
+  const progress = liveMembers.length ? Math.round((answeredMembers / liveMembers.length) * 100) : 0;
   const followTag = following && cur ? ` <span class="ob-follow" title="Agent experiment under observation">◎追跡中 ${esc(cur.id.slice(0,8))}</span>` : '';
   bar.innerHTML = `
     <span class="ob-dot ${esc(dotCls)}"></span>
     <strong>Orchestrator</strong> <span class="ob-sep">·</span> ${esc(barState)}${followTag}
     <span class="ob-sep">·</span> Q0 ${q0} <span class="ob-sep">|</span> Q1 ${q1} <span class="ob-sep">|</span> Q2 ${q2}
     <span class="ob-sep">·</span> ${curText}
+    <span class="ob-progress" title="回答済み ${answeredMembers} / ${liveMembers.length} チャット"><span class="ob-progress-track"><span style="width:${progress}%"></span></span><span>${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
     <span style="flex:1"></span>
     <button class="sm" id="orchPauseBtn">${data.paused?'Resume':'Pause'}</button>
     <button class="sm" id="orchQueueBtn">Queue</button>

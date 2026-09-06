@@ -908,6 +908,14 @@ dialog menu { display: flex; gap: 6px; justify-content: flex-end; }
 .orchestrator-bar .ob-sep { color: var(--border-strong); }
 .orchestrator-bar .ob-follow { color: var(--running); font-weight: 700; white-space: nowrap; }
 .orchestrator-bar button { padding: 3px 8px; font-size: 11px; }
+.ob-progress { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); white-space: nowrap; font-size: 10px; }
+.ob-progress-track { width: 72px; height: 5px; overflow: hidden; border-radius: 99px; background: var(--border); }
+.ob-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--settled); transition: width .25s ease; }
+@media (max-width: 560px) {
+  .orchestrator-bar { align-items: flex-start; }
+  .ob-progress { order: 3; width: 100%; }
+  .ob-progress-track { flex: 1; }
+}
 #orchestratorDrawer {
   border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0;
   max-width: 520px; width: min(520px, calc(100vw - 24px)); max-height: 80vh; overflow: auto;
