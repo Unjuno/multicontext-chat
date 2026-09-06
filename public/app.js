@@ -929,7 +929,7 @@ function isWorkspaceDirty() {
     compileAgentId: String(lastWorkspace.compileAgentId || ''),
     compilePrompt: String(lastWorkspace.compilePrompt || ''),
     defaultAgentId: String(lastWorkspace.defaultAgentId || ''),
-    agentSelectionMode: String(lastWorkspace.agentSelectionMode || ''),
+    agentSelectionMode: String(lastWorkspace.settings?.agentSelectionMode || 'require_selection'),
   };
   if (cur.wname !== srv.wname || cur.globalPrompt !== srv.globalPrompt || cur.compileAgentId !== srv.compileAgentId || cur.compilePrompt !== srv.compilePrompt || cur.defaultAgentId !== srv.defaultAgentId || cur.agentSelectionMode !== srv.agentSelectionMode) return true;
   // check member drafts
