@@ -20,7 +20,17 @@ export class StateStore {
       this.state = parsed;
       this.migrateAndRecover();
     } catch (error) {
-      throw new Error(`Failed to load state: ${error.message}`);
+      const backupPath = `${this.filePath}.bak`;
+      if (!fs.existsSync(backupPath)) throw new Error(`Failed to load state: ${error.message}`);
+      try {
+        const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+        if (!backup?.workspaces) throw new Error('Invalid backup state file');
+        this.state = backup;
+        this.migrateAndRecover();
+        return;
+      } catch (backupError) {
+        throw new Error(`Failed to load state: ${error.message}; backup: ${backupError.message}`);
+      }
     }
   }
 
@@ -109,6 +119,7 @@ export class StateStore {
 
   save() {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+    if (fs.existsSync(this.filePath)) fs.copyFileSync(this.filePath, `${this.filePath}.bak`);
     const tmp = `${this.filePath}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2));
     fs.renameSync(tmp, this.filePath);
