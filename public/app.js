@@ -143,6 +143,7 @@ const esc = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({
 function renderCompileText(value = '') {
   // Escape first: only the small, intentional Markdown subset below becomes HTML.
   const inline = (text) => text
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`\n]+)`/g, '<code>$1</code>');
   const lines = esc(value).split('\n');
