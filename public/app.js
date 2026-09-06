@@ -253,7 +253,7 @@ async function fetchMcpRuntimeEntry(signal) {
     const data = await request('/api/mcp/status', { signal });
     if (!data.enabled) return { name: 'MCP', state: 'needs_setup', message: '無効', ownership: null, attempt_id: 0 };
     if (data.tokenConfigured) return { name: 'MCP', state: 'ready', message: '有効', ownership: null, attempt_id: 0 };
-    return { name: 'MCP', state: 'checking', message: '要設定', ownership: null, attempt_id: 0 };
+    return { name: 'MCP', state: 'needs_setup', message: '要設定', ownership: null, attempt_id: 0 };
   } catch (e) {
     if (e && e.name === 'AbortError') throw e;
     return { name: 'MCP', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 };
@@ -291,8 +291,8 @@ async function pollRuntime() {
       const lcState = health.librechat && health.librechat.ok ? 'ready' : 'error';
       const lcMsg = health.librechat && health.librechat.ok ? '接続済み' : 'LibreChat 接続を確認';
       // GPT-OSS: browser cannot verify directly; Desktop runtime provides actual model health.
-      const modelState = 'checking';
-      const modelMsg = 'Desktop runtimeでのみ確認可能';
+      const modelState = 'error';
+      const modelMsg = 'Desktop runtimeで確認できません';
       base = [
         { name: 'モデル', state: modelState, message: modelMsg, ownership: null, attempt_id: 0 },
         { name: 'LibreChat', state: lcState, message: lcMsg, ownership: null, attempt_id: 0 },
