@@ -418,6 +418,13 @@ function initRuntimeStatus() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length >= 3) {
+        // Startup has already performed the authoritative desktop probe. Some
+        // Tauri versions serialize the external model status as `checking`
+        // when the next page is loaded; retain the confirmed hand-off.
+        const transferredModel = parsed.find((status) => status.name === 'モデル');
+        if (transferredModel && /接続済み|準備完了/.test(String(transferredModel.message || '')) && transferredModel.state !== 'error') {
+          transferredModel.state = 'ready';
+        }
         runtimeStatuses = parsed;
         renderRuntime(parsed);
       }
