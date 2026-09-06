@@ -290,6 +290,10 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
           resultPromise = app.broadcast(workspaceId, body.prompt);
           if (receiptKey) {
             broadcastReceipts.set(receiptKey, { promise: resultPromise, expiresAt: Date.now() + 10 * 60 * 1000 });
+            resultPromise.catch(() => {
+              // A failed attempt must not poison the key; callers may safely retry.
+              broadcastReceipts.delete(receiptKey);
+            });
             resultPromise.finally(() => setTimeout(() => {
               const receipt = broadcastReceipts.get(receiptKey);
               if (receipt?.expiresAt <= Date.now()) broadcastReceipts.delete(receiptKey);
