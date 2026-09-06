@@ -508,8 +508,10 @@ async function refreshList(expectedId = currentId) {
     button.onclick = (event) => {
       event.stopPropagation();
       const id = button.dataset.id;
-      if (pinnedWorkspaceIds.has(id)) pinnedWorkspaceIds.delete(id); else pinnedWorkspaceIds.add(id);
+      const willPin = !pinnedWorkspaceIds.has(id);
+      if (willPin) pinnedWorkspaceIds.add(id); else pinnedWorkspaceIds.delete(id);
       localStorage.setItem('mcc_pinned_workspaces', JSON.stringify([...pinnedWorkspaceIds]));
+      toast(willPin ? 'ワークスペースをピン留めしました' : 'ピン留めを解除しました', 'success');
       refreshList().catch((err) => toast(err.message, 'error'));
     };
   });
