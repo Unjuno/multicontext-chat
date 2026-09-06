@@ -1389,7 +1389,7 @@ async function refresh(expectedId = currentId) {
             <option value="auto_first" ${workspace.settings?.agentSelectionMode === 'auto_first' ? 'selected' : ''}>先頭Agentを自動選択（簡易）</option>
           </select>
           ${agents.length ? '' : agentDiscoveryState === 'error'
-            ? '<div class="hint" style="color:var(--danger)">Agent一覧を取得できません。LibreChatの接続を確認して「↻ 更新」を試してください。</div>'
+            ? '<div class="hint" style="color:var(--danger)">Agent一覧を取得できません。LibreChatの接続を確認し、上部の「AIスタック状態」から「再確認」を試してください。</div>'
             : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
         </div>
       </div>
