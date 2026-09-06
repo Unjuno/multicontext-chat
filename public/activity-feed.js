@@ -27,31 +27,31 @@ export function formatActivityEvent(ev, memberNames = {}) {
   const runId = ev.runId ? shortId(ev.runId) : (detail.runId ? shortId(detail.runId) : null);
   const base = { time: timeOf(ev), actor, target: null, detail: null, runId, origin: ev.origin || null };
   switch (ev.type) {
-    case 'mcp.run.started': return { ...base, action: 'run started' };
-    case 'run.settled': return { ...base, action: 'run settled' };
-    case 'run.blocked': return { ...base, action: 'run blocked' };
-    case 'run.failed': return { ...base, action: 'run failed' };
-    case 'run.cancelled': return { ...base, action: 'run cancelled' };
+    case 'mcp.run.started': return { ...base, action: '実行を開始' };
+    case 'run.settled': return { ...base, action: '実行が完了' };
+    case 'run.blocked': return { ...base, action: '実行がブロック' };
+    case 'run.failed': return { ...base, action: '実行に失敗' };
+    case 'run.cancelled': return { ...base, action: '実行をキャンセル' };
     case 'run.members.cancelled':
-      return { ...base, action: 'run members cancelled', detail: detail.cancelled != null ? `${detail.cancelled} items` : null };
+      return { ...base, action: 'メンバーの実行をキャンセル', detail: detail.cancelled != null ? `${detail.cancelled}件` : null };
     case 'q.enqueued':
-      return { ...base, action: 'queue item enqueued', detail: detail?.target?.type === 'member' ? `→ ${shortId(detail.target.memberId)}` : (detail?.target?.type || null) };
+      return { ...base, action: 'キューへ追加', detail: detail?.target?.type === 'member' ? `→ ${shortId(detail.target.memberId)}` : (detail?.target?.type || null) };
     case 'q.dispatched':
-      return { ...base, action: detail?.broadcast ? 'broadcast dispatched' : 'queue item dispatched' };
-    case 'member.started': return { ...base, action: 'member started' };
-    case 'member.completed': return { ...base, action: 'member completed' };
-    case 'member.cancelled': return { ...base, action: 'member cancelled' };
-    case 'member.failed': return { ...base, action: 'member failed', detail: detail.code ? String(detail.code) : null };
-    case 'tool.list_chats': return { ...base, action: 'list_chats' };
+      return { ...base, action: detail?.broadcast ? 'ブロードキャストを配信' : 'キューを配信' };
+    case 'member.started': return { ...base, action: 'メンバーの実行を開始' };
+    case 'member.completed': return { ...base, action: 'メンバーの実行が完了' };
+    case 'member.cancelled': return { ...base, action: 'メンバーをキャンセル' };
+    case 'member.failed': return { ...base, action: 'メンバーの実行に失敗', detail: detail.code ? String(detail.code) : null };
+    case 'tool.list_chats': return { ...base, action: 'チャット一覧を取得' };
     case 'tool.inspect_chat':
-      return { ...base, action: 'inspect_chat', target: detail.target ? String(detail.target) : null };
+      return { ...base, action: 'チャットを確認', target: detail.target ? String(detail.target) : null };
     case 'tool.send_to_chat':
       return {
         ...base,
-        action: 'send_to_chat',
+        action: 'チャットへ送信',
         target: Array.isArray(detail.targets) && detail.targets.length ? detail.targets.map(String).join(', ') : null,
       };
-    case 'tool.replayed': return { ...base, action: `replayed ${detail.tool ? String(detail.tool) : 'tool'}` };
+    case 'tool.replayed': return { ...base, action: `${detail.tool ? String(detail.tool) : 'ツール'}を再生` };
     case 'human.send': return { ...base, action: '直接送信' };
     case 'human.broadcast': return { ...base, action: 'ブロードキャスト送信' };
     case 'human.retry': return { ...base, action: '再試行を開始' };
