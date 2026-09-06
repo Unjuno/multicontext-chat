@@ -843,6 +843,7 @@ aside h3 {
   overflow-y: auto;
 }
 .compile-result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.compile-result-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .compile hr {
   border: none;
   border-top: 1px solid var(--border);

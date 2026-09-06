@@ -986,7 +986,7 @@ async function refresh(expectedId = currentId) {
         <label for="compilePrompt" class="field-label small">Compile Prompt <span class="scope-note">— 要約の指示（保存してから実行）</span></label>
         <textarea id="compilePrompt" placeholder="コンパイル指示 — 例: 差分を要約し、未解決点を列挙" aria-label="Compile Prompt">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
-          ? `<hr><div class="compile-result-head"><div class="small">${esc(workspace.lastCompile.at)}</div><button id="copyCompile" class="sm" type="button">結果をコピー</button></div><div class="compile-output" id="compileOutput">${esc(workspace.lastCompile.text)}</div>`
+          ? `<hr><div class="compile-result-head"><div class="small">${esc(workspace.lastCompile.at)}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdown保存</button></div></div><div class="compile-output" id="compileOutput">${esc(workspace.lastCompile.text)}</div>`
           : `<div class="small">手動のみ。${compileDisabled ? `現在は${workspace.runtimeState}のため待機中です。` : 'コンパイル結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">コンパイル</span>を押して要約を生成します。'}</div>`}
       </div>
     `;
@@ -1183,6 +1183,18 @@ function wire(workspace) {
       toast('Compile結果をコピーしました', 'success');
       setTimeout(() => { if (e.currentTarget.isConnected) e.currentTarget.textContent = previous; }, 1400);
     } catch { toast('Compile結果のコピーに失敗しました', 'error'); }
+  };
+  const downloadCompile = $('#downloadCompile');
+  if (downloadCompile) downloadCompile.onclick = () => {
+    const output = $('#compileOutput')?.textContent || '';
+    const blob = new Blob([`# ${workspace.name || 'MultiContext Compile'}\n\n${output}\n`], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${String(workspace.name || 'multicontext-report').replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-|-$/g, '') || 'multicontext-report'}.md`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Compile結果をMarkdownで保存しました', 'success');
   };
 
   $$('.member').forEach((card) => {
