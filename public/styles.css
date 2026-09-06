@@ -535,6 +535,22 @@ aside h3 {
   padding: 10px 14px; margin: 12px 0; font-size: 0.85rem; display: flex; align-items: center; gap: 10px;
 }
 .warning-banner span { flex: 1; }
+.attention-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  background: var(--blocked-bg);
+  color: #991b1b;
+}
+.attention-banner span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.attention-banner small { color: inherit; opacity: .82; font-size: 11px; }
+.attention-banner button { flex-shrink: 0; color: #991b1b; border-color: #fca5a5; background: transparent; }
+.attention-banner button:hover { background: rgba(255,255,255,.55); }
+:root[data-theme="dark"] .attention-banner button:hover { background: rgba(127,29,29,.35); }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }

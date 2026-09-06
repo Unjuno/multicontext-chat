@@ -1202,6 +1202,7 @@ async function refresh(expectedId = currentId) {
     document.title = `${workspace.name || 'ワークスペース'} — MultiContext`;
     const members = Object.values(workspace.members);
     const activeMembers = members.filter((m) => m.active !== false);
+    const blockedMembers = members.filter((m) => m.status === 'error');
     const queuedMessages = members.reduce((sum, member) => sum + (member.queue?.length || 0), 0);
     const runningMembers = members.filter((member) => member.inFlight).length;
     const hasWorkToStop = runningMembers > 0 || queuedMessages > 0;
@@ -1249,6 +1250,7 @@ async function refresh(expectedId = currentId) {
           ${agents.length ? '' : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
         </div>
       </div>
+      ${blockedMembers.length ? `<div class="attention-banner" role="alert"><span><strong>${blockedMembers.length}件のチャットが停止中です</strong><small>キューと履歴は保持されています。原因を確認して再試行できます。</small></span><button id="focusBlocked" class="sm" type="button">対象を確認</button></div>` : ''}
 
       <section class="workspace-overview" aria-label="ワークスペース概要">
         <div class="overview-item"><span class="overview-label">アクティブチャット</span><strong>${activeMembers.length}<small> / ${members.length} チャット</small></strong></div>
@@ -1341,6 +1343,11 @@ async function refresh(expectedId = currentId) {
 }
 
 function wire(workspace) {
+  $('#focusBlocked')?.addEventListener('click', () => {
+    const target = document.querySelector('.member[data-mid] .member-error')?.closest('.member');
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target?.querySelector('[data-action="retry"], [data-action="trim-history"]')?.focus();
+  });
   $('#refreshWorkspace').onclick = async (e) => {
     await withBusy(e.currentTarget, async () => {
       await refreshPreservingDrafts(workspace.id);
