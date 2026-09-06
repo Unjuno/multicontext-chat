@@ -63,8 +63,9 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
         compile_prompt: z.string().optional(),
         allow_cross_chat_inspect: z.boolean().optional(),
         allow_cross_chat_send: z.boolean().optional(),
+        agent_selection_mode: z.enum(['require_selection', 'auto_first']).optional(),
       }),
-    }, async ({ workspace_id, name, system_prompt, default_agent_id, compile_agent_id, compile_prompt, allow_cross_chat_inspect, allow_cross_chat_send }) => {
+    }, async ({ workspace_id, name, system_prompt, default_agent_id, compile_agent_id, compile_prompt, allow_cross_chat_inspect, allow_cross_chat_send, agent_selection_mode }) => {
       const patch = {};
       if (name !== undefined) patch.name = name;
       if (system_prompt !== undefined) patch.globalPrompt = system_prompt;
@@ -77,6 +78,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
           ...(allow_cross_chat_send !== undefined ? { allowCrossChatSend: allow_cross_chat_send } : {}),
         };
       }
+      if (agent_selection_mode !== undefined) patch.settings = { ...(patch.settings || {}), agentSelectionMode: agent_selection_mode };
       const ws = await app.updateWorkspace(workspace_id, patch);
       return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }], structuredContent: ws };
     });

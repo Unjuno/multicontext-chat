@@ -33,6 +33,7 @@ export class StateStore {
       workspace.settings ??= {};
       workspace.settings.allowCrossChatInspect ??= true;
       workspace.settings.allowCrossChatSend ??= true;
+      workspace.settings.agentSelectionMode ??= 'require_selection';
       workspace.stats ??= {};
       for (const key of ['broadcasts', 'executions', 'toolEnqueues', 'inspections']) workspace.stats[key] ??= 0;
       workspace.orchestratorQueue ??= [];
@@ -121,7 +122,7 @@ export class StateStore {
       id, name: String(input.name || 'MultiContext Workspace'), globalPrompt: String(input.globalPrompt || ''),
       compileAgentId: String(input.compileAgentId || ''), compilePrompt: String(input.compilePrompt || defaultCompilePrompt()),
       defaultAgentId: String(input.defaultAgentId || ''),
-      settings: { allowCrossChatInspect: input.settings?.allowCrossChatInspect !== false, allowCrossChatSend: input.settings?.allowCrossChatSend !== false },
+      settings: { allowCrossChatInspect: input.settings?.allowCrossChatInspect !== false, allowCrossChatSend: input.settings?.allowCrossChatSend !== false, agentSelectionMode: input.settings?.agentSelectionMode === 'auto_first' ? 'auto_first' : 'require_selection' },
       crossChatReceipts: {}, members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
       stats: { broadcasts: 0, executions: 0, toolEnqueues: 0, inspections: 0 },
       orchestratorQueue: [], orchestratorRuns: {}, orchestratorEvents: [], orchestratorPaused: false,
@@ -139,6 +140,7 @@ export class StateStore {
     if (patch.settings) {
       if (patch.settings.allowCrossChatInspect !== undefined) workspace.settings.allowCrossChatInspect = Boolean(patch.settings.allowCrossChatInspect);
       if (patch.settings.allowCrossChatSend !== undefined) workspace.settings.allowCrossChatSend = Boolean(patch.settings.allowCrossChatSend);
+      if (patch.settings.agentSelectionMode !== undefined) workspace.settings.agentSelectionMode = patch.settings.agentSelectionMode === 'auto_first' ? 'auto_first' : 'require_selection';
     }
     workspace.updatedAt = now(); this.save(); return workspace;
   }
@@ -490,11 +492,27 @@ export class StateStore {
   completeRun(workspaceId, memberId, queueItemId, result = {}) {
     const { workspace, member } = this.requireMember(workspaceId, memberId);
     if (member.current?.item?.id !== queueItemId) return false;
+    const orchestratorRunId = member.current.item.orchestratorRunId;
     const pending = member.messages.find((m) => m.id === member.current.pendingMessageId); if (pending) delete pending.pending;
     member.messages.push({ id: randomUUID(), at: now(), role: 'assistant', content: String(result.text || ''), responseId: result.id || null, usage: result.usage ?? null });
     if (result.conversationId) member.conversationId = result.conversationId;
     member.current = null; member.status = 'idle'; member.lastError = null; member.lastRun = { ...member.lastRun, finishedAt: now(), responseId: result.id || null };
-    workspace.stats.executions += 1; member.updatedAt = now(); workspace.updatedAt = now(); this.save(); return true;
+    workspace.stats.executions += 1; member.updatedAt = now(); workspace.updatedAt = now(); this.save();
+    this.settleOrchestratorRunIfDrained(workspaceId, orchestratorRunId);
+    return true;
+  }
+
+  settleOrchestratorRunIfDrained(workspaceId, runId) {
+    if (!runId) return;
+    const workspace = this.requireWorkspace(workspaceId);
+    const run = workspace.orchestratorRuns?.[runId];
+    if (!run || run.status !== 'running') return;
+    const owned = Object.values(workspace.members).some(member =>
+      member.current?.item?.orchestratorRunId === runId
+      || member.queue.some(item => item.orchestratorRunId === runId));
+    if (owned) return;
+    this.updateOrchestratorRun(workspaceId, runId, { status: 'settled' });
+    this.markDispatchedQDone(workspaceId, runId, 'settled');
   }
 
   failRun(workspaceId, memberId, queueItemId, errorMessage, { requeue = true } = {}) {

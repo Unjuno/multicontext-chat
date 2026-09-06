@@ -47,7 +47,8 @@ export function createRunEngine({ store, scheduler = null, invoke = {} }) {
       if (target.type === 'member') enqueueResult = await io.send(workspaceId, target.memberId, qItem.prompt, provenance);
       else enqueueResult = await io.broadcast(workspaceId, qItem.prompt, provenance);
 
-      const wait = await io.waitUntilSettled(workspaceId, timeoutSeconds, 500);
+      const wait = await io.waitUntilSettled(workspaceId, timeoutSeconds, 500, { ignoreOrchestratorRunId: run.id });
+      await Promise.resolve();
       const latest = store.getOrchestratorRun(workspaceId, run.id);
       if (terminalRunStatuses.has(latest.status) && latest.status !== 'running') return { run: latest, qItem, enqueueResult, wait };
 

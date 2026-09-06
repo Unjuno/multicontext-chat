@@ -26,6 +26,7 @@ export const config = {
   maxHistoryMessages: int(process.env.MULTICONTEXT_MAX_HISTORY_MESSAGES, 120),
   maxInspectResults: int(process.env.MULTICONTEXT_MAX_INSPECT_RESULTS, 8),
   agentTimeoutMs: int(process.env.MULTICONTEXT_AGENT_TIMEOUT_MS, 900000),
+  maxConcurrentRequests: int(process.env.MULTICONTEXT_MAX_CONCURRENT_REQUESTS, 4),
   mcpToken: process.env.MULTICONTEXT_MCP_TOKEN || '',
   mcpEnabled: process.env.MULTICONTEXT_MCP_ENABLED !== 'false',
   mcpHost: process.env.MULTICONTEXT_MCP_HOST || process.env.MULTICONTEXT_HOST || '127.0.0.1',

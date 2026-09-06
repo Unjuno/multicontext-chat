@@ -868,6 +868,11 @@ async function refresh(expectedId = currentId) {
           <div class="hint">指示階層: System Prompt（共有） → Developer Prompt（チャット固有） → user（Broadcast / Direct）。nativeはLibreChat会話を継続、compatはローカル履歴を再生。 · <span class="small">${activeMembers.length}件アクティブ / 全${members.length}件</span></div>
           <label for="defaultAgentId" class="field-label" style="margin-top:8px">既定エージェント <span class="scope-note">— 新しいチャットや「ワークスペース既定を使用」の解決先</span></label>
           <select id="defaultAgentId" aria-label="既定エージェント">${agentOptionsHtml(workspace.defaultAgentId, false)}</select>
+          <label for="agentSelectionMode" class="field-label" style="margin-top:8px">Agent未指定時の動作</label>
+          <select id="agentSelectionMode" aria-label="Agent未指定時の動作">
+            <option value="require_selection" ${workspace.settings?.agentSelectionMode !== 'auto_first' ? 'selected' : ''}>明示選択を要求（安全）</option>
+            <option value="auto_first" ${workspace.settings?.agentSelectionMode === 'auto_first' ? 'selected' : ''}>先頭Agentを自動選択（簡易）</option>
+          </select>
           ${agents.length ? '' : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
         </div>
       </div>
@@ -941,6 +946,7 @@ function wire(workspace) {
     compileAgentId: String(workspace.compileAgentId || ''),
     compilePrompt: String(workspace.compilePrompt || ''),
     defaultAgentId: String(workspace.defaultAgentId || ''),
+    agentSelectionMode: String(workspace.settings?.agentSelectionMode || 'require_selection'),
   };
   function updateDirty() {
     const cur = {
@@ -949,8 +955,9 @@ function wire(workspace) {
       compileAgentId: $('#compileAgentId')?.value ?? '',
       compilePrompt: $('#compilePrompt')?.value ?? '',
       defaultAgentId: $('#defaultAgentId')?.value ?? '',
+      agentSelectionMode: $('#agentSelectionMode')?.value ?? 'require_selection',
     };
-    const dirty = cur.wname !== serverVals.wname || cur.globalPrompt !== serverVals.globalPrompt || cur.compileAgentId !== serverVals.compileAgentId || cur.compilePrompt !== serverVals.compilePrompt || cur.defaultAgentId !== serverVals.defaultAgentId;
+    const dirty = cur.wname !== serverVals.wname || cur.globalPrompt !== serverVals.globalPrompt || cur.compileAgentId !== serverVals.compileAgentId || cur.compilePrompt !== serverVals.compilePrompt || cur.defaultAgentId !== serverVals.defaultAgentId || cur.agentSelectionMode !== serverVals.agentSelectionMode;
     if (saveBtn) {
       saveBtn.textContent = dirty ? 'ワークスペース設定を保存 · 未保存' : 'ワークスペース設定を保存';
       saveBtn.classList.toggle('needs-save', dirty);
@@ -958,7 +965,7 @@ function wire(workspace) {
     }
     return dirty;
   }
-  ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId'].forEach((id) => {
+  ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId','agentSelectionMode'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) {
       const ev = el.tagName === 'SELECT' ? 'change' : 'input';
@@ -979,6 +986,7 @@ function wire(workspace) {
           compileAgentId: $('#compileAgentId').value,
           compilePrompt: $('#compilePrompt').value,
           defaultAgentId: $('#defaultAgentId')?.value || '',
+          settings: { agentSelectionMode: $('#agentSelectionMode')?.value || 'require_selection' },
         }),
       });
       await refreshList();

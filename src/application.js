@@ -166,6 +166,16 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       store.updateWorkspace(workspaceId, { defaultAgentId: resolved });
       return resolved;
     }
+    // Multiple agents exist — pick the first as default so the workspace
+    // is usable out of the box. This is a pragmatic fallback; users can
+    // override via workspace settings later.
+    if (workspace.settings?.agentSelectionMode !== 'auto_first') return '';
+    const status = await getAvailableAgentsWithStatus(true);
+    if (status.ok && status.agents.length > 0) {
+      const first = status.agents[0];
+      store.updateWorkspace(workspaceId, { defaultAgentId: first.id });
+      return first.id;
+    }
     return '';
   }
 
@@ -340,12 +350,17 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   async function addChat(workspaceId, input = {}) {
     const workspace = store.requireWorkspace(workspaceId);
     // If no explicit agent and no workspace default, try single-agent auto before creating member
-    if (!input.agent_id && !input.agentId && !workspace.defaultAgentId) {
-      await ensureWorkspaceDefaultAgent(workspaceId);
+    let resolvedAgentId = input.agent_id || input.agentId || '';
+    if (!resolvedAgentId && !workspace.defaultAgentId) {
+      resolvedAgentId = await ensureWorkspaceDefaultAgent(workspaceId);
+    }
+    // Use workspace default agent if member has no explicit agent
+    if (!resolvedAgentId && workspace.defaultAgentId) {
+      resolvedAgentId = workspace.defaultAgentId;
     }
     const memberInput = {
       name: input.name,
-      agentId: String(input.agent_id || input.agentId || ''),
+      agentId: String(resolvedAgentId || ''),
       developerPrompt: String(input.developer_prompt || input.developerPrompt || ''),
       active: input.active,
       canInspectOthers: input.canInspectOthers,
@@ -414,6 +429,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       const single = await getResolvedSingleAgentId();
       if (single) {
         store.updateWorkspace(workspaceId, { defaultAgentId: single });
+      } else if (agents.length > 1 && workspace.settings?.agentSelectionMode === 'auto_first') {
+        const first = String(agents[0].id || '');
+        if (first) store.updateWorkspace(workspaceId, { defaultAgentId: first });
       } else if (agents.length > 1) {
         throw problem('複数のAgentが存在します。ワークスペースまたはチャットで使用するAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
       } else if (agents.length === 0) {
@@ -669,7 +687,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     }
   }
 
-  async function waitUntilSettled(workspaceId, timeoutSeconds = 60, pollIntervalMs = 500) {
+  async function waitUntilSettled(workspaceId, timeoutSeconds = 60, pollIntervalMs = 500, { ignoreOrchestratorRunId = null } = {}) {
     const timeout = Math.max(1, Math.min(Number(timeoutSeconds) || 60, 300)) * 1000;
     const interval = Math.max(100, Math.min(Number(pollIntervalMs) || 500, 5000));
     const start = Date.now();
@@ -679,6 +697,12 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       catch { throw problem('Workspace not found', 404, WORKSPACE_NOT_FOUND); }
       const state = store.runtimeState(workspaceId, scheduler.runningMemberIds(workspaceId));
       if (state === 'SETTLED' || state === 'BLOCKED') {
+        const hasOtherRunningOrchestrator = typeof store.listOrchestratorRuns === 'function'
+          && store.listOrchestratorRuns(workspaceId).some(run => run.status === 'running' && run.id !== ignoreOrchestratorRunId);
+        if (hasOtherRunningOrchestrator) {
+          await new Promise(resolve => setTimeout(resolve, interval));
+          continue;
+        }
         const view = await getWorkspace(workspaceId);
         return { workspace_id: workspaceId, state, workspace: view };
       }

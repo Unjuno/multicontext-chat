@@ -22,7 +22,7 @@ External MCP client → Streamable HTTP /mcp → src/mcp/handler.js → src/appl
 
 `src/application.js` is the single source of truth for workspace state, agent resolution, broadcast/direct validation, compile gating, and cross-chat semantics. Both `src/server.js` (REST) and `src/mcp/*` (MCP) are thin adapters that call it. This avoids duplicated orchestration logic and guarantees REST and MCP behave consistently.
 
-- Agent resolution: `member.agentId ?? workspace.defaultAgentId ?? (single available ? that : AGENT_SELECTION_REQUIRED)`, validated against live discovery; stale IDs surface `AGENT_NOT_AVAILABLE`.
+- Agent resolution: `member.agentId ?? workspace.defaultAgentId ?? (single available ? that : mode-dependent)`, validated against live discovery; stale IDs surface `AGENT_NOT_AVAILABLE`. `settings.agentSelectionMode` defaults to `require_selection` and may be set to `auto_first` for convenience.
 - Compile: `compileAgentId ?? workspace.defaultAgentId ?? singleAgent ?? error`.
 - Cross-chat `send-to-chat` validates all targets before any enqueue.
 - `wait_until_settled` polls mechanical `runtimeState`, bounded 1-300s, no mutation.

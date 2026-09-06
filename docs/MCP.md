@@ -224,7 +224,7 @@ Resources via `multicontext://workspaces` etc are not required; tools are primar
 ## Agent Selection Behavior
 
 - Source of truth is LibreChat `GET /api/agents/v1/responses/models`.
-- Effective: `member.agentId ?? workspace.defaultAgentId ?? (exactly-one-agent ? thatId : require_selection)`. Explicit IDs are never silently overwritten.
+- Effective: `member.agentId ?? workspace.defaultAgentId ?? (exactly-one-agent ? thatId : mode-dependent)`. Explicit IDs are never silently overwritten. `settings.agentSelectionMode` defaults to `require_selection`; set it to `auto_first` through workspace update when convenience is preferred.
 - **Single agent:** auto-selected for new workspaces/members and for compile fallback.
 - **Multiple agents, no default:** `AGENT_SELECTION_REQUIRED` (400, Japanese message) before any queue mutation; broadcast validates all active members before enqueue, direct validates target, cross-chat `send-to-chat` validates all targets before any enqueue (avoid partial delivery).
 - **Stale/deleted:** non-empty ID is validated against current discovery; if not found → `AGENT_NOT_AVAILABLE` actionable, UI shows `利用不可`.

@@ -1,7 +1,23 @@
 import { CrossChatToolExecutor, extractToolCalls } from './cross-chat-executor.js';
 export class Scheduler {
-  constructor({ store, client, app, maxHistoryMessages = 120, maxNativeToolIterations = 10 }) {
-    this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.maxNativeToolIterations = maxNativeToolIterations; this.running = new Map(); this.executor = null;
+  constructor({ store, client, app, maxHistoryMessages = 120, maxNativeToolIterations = 10, maxConcurrentRequests = Number.POSITIVE_INFINITY }) {
+    this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.maxNativeToolIterations = maxNativeToolIterations; this.maxConcurrentRequests = Math.max(1, Number(maxConcurrentRequests) || 4); this.activeRequests = 0; this.requestWaiters = []; this.running = new Map(); this.executor = null;
+  }
+  async acquireRequestSlot(signal) {
+    if (this.activeRequests < this.maxConcurrentRequests) { this.activeRequests += 1; return () => this.releaseRequestSlot(); }
+    return new Promise((resolve, reject) => {
+      const waiter = { resolve, reject, signal };
+      const onAbort = () => { this.requestWaiters = this.requestWaiters.filter(w => w !== waiter); reject(signal.reason || new Error('Aborted')); };
+      waiter.onAbort = onAbort;
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener('abort', onAbort, { once: true });
+      this.requestWaiters.push(waiter);
+    }).then(() => () => this.releaseRequestSlot());
+  }
+  releaseRequestSlot() {
+    const waiter = this.requestWaiters.shift();
+    if (waiter) { waiter.signal?.removeEventListener('abort', waiter.onAbort); waiter.resolve(); return; }
+    this.activeRequests = Math.max(0, this.activeRequests - 1);
   }
   setApp(app) { this.app = app; app._scheduler = this; app._store = this.store; this.executor = new CrossChatToolExecutor({ app }); }
   key(workspaceId, memberId) { return `${workspaceId}:${memberId}`; }
@@ -64,12 +80,15 @@ export class Scheduler {
       this.kickWorkspace(workspace.id);
     }
   }
-  kickWorkspace(workspaceId) { const w = this.store.requireWorkspace(workspaceId); for (const m of Object.values(w.members)) this.kickMember(workspaceId, m.id); }
-  kickMember(workspaceId, memberId) {
+  kickWorkspace(workspaceId) { const w = this.store.requireWorkspace(workspaceId); for (const m of Object.values(w.members)) this.kickMember(workspaceId, m.id, { defer: false }); }
+  kickMember(workspaceId, memberId, { defer = true } = {}) {
     const key = this.key(workspaceId, memberId); if (this.running.has(key)) return;
     const member = this.store.getMember(workspaceId, memberId); if (!member || !member.active || member.status === 'error' || member.queue.length === 0) return;
     const controller = new AbortController(); this.running.set(key, controller);
-    void this.drain(workspaceId, memberId, controller).finally(() => {
+    // Let the caller observe the committed enqueue/receipt before the worker
+    // synchronously shifts the first item from the queue.
+    const start = defer ? new Promise(resolve => setTimeout(resolve, 0)) : Promise.resolve();
+    void start.then(() => this.drain(workspaceId, memberId, controller)).finally(() => {
       this.running.delete(key);
       const latest = this.store.getMember(workspaceId, memberId);
       if (latest?.active && latest.status !== 'error' && latest.queue.length > 0) this.kickMember(workspaceId, memberId);
@@ -160,7 +179,9 @@ export class Scheduler {
           if (m.includes('GPT-OSS') || m.includes('llama')) return 'GPT-OSSを利用できません';
           return m;
         };
+        let releaseRequestSlot = null;
         try {
+          releaseRequestSlot = await this.acquireRequestSlot(controller.signal);
           const result = await this.client.runAgent({
             agentId: effectiveAgentId, globalPrompt: workspace.globalPrompt, developerPrompt: current.developerPrompt,
             history: history.slice(-(this.maxHistoryMessages - 1)), prompt: item.prompt, conversationId,
@@ -250,6 +271,8 @@ export class Scheduler {
         } catch (inner) {
           const msg = japMap(inner?.message || String(inner));
           throw new Error(msg);
+        } finally {
+          releaseRequestSlot?.();
         }
       } catch (error) {
         if (!this.store.getMember(workspaceId, memberId)) break;

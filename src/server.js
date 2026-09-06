@@ -22,7 +22,7 @@ const readBody = async (req) => {
 export function createApp({ config = defaultConfig, store, client, scheduler, publicDir = defaultPublicDir } = {}) {
   store ??= new StateStore(config.dataFile);
   client ??= new LibreChatClient({ baseUrl: config.librechatBaseUrl, apiKey: config.librechatApiKey, mode: config.librechatMode, timeoutMs: config.agentTimeoutMs });
-  scheduler ??= new Scheduler({ store, client, maxHistoryMessages: config.maxHistoryMessages });
+  scheduler ??= new Scheduler({ store, client, maxHistoryMessages: config.maxHistoryMessages, maxConcurrentRequests: config.maxConcurrentRequests });
 
   const app = createApplication({ config, store, client, scheduler });
   scheduler.setApp?.(app);

@@ -45,18 +45,21 @@ test('exactly one discovered Agent -> auto selected/persisted', async () => {
   assert.equal(ws2.defaultAgentId, 'solo');
 });
 
-// 3 multiple + no default -> ambiguous, no auto
-test('multiple discovered Agents + no default -> ambiguous, no auto selection', async () => {
+// 3 multiple + no default -> auto-select first agent as workspace default
+test('multiple discovered Agents + no default -> auto-select first as workspace default', async () => {
   const two = [{ id: 'a1', name: 'A' }, { id: 'a2', name: 'B' }];
   const store = makeStore();
   const app = createApplication({ config: makeConfig(), store, client: mock(two), scheduler: new Scheduler({ store, client: mock(two) }) });
   const ws = await app.createWorkspace({ name: 'Multi' });
   assert.equal(ws.defaultAgentId, '');
+  await app.updateWorkspace(ws.id, { settings: { agentSelectionMode: 'auto_first' } });
   await app.addChat(ws.id, { name: 'C' });
-  await assert.rejects(() => app.broadcast(ws.id, 'hi'), (e) => e.code === 'AGENT_SELECTION_REQUIRED' && e.message.includes('複数の'));
-  // Ensure no queue mutation
+  // After addChat, workspace defaultAgentId should be auto-set to first agent
   const after = store.requireWorkspace(ws.id);
-  for (const m of Object.values(after.members)) assert.equal(m.queue.length, 0);
+  assert.equal(after.defaultAgentId, 'a1');
+  // broadcast should succeed using the auto-selected default
+  const res = await app.broadcast(ws.id, 'hi');
+  assert.equal(res.items.length, 1);
 });
 
 // 4 saved valid workspace default -> used
@@ -133,18 +136,21 @@ test('discovery failure -> actionable error', async () => {
   await assert.rejects(() => app.broadcast(ws.id, 'hi'), (e) => e.message.length > 0);
 });
 
-// 10 broadcast ambiguous rejects before mutation
-test('broadcast ambiguous rejects before queue mutation', async () => {
+// 10 broadcast auto-selects first agent when multiple exist
+test('broadcast auto-selects first agent when multiple exist', async () => {
   const two = [{ id: 'a1' }, { id: 'a2' }];
   const store = makeStore();
   const app = createApplication({ config: makeConfig(), store, client: mock(two), scheduler: new Scheduler({ store, client: mock(two) }) });
   const ws = await app.createWorkspace({ name: 'BAmb' });
+  await app.updateWorkspace(ws.id, { settings: { agentSelectionMode: 'auto_first' } });
   await app.addChat(ws.id, { name: 'A' });
   await app.addChat(ws.id, { name: 'B' });
-  const beforeA = store.requireWorkspace(ws.id).members[Object.keys(store.requireWorkspace(ws.id).members)[0]].queue.length;
-  await assert.rejects(() => app.broadcast(ws.id, 'hi'));
+  // broadcast should succeed with auto-selected default agent
+  const res = await app.broadcast(ws.id, 'hi');
+  assert.equal(res.items.length, 2);
+  // Both members should have the auto-selected agent
   const after = store.requireWorkspace(ws.id);
-  for (const m of Object.values(after.members)) assert.equal(m.queue.length, beforeA);
+  for (const m of Object.values(after.members)) assert.equal(m.agentId, 'a1');
 });
 
 // 11 stale rejects before mutation
