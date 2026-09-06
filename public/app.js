@@ -1848,7 +1848,7 @@ function wire(workspace) {
       if (field) field.addEventListener(field.type === 'checkbox' || field.tagName === 'SELECT' ? 'change' : 'input', updateMemberDirty);
     });
     updateMemberDirty();
-    memberSave.onclick = async (e) => {
+    if (memberSave && editor) memberSave.onclick = async (e) => {
       await withBusy(e.currentTarget, async () => {
         const body = {
           name: $('[name=name]', editor).value,
@@ -1864,7 +1864,8 @@ function wire(workspace) {
         toast('チャット設定を保存しました', 'success');
       }).catch((err) => toast(err.message, 'error'));
     };
-    $('[data-action=delete]', card).onclick = async (e) => {
+    const memberDelete = $('[data-action=delete]', card);
+    if (memberDelete) memberDelete.onclick = async (e) => {
       const memberDraft = memberSave ? updateMemberDirty() : false;
       const unsavedWarning = memberDraft ? '\n編集中の未保存変更も失われます。先に保存してください。' : '';
       if (!confirm(`「${member.name}」を削除しますか？${unsavedWarning}\nこの操作は取り消せません。`)) return;
