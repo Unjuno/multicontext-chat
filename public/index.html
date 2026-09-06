@@ -95,10 +95,10 @@
       </menu>
     </form>
   </dialog>
-  <dialog id="newWorkspaceDialog" aria-labelledby="newWorkspaceDialogTitle">
+  <dialog id="newWorkspaceDialog" aria-labelledby="newWorkspaceDialogTitle" aria-describedby="newWorkspaceDialogDescription">
     <form id="newWorkspaceForm" method="dialog">
       <h3 id="newWorkspaceDialogTitle">新しいワークスペース</h3>
-      <p>用途が分かる名前を付けると、後からすぐ見つけられます。</p>
+      <p id="newWorkspaceDialogDescription">用途が分かる名前を付けると、後からすぐ見つけられます。作成時に、最初に用意するチャット数も選べます。</p>
       <label for="newWorkspaceName" class="field-label">ワークスペース名</label>
       <input id="newWorkspaceName" required maxlength="120" placeholder="例：論文レビュー、製品仕様の検討" autocomplete="off">
       <span id="newWorkspaceNameCount" class="field-hint" aria-live="polite">0 / 120</span>
@@ -109,7 +109,7 @@
         <option value="3">3件</option>
         <option value="4">4件</option>
       </select>
-      <span class="field-hint">作成後に、各チャットへ役割とAgentを設定できます。</span>
+      <span id="newWorkspaceChatCountHint" class="field-hint">作成後に、各チャットへ役割とAgentを設定できます。</span>
       <menu><button id="cancelNewWorkspace" type="button">キャンセル</button><button id="createWorkspace" value="default" class="primary">作成</button></menu>
     </form>
   </dialog>
