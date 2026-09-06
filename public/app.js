@@ -1515,7 +1515,7 @@ function wire(workspace) {
       await withBusy(e.currentTarget, async () => {
         await request(`/api/workspaces/${workspace.id}/members/${memberId}/retry`, { method: 'POST', body: '{}' });
         await refreshPreservingDrafts(workspace.id);
-        toast('リトライを開始しました', 'success');
+        toast(`${member.name || 'チャット'} の再試行を開始しました（キューは保持されています）`, 'success');
       }).catch((err) => toast(err.message, 'error'));
     };
     $('[data-action=direct]', card).onsubmit = async (event) => {
