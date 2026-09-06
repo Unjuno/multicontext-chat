@@ -308,6 +308,9 @@ aside h3 {
 .workspace-reset { display: none; margin: -2px 10px 8px auto; padding: 2px 0; border: 0; background: transparent; color: var(--text-muted); font-size: 10px; cursor: pointer; }
 .workspace-reset.is-visible { display: block; }
 .workspace-reset:hover { color: var(--accent); text-decoration: underline; }
+.workspace-group + .workspace-group { margin-top: 8px; }
+.workspace-group-label { padding: 4px 10px 3px; color: var(--text-muted); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }
+.workspace-group-label span { font-weight: 400; margin-left: 3px; }
 .field-hint { display: block; margin-top: 4px; color: var(--text-muted); font-size: 11px; text-align: right; }
 .help-list { display: grid; gap: 8px; margin-top: 12px; }
 .help-list div { display: flex; align-items: center; gap: 12px; }

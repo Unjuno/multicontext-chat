@@ -586,7 +586,7 @@ async function refreshList(expectedId = currentId) {
     };
     return;
   }
-  $('#workspaces').innerHTML = visibleWorkspaces.map((workspace) => {
+  const renderWorkspace = (workspace) => {
     const members = workspace.members || {};
     const count = Object.keys(members).length;
     const active = Object.values(members).filter((m) => m.active !== false).length;
@@ -602,7 +602,13 @@ async function refreshList(expectedId = currentId) {
       <span class="ws-name">${esc(workspace.name)}</span>
       <span class="ws-count">${active}/${count}</span>
     </button><button class="workspace-pin ${pinned ? 'pinned' : ''}" data-action="toggle-pin" data-id="${workspace.id}" type="button" aria-pressed="${pinned}" aria-label="${pinned ? 'ピン留めを解除' : 'ワークスペースをピン留め'}" title="${pinned ? 'ピン留めを解除' : 'ピン留め'}">★</button></div>`;
-  }).join('');
+  };
+  const pinnedWorkspaces = visibleWorkspaces.filter((workspace) => pinnedWorkspaceIds.has(workspace.id));
+  const otherWorkspaces = visibleWorkspaces.filter((workspace) => !pinnedWorkspaceIds.has(workspace.id));
+  const renderGroup = (label, items) => items.length
+    ? `<div class="workspace-group" role="presentation"><div class="workspace-group-label">${esc(label)} <span>${items.length}件</span></div>${items.map(renderWorkspace).join('')}</div>`
+    : '';
+  $('#workspaces').innerHTML = renderGroup('ピン留め', pinnedWorkspaces) + renderGroup('その他', otherWorkspaces);
   $$('[data-action="toggle-pin"]').forEach((button) => {
     button.onclick = (event) => {
       event.stopPropagation();
