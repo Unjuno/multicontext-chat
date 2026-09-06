@@ -532,6 +532,10 @@ aside h3 {
 }
 .error-banner span { flex: 1; }
 .workspace-last-updated { color: var(--text-muted); font-size: 10px; white-space: nowrap; }
+.help-concepts { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.help-concepts div { display: grid; gap: 2px; }
+.help-concepts strong { font-size: 11px; color: var(--text); }
+.help-concepts span { color: var(--text-muted); font-size: 11px; line-height: 1.45; }
 .error-banner strong { color: inherit; font-size: 12px; }
 .error-banner small { color: inherit; opacity: .8; }
 .refresh-diagnostic { flex: 1 1 100%; min-width: 0; font-size: 11px; }
