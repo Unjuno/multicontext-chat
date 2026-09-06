@@ -61,7 +61,7 @@ surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op)
 |---|---|---|---|---|---|---|---|---|
 | create workspace | `POST /api/workspaces` | `multicontext_create_workspace` | `app.createWorkspace` | = | = | n/a | VERIFIED | spy proves shared impl |
 | update workspace (+settings) | `PATCH /api/workspaces/:id` | `multicontext_update_workspace` | `app.updateWorkspace` | = | = | n/a | VERIFIED | cross-chat settings both ways |
-| delete workspace | `DELETE /api/workspaces/:id` | `multicontext_delete_workspace` | `app.deleteWorkspace` | = | = | n/a | PARTIAL | shared impl by inspection |
+| delete workspace | `DELETE /api/workspaces/:id` | `multicontext_delete_workspace` | `app.deleteWorkspace` | = | = | n/a | PARTIAL | shared impl by inspection; exact workspace-name confirmation required, active work rejected |
 | add member | `POST …/members` | `multicontext_add_chat` | `app.addChat` | = | = | n/a | VERIFIED | |
 | update member | `PATCH …/members/:id` | `multicontext_update_chat` | `app.updateChat` | = | = | n/a | VERIFIED | |
 | delete member | `DELETE …/members/:id` | `multicontext_delete_chat` | `app.deleteChat` | = | = | n/a | VERIFIED | |
