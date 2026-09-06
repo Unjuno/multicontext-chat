@@ -172,6 +172,8 @@ async function request(url, options = {}) {
     const message = {
       'Prompt is required': 'プロンプトを入力してください',
       'Unauthorized': '認証が必要です。接続設定を確認してください',
+      'Invalid idempotency_key: use 1-64 chars of [A-Za-z0-9_-]': '再送識別キーの形式が不正です',
+      'Idempotency key was already used for a different prompt': '同じ再送識別キーが別のプロンプトに使われています',
     }[String(rawMessage)] || rawMessage;
     const err = new Error(message);
     err.status = response.status;
