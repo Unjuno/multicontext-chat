@@ -721,14 +721,14 @@ async function refreshList(expectedId = currentId) {
   if (!scopedWorkspaces.length) {
     $('#workspaces').innerHTML = workspaceStatusFilter === 'ARCHIVED'
       ? '<div class="workspace-empty"><strong>アーカイブ済みのワークスペースはありません</strong><span class="small">アーカイブしたワークスペースはここに表示されます。</span></div>'
-      : `<div class="workspace-empty"><strong>まだワークスペースがありません</strong><span class="small">チャットとAgentをまとめる場所を作成しましょう。</span><button class="sm" type="button" data-action="new-workspace-from-empty">新しいワークスペースを作成</button></div>`;
+      : `<div class="workspace-empty" role="status"><strong>まだワークスペースがありません</strong><span class="small">チャットとAgentをまとめる場所を作成しましょう。</span><button class="sm" type="button" data-action="new-workspace-from-empty">新しいワークスペースを作成</button></div>`;
     $('#workspaces [data-action="new-workspace-from-empty"]')?.addEventListener('click', () => {
       document.getElementById('newWorkspace')?.click();
     });
     return;
   }
   if (!visibleWorkspaces.length) {
-    $('#workspaces').innerHTML = `<div class="workspace-no-results">
+    $('#workspaces').innerHTML = `<div class="workspace-no-results" role="status" aria-live="polite">
       <span class="small">一致するワークスペースがありません</span>
       <button class="sm" type="button" data-action="clear-workspace-filters">条件をクリア</button>
     </div>`;
