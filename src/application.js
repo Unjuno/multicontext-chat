@@ -354,6 +354,10 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   async function deleteWorkspace(workspaceId) {
+    const runtimeState = store.runtimeState(workspaceId, scheduler.runningMemberIds(workspaceId));
+    if (runtimeState === 'RUNNING' || runtimeState === 'PENDING') {
+      throw problem('実行中またはキュー待ちのワークスペースは、全て停止してから削除してください', 409, 'WORKSPACE_ACTIVE');
+    }
     scheduler.stopWorkspace(workspaceId);
     store.deleteWorkspace(workspaceId);
     return { deleted: true, workspace_id: workspaceId };
