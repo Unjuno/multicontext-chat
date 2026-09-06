@@ -376,7 +376,8 @@ async function pollRuntime() {
       // the managed/external model reliably, so it must not downgrade that
       // already-approved state to CHECKING.
       const desktopStartupApproved = window.location.hostname === '127.0.0.1' && Boolean(localStorage.getItem('mcc_api_base'));
-      if (desktopStartupApproved && baseModel && baseModel.state !== 'error') {
+      const desktopFallbackModel = baseModel?.message === 'デスクトップランタイムで確認中';
+      if ((desktopStartupApproved || desktopFallbackModel) && baseModel && baseModel.state !== 'error') {
         baseModel.state = 'ready';
         baseModel.message = '準備完了';
       }
