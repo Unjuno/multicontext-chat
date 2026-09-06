@@ -1510,13 +1510,15 @@ function wire(workspace) {
       refreshedTarget.focus({ preventScroll: true });
     }
   });
-  $('#refreshWorkspace').onclick = async (e) => {
+  $('#refreshWorkspace')?.addEventListener('click', async (event) => {
+    const e = { currentTarget: event.currentTarget };
     await withBusy(e.currentTarget, async () => {
       await refreshPreservingDrafts(workspace.id);
       toast('ワークスペースを更新しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
-  };
-  $('#archiveWorkspace').onclick = async (e) => {
+  });
+  $('#archiveWorkspace')?.addEventListener('click', async (event) => {
+    const e = { currentTarget: event.currentTarget };
     const action = workspace.archived ? '復元' : 'アーカイブ';
     const unsavedWarning = isWorkspaceDirty() ? '\n未保存の変更は破棄されます。先に保存してください。' : '';
     if (!confirm(`「${workspace.name}」を${action}しますか？${unsavedWarning}`)) return;
@@ -1525,7 +1527,7 @@ function wire(workspace) {
       localStorage.setItem('mcc_last_workspace', workspace.id);
       location.reload();
     }).catch((err) => toast(err.message, 'error'));
-  };
+  });
   const saveBtn = $('#saveWorkspace');
   const serverVals = {
     wname: String(workspace.name || ''),
@@ -1585,7 +1587,8 @@ function wire(workspace) {
   setTimeout(updateDirty, 60);
   setTimeout(updateDirty, 250);
 
-  $('#saveWorkspace').onclick = async (e) => {
+  $('#saveWorkspace')?.addEventListener('click', async (event) => {
+    const e = { currentTarget: event.currentTarget };
     await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}`, {
         method: 'PATCH',
@@ -1602,9 +1605,10 @@ function wire(workspace) {
       await refreshPreservingDrafts(workspace.id);
       toast('ワークスペースを保存しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
-  };
+  });
 
-  $('#addMember').onclick = async (e) => {
+  $('#addMember')?.addEventListener('click', async (event) => {
+    const e = { currentTarget: event.currentTarget };
     await withBusy(e.currentTarget, async () => {
       await request(`/api/workspaces/${workspace.id}/members`, {
         method: 'POST',
@@ -1613,7 +1617,7 @@ function wire(workspace) {
       await refreshPreservingDrafts(workspace.id);
       toast('チャットを追加しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
-  };
+  });
 
   const emptyAdd = $('#emptyAddChat');
   if (emptyAdd) emptyAdd.onclick = () => $('#addMember').click();
