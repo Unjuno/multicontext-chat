@@ -1711,7 +1711,26 @@ function wire(workspace) {
         }
       });
     }
-    $('[data-action=save]', card).onclick = async (e) => {
+    const memberSave = $('[data-action=save]', card);
+    const updateMemberDirty = () => {
+      if (!memberSave) return false;
+      const dirty = [
+        ['name', String(member.name ?? '')],
+        ['agentId', String(member.agentId ?? '')],
+        ['developerPrompt', String(member.developerPrompt ?? '')],
+      ].some(([name, value]) => $(`[name="${name}"]`, editor)?.value !== value)
+        || ['active', 'canInspectOthers', 'canSendOthers'].some((name) => $(`[name="${name}"]`, editor)?.checked !== Boolean(member[name]));
+      memberSave.disabled = !dirty;
+      memberSave.textContent = dirty ? '変更を保存' : '保存済み';
+      memberSave.title = dirty ? 'このチャットの変更を保存' : '変更はありません';
+      return dirty;
+    };
+    ['name', 'agentId', 'developerPrompt', 'active', 'canInspectOthers', 'canSendOthers'].forEach((name) => {
+      const field = $(`[name="${name}"]`, editor);
+      if (field) field.addEventListener(field.type === 'checkbox' || field.tagName === 'SELECT' ? 'change' : 'input', updateMemberDirty);
+    });
+    updateMemberDirty();
+    memberSave.onclick = async (e) => {
       await withBusy(e.currentTarget, async () => {
         const body = {
           name: $('[name=name]', editor).value,
