@@ -1354,7 +1354,7 @@ async function refresh(expectedId = currentId) {
 
       <div id="orchestratorBar" class="orchestrator-bar" style="display:none"></div>
       <dialog id="orchestratorDrawer" aria-labelledby="orchestratorDrawerTitle"><div class="orchestrator-drawer-head"><strong id="orchestratorDrawerTitle">実行管理の詳細</strong><button id="orchestratorClose" class="sm">閉じる</button></div><div id="orchestratorDrawerBody" class="orchestrator-drawer-body"><div class="small">実行状況を読み込んでいます…</div></div></dialog>
-      <div class="section-label">一斉送信 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件へ` : 'アクティブなチャットがありません'}</span></div>
+      <div class="section-label">一斉送信 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件へ` : activeMembers.length ? 'Agent選択が必要です' : 'アクティブなチャットがありません'}</span></div>
       <div class="composer ${canBroadcast ? '' : 'disabled'}">
         <div style="flex:1; display:flex; flex-direction:column">
           <label for="broadcastPrompt" class="composer-label">全アクティブチャットへ <span class="scope-note">— 同じ問いを全チャットへ送信</span></label>
