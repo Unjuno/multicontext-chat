@@ -1330,7 +1330,7 @@ async function refresh(expectedId = currentId) {
         <label for="compilePrompt" class="field-label small">まとめ方の指示 <span class="scope-note">— レポートの作成方法（保存してから作成）</span></label>
         <textarea id="compilePrompt" placeholder="まとめ方の指示（例: 主な結論と未解決点を分けて整理）" aria-label="統合レポートのまとめ方の指示">${esc(workspace.compilePrompt || '')}</textarea>
         ${workspace.lastCompile
-          ? `<hr><div class="compile-result-head"><div class="small">${esc(displayTimestamp(workspace.lastCompile.at))}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdownで保存</button></div></div><div class="compile-output" id="compileOutput" role="region" aria-label="統合レポートの結果">${renderCompileText(workspace.lastCompile.text)}</div>`
+          ? `<hr><div class="compile-result-head"><div class="small">${esc(displayTimestamp(workspace.lastCompile.at))}</div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdownで保存</button></div></div><div class="compile-output" id="compileOutput" role="region" aria-label="統合レポートの結果" aria-live="polite" tabindex="0">${renderCompileText(workspace.lastCompile.text)}</div>`
           : `<div class="small">手動のみ。${compileStateBlocked ? `現在は${workspace.runtimeState || '処理中'}のため待機中です。` : !compileAgentReady ? '作成担当を選択してから実行してください。' : '結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">レポートを作成</span>を押して回答をまとめます。'}</div>`}
       </div>
     `;
