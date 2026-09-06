@@ -1449,6 +1449,7 @@ const updateWorkspaceNameCount = () => {
   if (newWorkspaceNameCount && newWorkspaceName) newWorkspaceNameCount.textContent = `${newWorkspaceName.value.length} / 120`;
 };
 newWorkspaceName?.addEventListener('input', updateWorkspaceNameCount);
+$('#newWorkspaceDialog')?.addEventListener('close', () => $('#newWorkspace')?.focus());
 $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
   event.preventDefault();
   const name = $('#newWorkspaceName');
