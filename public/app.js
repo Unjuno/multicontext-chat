@@ -496,7 +496,20 @@ async function refreshList(expectedId = currentId) {
       <span class="ws-count">${active}/${count}</span>
     </button></div>`;
   }).join('');
-  $$('.workspace-link').forEach((button) => { button.onclick = () => { closeSidebar(); handleWorkspaceSelect(button.dataset.id); }; });
+  $$('.workspace-link').forEach((button) => {
+    button.onclick = () => { closeSidebar(); handleWorkspaceSelect(button.dataset.id); };
+    button.onkeydown = (event) => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      const buttons = $$('.workspace-link');
+      const index = buttons.indexOf(button);
+      if (index < 0) return;
+      event.preventDefault();
+      const nextIndex = event.key === 'ArrowDown' ? (index + 1) % buttons.length
+        : event.key === 'ArrowUp' ? (index - 1 + buttons.length) % buttons.length
+        : event.key === 'Home' ? 0 : buttons.length - 1;
+      buttons[nextIndex]?.focus();
+    };
+  });
 }
 
 function handleWorkspaceSelect(id) {
