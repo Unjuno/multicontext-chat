@@ -6,6 +6,7 @@ let currentId = null;
 let timer = null;
 let agents = [];
 let refreshController = null;
+let workspaceSearchTimer = null;
 const openEditors = new Set();
 let workspaceSearchQuery = '';
 const workspaceFilterValues = new Set(['all', 'RUNNING', 'PENDING', 'BLOCKED', 'SETTLED', 'ARCHIVED']);
@@ -1523,13 +1524,17 @@ document.addEventListener('keydown', (e) => {
 const workspaceSearch = $('#workspaceSearch');
 workspaceSearch?.addEventListener('input', () => {
   workspaceSearchQuery = workspaceSearch.value;
-  refreshList().catch((err) => toast(err.message, 'error'));
+  clearTimeout(workspaceSearchTimer);
+  workspaceSearchTimer = setTimeout(() => {
+    refreshList().catch((err) => toast(err.message, 'error'));
+  }, 180);
 });
 workspaceSearch?.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape' || !workspaceSearch.value) return;
   event.preventDefault();
   workspaceSearch.value = '';
   workspaceSearchQuery = '';
+  clearTimeout(workspaceSearchTimer);
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 const workspaceFilter = $('#workspaceFilter');
@@ -1548,6 +1553,7 @@ workspaceSortSelect?.addEventListener('change', () => {
 });
 $('#resetWorkspaceView')?.addEventListener('click', () => {
   workspaceSearchQuery = '';
+  clearTimeout(workspaceSearchTimer);
   workspaceStatusFilter = 'all';
   workspaceSort = 'recent';
   if (workspaceSearch) workspaceSearch.value = '';
