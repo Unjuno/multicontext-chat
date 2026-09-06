@@ -11,6 +11,7 @@ import { createApplication } from './application.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = path.resolve(__dirname, '../public');
+const APP_VERSION = '0.2.0';
 const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': 'tauri://localhost', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS' }); res.end(status === 204 ? '' : JSON.stringify(body)); };
 const readBody = async (req) => {
   const chunks = []; let bytes = 0;
@@ -153,7 +154,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (req.method === 'OPTIONS') return json(res, 204, null);
     if (!authorized(req)) return json(res, 401, { error: 'Unauthorized' });
     const parts = url.pathname.split('/').filter(Boolean);
-    if (url.pathname === '/api/health' && req.method === 'GET') { const librechat = await client.health(); return json(res, librechat.ok ? 200 : 503, { ok: librechat.ok, librechat, publicUrl: config.publicUrl || null }); }
+    if (url.pathname === '/api/health' && req.method === 'GET') { const librechat = await client.health(); return json(res, librechat.ok ? 200 : 503, { ok: librechat.ok, version: APP_VERSION, librechat, publicUrl: config.publicUrl || null }); }
     if (url.pathname === '/api/agents' && req.method === 'GET') {
       try {
         const agents = await app.listAgents();

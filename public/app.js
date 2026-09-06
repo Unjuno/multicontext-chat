@@ -216,7 +216,7 @@ async function refreshHealth() {
   try {
     const health = await request('/api/health');
     $('#health').textContent = `LibreChat ${health.librechat.mode} · ${health.librechat.agents} エージェント · ${health.librechat.latencyMs}ms`;
-    $('#health').title = `mode=${health.librechat.mode} agents=${health.librechat.agents} latency=${health.librechat.latencyMs}ms`;
+    $('#health').title = `MultiContext v${health.version || '不明'} · mode=${health.librechat.mode} agents=${health.librechat.agents} latency=${health.librechat.latencyMs}ms`;
   } catch (error) {
     $('#health').textContent = `LibreChat 接続不可 · ${error.message}`;
     $('#health').title = error.message;
