@@ -355,7 +355,7 @@ async function pollRuntime() {
       // with an endless CHECKING state after navigation.
       const cachedModel = runtimeStatuses.find((status) => status.name === 'モデル');
       const desktopPage = window.location.hostname === '127.0.0.1' && (Boolean(localStorage.getItem('mcc_api_base')) || new URLSearchParams(window.location.search).get('desktop_ready') === '1');
-      const modelState = cachedModel?.state === 'ready' || desktopPage ? 'ready' : 'checking';
+      const modelState = cachedModel?.state === 'ready' || desktopPage || window.location.hostname === '127.0.0.1' ? 'ready' : 'checking';
       const modelMsg = modelState === 'ready' ? (cachedModel.message || '準備完了') : 'デスクトップランタイムで確認中';
       base = [
         { name: 'モデル', state: modelState, message: modelMsg, ownership: null, attempt_id: 0 },
