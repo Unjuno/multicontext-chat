@@ -1823,11 +1823,13 @@ function openSidebar() {
   sidebar?.classList.add('open');
   if (overlay) overlay.hidden = false;
   menuBtn?.setAttribute('aria-expanded', 'true');
+  menuBtn?.setAttribute('aria-label', 'メニューを閉じる');
 }
 function closeSidebar() {
   sidebar?.classList.remove('open');
   if (overlay) overlay.hidden = true;
   menuBtn?.setAttribute('aria-expanded', 'false');
+  menuBtn?.setAttribute('aria-label', 'メニューを開く');
 }
 menuBtn?.addEventListener('click', () => {
   if (sidebar?.classList.contains('open')) closeSidebar(); else openSidebar();
