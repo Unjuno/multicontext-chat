@@ -14,7 +14,7 @@ export function workspaceStatusLabel(state) {
 }
 
 export function memberStatusLabel(state) {
-  const labels = { error: 'ブロック中', running: '実行中', idle: '待機' };
+  const labels = { error: 'ブロック中', running: '実行中', idle: '待機中' };
   const normalized = String(state || '').toLowerCase();
   const label = labels[normalized] || '状態確認中';
   const cls = normalized === 'error' ? 'blocked' : normalized || 'unknown';
