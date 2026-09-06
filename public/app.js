@@ -536,6 +536,10 @@ function initRuntimeStatus() {
         btn.setAttribute('aria-expanded','false');
       }
     });
+    dialog.addEventListener('close', () => {
+      btn.setAttribute('aria-expanded','false');
+      btn.focus();
+    });
     refreshBtn?.addEventListener('click', () => {
       refreshBtn.disabled = true;
       pollRuntime().finally(() => { refreshBtn.disabled = false; });
