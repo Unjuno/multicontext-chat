@@ -957,7 +957,14 @@ function renderOrchestratorDrawer(data) {
   }).join('');
   const historyItems = qHistory.slice(-10);
   const histHtml = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">履歴 (${qHistory.length})</div>${historyItems.map(it=>`<div class="orchestrator-event ${esc(it.origin)}">${esc(it.state)} ${esc(it.prompt.slice(0,60))}</div>`).join('') || '<div class="small">空です</div>'}</div>`;
-  const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${esc(e.origin)}">${esc(e.ts.slice(11,19))} ${esc(e.type)} <span style="color:var(--text-muted)">${esc(e.origin)}${e.actor?'/'+esc(e.actor):''}</span></div>`).join('');
+  const eventLabels = {
+    'compile.started': 'Compileを開始', 'compile.completed': 'Compileが完了', 'compile.failed': 'Compileに失敗',
+    'member.started': 'メンバーの実行を開始', 'member.completed': 'メンバーの実行が完了',
+    'member.failed': 'メンバーの実行に失敗', 'member.cancelled': 'メンバーをキャンセル',
+    'human.retry': '再試行を開始', 'human.stop': '停止', 'human.send': '直接送信',
+    'human.broadcast': 'ブロードキャスト送信', 'q.enqueued': 'キューへ追加', 'q.dispatched': 'キューを配信',
+  };
+  const evHtml = (data.events||[]).slice(-20).reverse().map(e=>`<div class="orchestrator-event ${esc(e.origin)}">${esc(e.ts.slice(11,19))} ${esc(eventLabels[e.type] || e.type)} <span style="color:var(--text-muted)">${esc(e.origin)}${e.actor?'/'+esc(e.actor):''}</span></div>`).join('');
   body.innerHTML = `<div class="orchestrator-q-group"><div class="orchestrator-q-title">ライブ活動</div>${activityHtml}</div>` + pendingHtml + histHtml + `<div class="orchestrator-q-group"><div class="orchestrator-q-title">イベント</div>${evHtml || '<div class="small">イベントはまだありません</div>'}</div>`;
 }
 function renderOrchestratorBar(data) {
