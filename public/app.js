@@ -1019,6 +1019,8 @@ function renderOrchestratorBar(data) {
   const bar = document.getElementById('orchestratorBar');
   if (!bar || !data) return;
   bar.style.display = 'flex';
+  bar.setAttribute('role', 'status');
+  bar.setAttribute('aria-live', 'polite');
   // P1 fix: use pending/history split from store (queue is pending only, queueHistory is terminal)
   const qPending = data.queue || [];
   const qHistory = data.queueHistory || [];
@@ -1045,11 +1047,11 @@ function renderOrchestratorBar(data) {
   const runningMembers = liveMembers.filter(member => member.status === 'running').length;
   const answeredMembers = liveMembers.filter(member => (member.messages || []).some(message => message.role === 'assistant')).length;
   const progress = liveMembers.length ? Math.round((answeredMembers / liveMembers.length) * 100) : 0;
-  const followTag = following && cur ? ` <span class="ob-follow" title="Agent experiment under observation">◎追跡中 ${esc(cur.id.slice(0,8))}</span>` : '';
+  const followTag = following && cur ? ` <span class="ob-follow" title="この実行の進行状況を表示中">◎追跡中 ${esc(cur.id.slice(0,8))}</span>` : '';
   bar.innerHTML = `
     <span class="ob-dot ${esc(dotCls)}"></span>
     <strong>実行管理</strong> <span class="ob-sep">·</span> ${esc(barStateLabels[barState] || '状態確認中')}${followTag}
-    <span class="ob-sep">·</span> Q0 ${q0} <span class="ob-sep">|</span> Q1 ${q1} <span class="ob-sep">|</span> Q2 ${q2}
+    <span class="ob-sep">·</span> 優先度 高 ${q0} <span class="ob-sep">|</span> 標準 ${q1} <span class="ob-sep">|</span> 低 ${q2}
     <span class="ob-sep">·</span> ${curText}
     <span class="ob-progress" title="回答済み ${answeredMembers} / ${liveMembers.length} チャット"><span class="ob-progress-track"><span style="width:${progress}%"></span></span><span>${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
     <span style="flex:1"></span>
