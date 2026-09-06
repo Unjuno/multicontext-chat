@@ -1457,6 +1457,7 @@ function wire(workspace) {
     const dirty = cur.wname !== serverVals.wname || cur.globalPrompt !== serverVals.globalPrompt || cur.compileAgentId !== serverVals.compileAgentId || cur.compilePrompt !== serverVals.compilePrompt || cur.defaultAgentId !== serverVals.defaultAgentId || cur.agentSelectionMode !== serverVals.agentSelectionMode;
     if (saveBtn) {
       saveBtn.textContent = 'ワークスペース設定を保存';
+      saveBtn.disabled = !dirty;
       saveBtn.classList.toggle('needs-save', dirty);
       saveBtn.title = dirty ? '未保存の変更があります — クリックで保存' : 'ワークスペース・共通指示・統合レポート設定を保存';
     }
