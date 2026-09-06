@@ -157,7 +157,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     }
     if (url.pathname === '/api/workspaces' && req.method === 'GET') {
       try {
-        const workspaces = await app.listWorkspaces();
+        const workspaces = await app.listWorkspaces({ includeArchived: url.searchParams.get('include_archived') === 'true' });
         return json(res, 200, { workspaces });
       } catch (e) { return json(res, e.status || 500, { error: e.message }); }
     }
@@ -202,6 +202,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         if (body.compile_agent_id !== undefined) patch.compileAgentId = body.compile_agent_id;
         if (body.compilePrompt !== undefined) patch.compilePrompt = body.compilePrompt;
         if (body.compile_prompt !== undefined) patch.compilePrompt = body.compile_prompt;
+        if (body.archived !== undefined) patch.archived = body.archived;
         if (body.settings !== undefined) patch.settings = body.settings;
         const view = await app.updateWorkspace(workspaceId, patch);
         return json(res, 200, enrichView(view, req));

@@ -33,6 +33,7 @@ function sanitizeWorkspace(workspace, runtimeState, runningMemberIds, includeMes
     compileAgentId: workspace.compileAgentId || '',
     compilePrompt: workspace.compilePrompt || '',
     defaultAgentId: workspace.defaultAgentId || '',
+    archived: Boolean(workspace.archived),
     settings: workspace.settings,
     members,
     createdAt: workspace.createdAt,
@@ -231,8 +232,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   // Public operations
-  async function listWorkspaces() {
-    const workspaces = store.listWorkspaces().map(w => {
+  async function listWorkspaces({ includeArchived = false } = {}) {
+    const workspaces = store.listWorkspaces({ includeArchived }).map(w => {
       const runtimeState = store.runtimeState(w.id, scheduler.runningMemberIds(w.id));
       return { ...w, runtimeState, settled: runtimeState === 'SETTLED' };
     });
@@ -328,6 +329,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (patch.defaultAgentId !== undefined) patchClean.defaultAgentId = patch.defaultAgentId;
     if (patch.compileAgentId !== undefined) patchClean.compileAgentId = patch.compileAgentId;
     if (patch.compilePrompt !== undefined) patchClean.compilePrompt = patch.compilePrompt;
+    if (patch.archived !== undefined) patchClean.archived = patch.archived;
     if (patch.settings !== undefined) patchClean.settings = patch.settings;
     store.updateWorkspace(workspaceId, patchClean);
     return getWorkspace(workspaceId);

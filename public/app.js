@@ -8,7 +8,7 @@ let agents = [];
 let refreshController = null;
 const openEditors = new Set();
 let workspaceSearchQuery = '';
-const workspaceFilterValues = new Set(['all', 'RUNNING', 'PENDING', 'BLOCKED', 'SETTLED']);
+const workspaceFilterValues = new Set(['all', 'RUNNING', 'PENDING', 'BLOCKED', 'SETTLED', 'ARCHIVED']);
 const savedWorkspaceFilter = localStorage.getItem('mcc_workspace_filter');
 let workspaceStatusFilter = workspaceFilterValues.has(savedWorkspaceFilter) ? savedWorkspaceFilter : 'all';
 let workspaceSort = localStorage.getItem('mcc_workspace_sort') === 'name' ? 'name' : 'recent';
@@ -475,7 +475,7 @@ async function refreshAgents(expectedId = currentId) {
 }
 
 async function refreshList(expectedId = currentId) {
-  const data = await request('/api/workspaces');
+  const data = await request(workspaceStatusFilter === 'ARCHIVED' ? '/api/workspaces?include_archived=true' : '/api/workspaces');
   if (expectedId !== currentId) return;
   const workspaces = data.workspaces || [];
   if (!currentId) $('#app')?.setAttribute('aria-busy', 'false');
@@ -486,11 +486,12 @@ async function refreshList(expectedId = currentId) {
     localStorage.setItem('mcc_pinned_workspaces', JSON.stringify(validPinnedIds));
   }
   const stateCounts = workspaces.reduce((counts, workspace) => {
+    if (workspace.archived) { counts.ARCHIVED += 1; return counts; }
     const state = String(workspace.runtimeState || '').toUpperCase();
     if (state in counts) counts[state] += 1;
     return counts;
-  }, { RUNNING: 0, PENDING: 0, BLOCKED: 0, SETTLED: 0 });
-  const filterLabels = { all: 'すべての状態', RUNNING: '実行中', PENDING: 'キューあり', BLOCKED: '要対応', SETTLED: '完了' };
+  }, { RUNNING: 0, PENDING: 0, BLOCKED: 0, SETTLED: 0, ARCHIVED: 0 });
+  const filterLabels = { all: 'すべての状態', RUNNING: '実行中', PENDING: 'キューあり', BLOCKED: '要対応', SETTLED: '完了', ARCHIVED: 'アーカイブ済み' };
   $$('#workspaceFilter option').forEach((option) => {
     const value = option.value;
     option.textContent = `${filterLabels[value] || value} (${value === 'all' ? workspaces.length : (stateCounts[value] || 0)})`;
@@ -498,7 +499,7 @@ async function refreshList(expectedId = currentId) {
   const query = workspaceSearchQuery.trim().toLowerCase();
   const visibleWorkspaces = workspaces.filter((workspace) => {
     const matchesQuery = !query || String(workspace.name || '').toLowerCase().includes(query);
-    const matchesStatus = workspaceStatusFilter === 'all' || String(workspace.runtimeState || '').toUpperCase() === workspaceStatusFilter;
+    const matchesStatus = workspaceStatusFilter === 'ARCHIVED' ? Boolean(workspace.archived) : !workspace.archived && (workspaceStatusFilter === 'all' || String(workspace.runtimeState || '').toUpperCase() === workspaceStatusFilter);
     return matchesQuery && matchesStatus;
   }).sort((a, b) => {
     const pinOrder = Number(pinnedWorkspaceIds.has(b.id)) - Number(pinnedWorkspaceIds.has(a.id));
@@ -1008,6 +1009,7 @@ async function refresh(expectedId = currentId) {
             <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="refreshWorkspace" class="sm" type="button" title="ワークスペースの状態を更新" aria-label="ワークスペースの状態を更新">↻ 更新</button><button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
             <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
             <button id="stop" class="sm danger" title="全チャットの生成とキューを停止">全て停止</button>
+            <button id="archiveWorkspace" class="sm" title="${workspace.archived ? 'ワークスペースを通常一覧へ戻す' : 'ワークスペースをアーカイブ一覧へ移す'}">${workspace.archived ? '復元' : 'アーカイブ'}</button>
             <button id="deleteWorkspace" class="sm danger" title="このワークスペースを削除">削除</button>
           </div>
         </div>
@@ -1114,6 +1116,15 @@ function wire(workspace) {
     await withBusy(e.currentTarget, async () => {
       await refreshPreservingDrafts(workspace.id);
       toast('ワークスペースを更新しました', 'success');
+    }).catch((err) => toast(err.message, 'error'));
+  };
+  $('#archiveWorkspace').onclick = async (e) => {
+    const action = workspace.archived ? '復元' : 'アーカイブ';
+    if (!confirm(`「${workspace.name}」を${action}しますか？`)) return;
+    await withBusy(e.currentTarget, async () => {
+      await request(`/api/workspaces/${workspace.id}`, { method: 'PATCH', body: JSON.stringify({ archived: !workspace.archived }) });
+      localStorage.setItem('mcc_last_workspace', workspace.id);
+      location.reload();
     }).catch((err) => toast(err.message, 'error'));
   };
   const saveBtn = $('#saveWorkspace');
@@ -1517,6 +1528,11 @@ await Promise.all([refreshHealth(), refreshAgents(), refreshList().catch((error)
 })]);
 const savedWorkspaceId = localStorage.getItem('mcc_last_workspace');
 const openLaunchWorkspace = async (workspace) => {
+  if (workspace.archived) {
+    workspaceStatusFilter = 'ARCHIVED';
+    if (workspaceFilter) workspaceFilter.value = 'ARCHIVED';
+    localStorage.setItem('mcc_workspace_filter', 'ARCHIVED');
+  }
   const state = String(workspace.runtimeState || '').toUpperCase();
   if (workspaceStatusFilter !== 'all' && state !== workspaceStatusFilter) {
     workspaceStatusFilter = 'all';
@@ -1527,7 +1543,7 @@ const openLaunchWorkspace = async (workspace) => {
 };
 if (savedWorkspaceId) {
   try {
-    const { workspaces = [] } = await request('/api/workspaces');
+    const { workspaces = [] } = await request('/api/workspaces?include_archived=true');
     const savedWorkspace = workspaces.find((workspace) => String(workspace.id) === savedWorkspaceId);
     if (savedWorkspace) await openLaunchWorkspace(savedWorkspace);
     else {
@@ -1541,7 +1557,7 @@ if (savedWorkspaceId) {
   }
 } else {
   try {
-    const { workspaces = [] } = await request('/api/workspaces');
+    const { workspaces = [] } = await request('/api/workspaces?include_archived=true');
     const fallback = workspaces.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
     if (fallback) await openLaunchWorkspace(fallback);
   } catch {

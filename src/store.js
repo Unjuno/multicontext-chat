@@ -29,6 +29,7 @@ export class StateStore {
     this.state.version = 2;
     for (const workspace of Object.values(this.state.workspaces)) {
       workspace.compilePrompt ??= defaultCompilePrompt();
+      workspace.archived ??= false;
       workspace.defaultAgentId ??= '';
       workspace.settings ??= {};
       workspace.settings.allowCrossChatInspect ??= true;
@@ -105,7 +106,7 @@ export class StateStore {
     fs.renameSync(tmp, this.filePath);
   }
 
-  listWorkspaces() { return Object.values(this.state.workspaces).map((w) => this.publicWorkspace(w, false)); }
+  listWorkspaces({ includeArchived = false } = {}) { return Object.values(this.state.workspaces).filter((w) => includeArchived || !w.archived).map((w) => this.publicWorkspace(w, false)); }
   getWorkspace(id) { return this.state.workspaces[id] ?? null; }
   requireWorkspace(id) { const w = this.getWorkspace(id); if (!w) throw problem('Workspace not found', 404); return w; }
   getMember(workspaceId, memberId) { return this.getWorkspace(workspaceId)?.members?.[memberId] ?? null; }
@@ -125,6 +126,7 @@ export class StateStore {
       settings: { allowCrossChatInspect: input.settings?.allowCrossChatInspect !== false, allowCrossChatSend: input.settings?.allowCrossChatSend !== false, agentSelectionMode: input.settings?.agentSelectionMode === 'auto_first' ? 'auto_first' : 'require_selection' },
       crossChatReceipts: {}, members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
       stats: { broadcasts: 0, executions: 0, toolEnqueues: 0, inspections: 0 },
+      archived: false,
       orchestratorQueue: [], orchestratorRuns: {}, orchestratorEvents: [], orchestratorPaused: false,
     };
     this.state.workspaces[id] = workspace; this.save(); return workspace;
@@ -136,6 +138,7 @@ export class StateStore {
     if (patch.globalPrompt !== undefined) workspace.globalPrompt = String(patch.globalPrompt);
     if (patch.compileAgentId !== undefined) workspace.compileAgentId = String(patch.compileAgentId);
     if (patch.compilePrompt !== undefined) workspace.compilePrompt = String(patch.compilePrompt);
+    if (patch.archived !== undefined) workspace.archived = Boolean(patch.archived);
     if (patch.defaultAgentId !== undefined) workspace.defaultAgentId = String(patch.defaultAgentId);
     if (patch.settings) {
       if (patch.settings.allowCrossChatInspect !== undefined) workspace.settings.allowCrossChatInspect = Boolean(patch.settings.allowCrossChatInspect);

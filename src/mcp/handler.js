@@ -61,17 +61,19 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
         default_agent_id: z.string().optional(),
         compile_agent_id: z.string().optional(),
         compile_prompt: z.string().optional(),
+        archived: z.boolean().optional(),
         allow_cross_chat_inspect: z.boolean().optional(),
         allow_cross_chat_send: z.boolean().optional(),
         agent_selection_mode: z.enum(['require_selection', 'auto_first']).optional(),
       }),
-    }, async ({ workspace_id, name, system_prompt, default_agent_id, compile_agent_id, compile_prompt, allow_cross_chat_inspect, allow_cross_chat_send, agent_selection_mode }) => {
+    }, async ({ workspace_id, name, system_prompt, default_agent_id, compile_agent_id, compile_prompt, archived, allow_cross_chat_inspect, allow_cross_chat_send, agent_selection_mode }) => {
       const patch = {};
       if (name !== undefined) patch.name = name;
       if (system_prompt !== undefined) patch.globalPrompt = system_prompt;
       if (default_agent_id !== undefined) patch.defaultAgentId = default_agent_id;
       if (compile_agent_id !== undefined) patch.compileAgentId = compile_agent_id;
       if (compile_prompt !== undefined) patch.compilePrompt = compile_prompt;
+      if (archived !== undefined) patch.archived = archived;
       if (allow_cross_chat_inspect !== undefined || allow_cross_chat_send !== undefined) {
         patch.settings = {
           ...(allow_cross_chat_inspect !== undefined ? { allowCrossChatInspect: allow_cross_chat_inspect } : {}),
