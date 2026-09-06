@@ -501,6 +501,8 @@ aside h3 {
 .status.settled::before { background: var(--settled); }
 .status.idle { background: var(--idle-bg); color: var(--text-muted); }
 .status.idle::before { background: #d4d4d4; }
+.status.archived { background: #f1f5f9; color: #475569; }
+.status.archived::before { background: #64748b; }
 
 .error-banner {
   background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 6px;

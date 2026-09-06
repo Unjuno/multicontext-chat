@@ -1006,7 +1006,7 @@ async function refresh(expectedId = currentId) {
         <div class="workspace-top">
           <div class="workspace-identity">
             <input id="wname" value="${esc(workspace.name)}" maxlength="120" aria-label="ワークスペース名" title="ワークスペース名は120文字以内です">
-            ${workspaceStatusHtml(workspace.runtimeState)}
+            ${workspaceStatusHtml(workspace.runtimeState)}${workspace.archived ? '<span class="status archived">アーカイブ済み</span>' : ''}
           </div>
           <div class="workspace-toolbar">
             <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="refreshWorkspace" class="sm" type="button" title="ワークスペースの状態を更新" aria-label="ワークスペースの状態を更新">↻ 更新</button><button id="saveWorkspace" class="sm primary" title="ワークスペース・System Prompt・Compile設定を保存">ワークスペース設定を保存</button>
