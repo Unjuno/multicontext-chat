@@ -1446,8 +1446,11 @@ async function refresh(expectedId = currentId) {
       const retryLabel = renderFailed
         ? '画面の更新に失敗しました。保存済みの内容を表示しています。'
         : '最新情報を取得できません。一時的な表示を確認中です。';
+      const retryProgress = renderFailed && workspaceRetryAttempt < 3
+        ? `自動で再試行しています（${workspaceRetryAttempt + 1} / 3）`
+        : '再試行ボタンから、いつでも手動で更新できます。';
       banner.innerHTML = hasStaleData
-        ? `<strong>${renderFailed ? '更新を完了できませんでした' : '最新情報を取得できません'}</strong><span>${retryLabel}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`
+        ? `<strong>${renderFailed ? '更新を完了できませんでした' : '最新情報を取得できません'}</strong><span>${retryLabel}</span><small>${retryProgress}</small><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`
         : `<span>更新失敗: ${esc(error.message)}</span><button class="sm" type="button" data-action="refresh-workspace">再試行</button>`;
       banner.querySelector('[data-action="refresh-workspace"]').onclick = (event) => {
         const retry = event.currentTarget;
