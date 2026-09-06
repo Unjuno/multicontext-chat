@@ -1172,7 +1172,7 @@ function memberCard(workspace, member) {
           ${member.messages.map((message) => `
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
               <div class="msg-head">${esc(messageRoleLabel(message.role))}${message.at ? ` · ${esc(displayTimestamp(message.at))}` : ''}${message.pending ? ' · 処理中' : ''}</div>
-              ${esc(message.content)}
+              ${renderCompileText(message.content)}
             </div>
           `).join('')}
         </div>
