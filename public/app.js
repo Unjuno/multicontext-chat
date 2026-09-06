@@ -9,6 +9,7 @@ let refreshController = null;
 const openEditors = new Set();
 let workspaceSearchQuery = '';
 let workspaceStatusFilter = 'all';
+let workspaceSort = 'recent';
 
 const savedTheme = localStorage.getItem('mcc_theme');
 if (savedTheme === 'dark' || savedTheme === 'light') document.documentElement.dataset.theme = savedTheme;
@@ -458,7 +459,9 @@ async function refreshList(expectedId = currentId) {
     const matchesQuery = !query || String(workspace.name || '').toLowerCase().includes(query);
     const matchesStatus = workspaceStatusFilter === 'all' || String(workspace.runtimeState || '').toUpperCase() === workspaceStatusFilter;
     return matchesQuery && matchesStatus;
-  });
+  }).sort((a, b) => workspaceSort === 'name'
+    ? String(a.name || '').localeCompare(String(b.name || ''), 'ja')
+    : String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
   const count = document.getElementById('workspaceCount');
   if (count) count.textContent = (query || workspaceStatusFilter !== 'all') ? `${visibleWorkspaces.length}/${workspaces.length}` : `${workspaces.length}`;
   if (!workspaces.length) {
@@ -1325,6 +1328,11 @@ workspaceSearch?.addEventListener('input', () => {
 const workspaceFilter = $('#workspaceFilter');
 workspaceFilter?.addEventListener('change', () => {
   workspaceStatusFilter = workspaceFilter.value;
+  refreshList().catch((err) => toast(err.message, 'error'));
+});
+const workspaceSortSelect = $('#workspaceSort');
+workspaceSortSelect?.addEventListener('change', () => {
+  workspaceSort = workspaceSortSelect.value;
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 
