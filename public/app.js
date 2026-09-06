@@ -1358,7 +1358,7 @@ async function refresh(expectedId = currentId) {
             ${workspaceStatusHtml(workspace.runtimeState)}${workspace.archived ? '<span class="status archived">アーカイブ済み</span>' : ''}
           </div>
           <div class="workspace-toolbar">
-            <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span><button id="refreshWorkspace" class="sm" type="button" title="ワークスペースの状態を更新" aria-label="ワークスペースの状態を更新">↻ 更新</button><button id="saveWorkspace" class="sm primary" title="ワークスペース・共通指示・統合レポート設定を保存">ワークスペース設定を保存</button>
+            <span id="workspaceSaveState" class="save-state" aria-live="polite">保存済み</span>${workspaceUpdatedLabel(workspace) ? `<span class="workspace-last-updated" title="サーバーから取得した最終更新時刻">更新: ${esc(workspaceUpdatedLabel(workspace))}</span>` : ''}<button id="refreshWorkspace" class="sm" type="button" title="ワークスペースの状態を更新" aria-label="ワークスペースの状態を更新">↻ 更新</button><button id="saveWorkspace" class="sm primary" title="ワークスペース・共通指示・統合レポート設定を保存">ワークスペース設定を保存</button>
             <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
             <button id="stop" class="sm danger" ${hasWorkToStop ? '' : 'disabled'} title="${hasWorkToStop ? `実行中${runningMembers}件・キュー${queuedMessages}件を停止` : '停止する生成やキューはありません'}">全て停止</button>
             <button id="archiveWorkspace" class="sm" ${archiveDisabled ? 'disabled' : ''} title="${archiveDisabled ? '実行中またはキュー待ちのためアーカイブできません' : workspace.archived ? 'ワークスペースを通常一覧へ戻す' : 'ワークスペースをアーカイブ一覧へ移す'}">${workspace.archived ? '復元' : 'アーカイブ'}</button>

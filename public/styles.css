@@ -531,6 +531,7 @@ aside h3 {
   padding: 10px 14px; margin: 12px 0; font-size: 0.85rem; display: flex; align-items: center; gap: 10px;
 }
 .error-banner span { flex: 1; }
+.workspace-last-updated { color: var(--text-muted); font-size: 10px; white-space: nowrap; }
 .error-banner strong { color: inherit; font-size: 12px; }
 .error-banner small { color: inherit; opacity: .8; }
 .refresh-diagnostic { flex: 1 1 100%; min-width: 0; font-size: 11px; }
