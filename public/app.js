@@ -1303,7 +1303,10 @@ function wire(workspace) {
   };
 
   $('#compile').onclick = async (e) => {
+    const compileSection = e.currentTarget.closest('.compile');
     await withBusy(e.currentTarget, async () => {
+      e.currentTarget.textContent = '生成中…';
+      compileSection?.setAttribute('aria-busy', 'true');
       await request(`/api/workspaces/${workspace.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ compileAgentId: $('#compileAgentId').value, compilePrompt: $('#compilePrompt').value }),
@@ -1311,7 +1314,9 @@ function wire(workspace) {
       await request(`/api/workspaces/${workspace.id}/compile`, { method: 'POST', body: '{}' });
       await refreshPreservingDrafts(workspace.id);
       toast('コンパイルが完了しました', 'success');
-    }).catch((err) => toast(err.message, 'error'));
+    }).catch((err) => toast(err.message, 'error')).finally(() => {
+      compileSection?.removeAttribute('aria-busy');
+    });
   };
 
   const copyCompile = $('#copyCompile');
