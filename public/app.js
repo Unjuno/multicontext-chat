@@ -91,6 +91,18 @@ function workspaceUpdatedLabel(workspace) {
   if (days < 7) return `${days}日前`;
   return new Date(time).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
 }
+function resetWorkspaceViewState() {
+  workspaceSearchQuery = '';
+  workspaceListExpanded = false;
+  clearTimeout(workspaceSearchTimer);
+  workspaceStatusFilter = 'all';
+  workspaceSort = 'recent';
+  if (workspaceSearch) workspaceSearch.value = '';
+  if (workspaceFilter) workspaceFilter.value = 'all';
+  if (workspaceSortSelect) workspaceSortSelect.value = 'recent';
+  localStorage.setItem('mcc_workspace_filter', 'all');
+  localStorage.setItem('mcc_workspace_sort', 'recent');
+}
 function agentOptionsHtml(selectedId, includeDefault) {
   const opts = [];
   if (includeDefault) {
@@ -607,10 +619,7 @@ async function refreshList(expectedId = currentId) {
       <button class="sm" type="button" data-action="clear-workspace-filters">条件をクリア</button>
     </div>`;
     $('#workspaces [data-action="clear-workspace-filters"]').onclick = () => {
-      workspaceSearchQuery = '';
-      workspaceStatusFilter = 'all';
-      if (workspaceSearch) workspaceSearch.value = '';
-      if (workspaceFilter) workspaceFilter.value = 'all';
+      resetWorkspaceViewState();
       refreshList().catch((err) => toast(err.message, 'error'));
     };
     return;
@@ -1646,16 +1655,7 @@ workspaceSortSelect?.addEventListener('change', () => {
   refreshList().catch((err) => toast(err.message, 'error'));
 });
 $('#resetWorkspaceView')?.addEventListener('click', () => {
-  workspaceSearchQuery = '';
-  workspaceListExpanded = false;
-  clearTimeout(workspaceSearchTimer);
-  workspaceStatusFilter = 'all';
-  workspaceSort = 'recent';
-  if (workspaceSearch) workspaceSearch.value = '';
-  if (workspaceFilter) workspaceFilter.value = 'all';
-  if (workspaceSortSelect) workspaceSortSelect.value = 'recent';
-  localStorage.setItem('mcc_workspace_filter', 'all');
-  localStorage.setItem('mcc_workspace_sort', 'recent');
+  resetWorkspaceViewState();
   refreshList().then(() => toast('表示条件をリセットしました', 'success')).catch((err) => toast(err.message, 'error'));
 });
 
