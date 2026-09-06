@@ -375,7 +375,8 @@ async function pollRuntime() {
       // gate accepted the model. A later browser-side re-probe cannot inspect
       // the managed/external model reliably, so it must not downgrade that
       // already-approved state to CHECKING.
-      if (window.location.protocol === 'tauri:' && baseModel && baseModel.state !== 'error') {
+      const desktopStartupApproved = window.location.hostname === '127.0.0.1' && Boolean(localStorage.getItem('mcc_api_base'));
+      if (desktopStartupApproved && baseModel && baseModel.state !== 'error') {
         baseModel.state = 'ready';
         baseModel.message = '準備完了';
       }
