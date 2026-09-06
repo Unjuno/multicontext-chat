@@ -1194,6 +1194,8 @@ function memberCard(workspace, member) {
     if (!member.lastError) return '';
     const m = String(member.lastError);
     if (m.includes('LibreChat agentId is required')) return '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
+    if (m.includes('Agentが利用不可です') || m.includes('Agentが利用不可')) return `${m} 設定を開いて利用可能なAgentを選択してください。`;
+    if (m.includes('Agentが未設定です')) return `${m} 設定を開いてAgentを選択してください。`;
     if (/context size|context length|too many tokens/i.test(m)) return '会話の履歴がAgentのコンテキスト上限を超えました。キューと履歴は保持されています。履歴を整理してから、もう一度再試行してください。';
     if (m.includes('peg-native format')) return 'Agentの応答形式を確認できませんでした。キューは保持されています。もう一度実行してください。';
     return m;
