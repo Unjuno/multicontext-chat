@@ -1032,6 +1032,7 @@ function memberCard(workspace, member) {
     if (m.includes('peg-native format')) return 'Agentの応答形式を確認できませんでした。キューは保持されています。もう一度実行してください。';
     return m;
   })();
+  const contextLimitError = /context size|context length|too many tokens/i.test(String(member.lastError || ''));
   return `
     <article class="member" data-mid="${member.id}">
       <div class="member-header">
@@ -1040,7 +1041,7 @@ function memberCard(workspace, member) {
           ${memberStatusHtml(member.status)}
         </div>
         <div class="member-actions">
-          ${member.status === 'error' ? '<button class="sm primary" data-action="retry" title="キューを保持したまま再試行">再試行</button>' : ''}
+          ${member.status === 'error' ? `<button class="sm primary" data-action="retry" title="${contextLimitError ? '履歴を整理してから、キューを保持したまま再試行' : 'キューを保持したまま再試行'}">${contextLimitError ? '整理後に再試行' : '再試行'}</button>` : ''}
           ${member.inFlight ? '<button class="sm danger" data-action="stop" title="実行中の生成を停止">停止</button>' : ''}
           <button class="sm" data-action="edit" aria-expanded="${openEditors.has(member.id) ? 'true' : 'false'}" title="設定">設定</button>
           <button class="sm" data-action="copytool" title="Action URLをコピー">URL</button>
