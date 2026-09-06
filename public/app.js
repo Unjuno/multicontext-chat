@@ -7,6 +7,7 @@ let timer = null;
 let agents = [];
 let refreshController = null;
 const openEditors = new Set();
+let workspaceSearchQuery = '';
 let lastWorkspace = null; // server snapshot for dirty checks
 
 function agentNameForId(id) {
@@ -418,11 +419,19 @@ async function refreshList(expectedId = currentId) {
   const data = await request('/api/workspaces');
   if (expectedId !== currentId) return;
   const workspaces = data.workspaces || [];
+  const query = workspaceSearchQuery.trim().toLowerCase();
+  const visibleWorkspaces = query ? workspaces.filter((workspace) => String(workspace.name || '').toLowerCase().includes(query)) : workspaces;
+  const count = document.getElementById('workspaceCount');
+  if (count) count.textContent = query ? `${visibleWorkspaces.length}/${workspaces.length}` : `${workspaces.length}`;
   if (!workspaces.length) {
     $('#workspaces').innerHTML = '<div class="small" style="padding:8px 10px">まだワークスペースがありません</div>';
     return;
   }
-  $('#workspaces').innerHTML = workspaces.map((workspace) => {
+  if (!visibleWorkspaces.length) {
+    $('#workspaces').innerHTML = '<div class="small workspace-no-results">一致するワークスペースがありません</div>';
+    return;
+  }
+  $('#workspaces').innerHTML = visibleWorkspaces.map((workspace) => {
     const members = workspace.members || {};
     const count = Object.keys(members).length;
     const active = Object.values(members).filter((m) => m.active !== false).length;
@@ -1193,6 +1202,11 @@ menuBtn?.addEventListener('click', () => {
 });
 overlay?.addEventListener('click', closeSidebar);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
+const workspaceSearch = $('#workspaceSearch');
+workspaceSearch?.addEventListener('input', () => {
+  workspaceSearchQuery = workspaceSearch.value;
+  refreshList().catch((err) => toast(err.message, 'error'));
+});
 
 $('#newWorkspace').onclick = async (e) => {
   if (isWorkspaceDirty() && currentId) {

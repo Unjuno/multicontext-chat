@@ -39,7 +39,8 @@
 
   <main>
     <aside id="sidebar" aria-label="ワークスペース一覧">
-      <h3>ワークスペース</h3>
+      <div class="sidebar-heading"><h3>ワークスペース</h3><span id="workspaceCount" class="small" aria-live="polite"></span></div>
+      <label class="workspace-search"><span class="sr-only">ワークスペースを検索</span><input id="workspaceSearch" type="search" placeholder="ワークスペースを検索" aria-label="ワークスペースを検索"></label>
       <div id="workspaces" role="list"></div>
       <div class="sidebar-foot">
         <span class="small">ヒント: ブロードキャストは全アクティブチャットに同時配信されます</span>
