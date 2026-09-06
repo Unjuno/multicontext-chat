@@ -57,7 +57,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
       description: 'Update workspace name, system prompt, default agent, compile settings',
       inputSchema: z.object({
         workspace_id: z.string().min(1),
-        name: z.string().optional(),
+        name: z.string().max(120).optional(),
         system_prompt: z.string().optional(),
         default_agent_id: z.string().optional(),
         compile_agent_id: z.string().optional(),
