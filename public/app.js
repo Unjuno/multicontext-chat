@@ -782,7 +782,7 @@ function queueInfo(member) {
 // ── Snapshot / restore form state across refresh ────────────────
 function snapshotFormState() {
   const snap = {};
-  for (const id of ['wname', 'globalPrompt', 'broadcastPrompt', 'compileAgentId', 'compilePrompt']) {
+  for (const id of ['wname', 'globalPrompt', 'broadcastPrompt', 'compileAgentId', 'compilePrompt', 'defaultAgentId', 'agentSelectionMode']) {
     const el = document.getElementById(id);
     if (el) snap[id] = el.value;
   }
@@ -805,7 +805,7 @@ function snapshotFormState() {
 
 function restoreFormState(snap) {
   if (!snap) return;
-  for (const id of ['wname', 'globalPrompt', 'broadcastPrompt', 'compileAgentId', 'compilePrompt']) {
+  for (const id of ['wname', 'globalPrompt', 'broadcastPrompt', 'compileAgentId', 'compilePrompt', 'defaultAgentId', 'agentSelectionMode']) {
     const el = document.getElementById(id);
     if (el && snap[id] !== undefined) el.value = snap[id];
   }
@@ -860,14 +860,18 @@ function isWorkspaceDirty() {
     globalPrompt: $('#globalPrompt')?.value ?? '',
     compileAgentId: $('#compileAgentId')?.value ?? '',
     compilePrompt: $('#compilePrompt')?.value ?? '',
+    defaultAgentId: $('#defaultAgentId')?.value ?? '',
+    agentSelectionMode: $('#agentSelectionMode')?.value ?? '',
   };
   const srv = {
     wname: String(lastWorkspace.name || ''),
     globalPrompt: String(lastWorkspace.globalPrompt || ''),
     compileAgentId: String(lastWorkspace.compileAgentId || ''),
     compilePrompt: String(lastWorkspace.compilePrompt || ''),
+    defaultAgentId: String(lastWorkspace.defaultAgentId || ''),
+    agentSelectionMode: String(lastWorkspace.agentSelectionMode || ''),
   };
-  if (cur.wname !== srv.wname || cur.globalPrompt !== srv.globalPrompt || cur.compileAgentId !== srv.compileAgentId || cur.compilePrompt !== srv.compilePrompt) return true;
+  if (cur.wname !== srv.wname || cur.globalPrompt !== srv.globalPrompt || cur.compileAgentId !== srv.compileAgentId || cur.compilePrompt !== srv.compilePrompt || cur.defaultAgentId !== srv.defaultAgentId || cur.agentSelectionMode !== srv.agentSelectionMode) return true;
   // check member drafts
   for (const [mid, member] of Object.entries(lastWorkspace.members || {})) {
     const card = document.querySelector(`[data-mid="${mid}"]`);
@@ -901,9 +905,9 @@ async function refreshPreservingDrafts(expectedId = currentId) {
   if (expectedId === currentId) {
     restoreFormState(snap);
     restoreScrollPositions(scrolls);
-    for (const id of ['wname','globalPrompt','compileAgentId','compilePrompt']) {
+    for (const id of ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId','agentSelectionMode']) {
       const el = document.getElementById(id);
-      if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
+      if (el) el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
     }
   }
 }
@@ -920,9 +924,9 @@ function tick() {
   refresh().then(() => {
     restoreFormState(snap);
     restoreScrollPositions(scrolls);
-    for (const id of ['wname','globalPrompt','compileAgentId','compilePrompt']) {
+    for (const id of ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId','agentSelectionMode']) {
       const el = document.getElementById(id);
-      if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
+      if (el) el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
     }
   }).finally(() => { ticking = false; scheduleNext(); });
 }
