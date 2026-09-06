@@ -1224,6 +1224,19 @@ menuBtn?.addEventListener('click', () => {
 });
 overlay?.addEventListener('click', closeSidebar);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
+document.addEventListener('keydown', (e) => {
+  const target = e.target;
+  const typing = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    workspaceSearch?.focus();
+    return;
+  }
+  if (e.key === '/' && !typing && currentId) {
+    e.preventDefault();
+    document.getElementById('broadcastPrompt')?.focus();
+  }
+});
 const workspaceSearch = $('#workspaceSearch');
 workspaceSearch?.addEventListener('input', () => {
   workspaceSearchQuery = workspaceSearch.value;
