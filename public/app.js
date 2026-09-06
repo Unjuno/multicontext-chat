@@ -1466,14 +1466,24 @@ $('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInp
 initRuntimeStatus();
 await Promise.all([refreshHealth(), refreshAgents(), refreshList().catch(() => {})]);
 const savedWorkspaceId = localStorage.getItem('mcc_last_workspace');
+const openLaunchWorkspace = async (workspace) => {
+  const state = String(workspace.runtimeState || '').toUpperCase();
+  if (workspaceStatusFilter !== 'all' && state !== workspaceStatusFilter) {
+    workspaceStatusFilter = 'all';
+    if (workspaceFilter) workspaceFilter.value = 'all';
+    localStorage.setItem('mcc_workspace_filter', 'all');
+  }
+  await select(workspace.id);
+};
 if (savedWorkspaceId) {
   try {
     const { workspaces = [] } = await request('/api/workspaces');
-    if (workspaces.some((workspace) => String(workspace.id) === savedWorkspaceId)) await select(savedWorkspaceId);
+    const savedWorkspace = workspaces.find((workspace) => String(workspace.id) === savedWorkspaceId);
+    if (savedWorkspace) await openLaunchWorkspace(savedWorkspace);
     else {
       localStorage.removeItem('mcc_last_workspace');
       const fallback = workspaces.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
-      if (fallback) await select(fallback.id);
+      if (fallback) await openLaunchWorkspace(fallback);
     }
   } catch {
     // Keep the last selection across transient startup/API failures.
@@ -1483,7 +1493,7 @@ if (savedWorkspaceId) {
   try {
     const { workspaces = [] } = await request('/api/workspaces');
     const fallback = workspaces.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
-    if (fallback) await select(fallback.id);
+    if (fallback) await openLaunchWorkspace(fallback);
   } catch {
     // The empty state remains available when the workspace list is unavailable.
   }
