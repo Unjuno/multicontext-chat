@@ -630,6 +630,15 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return getWorkspace(workspaceId);
   }
 
+  function trimChatHistory(workspaceId, chatId, max = 12) {
+    const workspace = store.requireWorkspace(workspaceId);
+    const member = workspace.members[chatId];
+    if (member?.current) throw problem('Cannot trim a running chat', 409);
+    const result = store.trimMessages(workspaceId, chatId, max);
+    try { store.appendEvent(workspaceId, { type: 'human.history_trimmed', origin: 'human', memberId: chatId, detail: result }); } catch {}
+    return { ...result, workspace: getWorkspace(workspaceId) };
+  }
+
   async function getRuntimeStatus(workspaceId = null) {
     const health = await client.health();
     const agentsStatusFull = await getAvailableAgentsWithStatus();
@@ -784,6 +793,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     stopWorkspace,
     stopChat,
     retryChat,
+    trimChatHistory,
     getRuntimeStatus,
     compile,
     waitUntilSettled,

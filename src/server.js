@@ -267,6 +267,13 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         try { const view = await app.retryChat(workspaceId, memberId); return json(res, 202, enrichView(view, req)); }
         catch (e) { return json(res, e.status || 500, { error: e.message }); }
       }
+      if (parts[5] === 'trim-history' && req.method === 'POST') {
+        try {
+          const body = await readBody(req);
+          const result = app.trimChatHistory(workspaceId, memberId, body.max ?? body.keep ?? 12);
+          return json(res, 200, { removed: result.removed, remaining: result.remaining, workspace: enrichView(result.workspace, req) });
+        } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+      }
       if (parts[5] === 'stop' && req.method === 'POST') {
         try {
           const view = await app.stopChat(workspaceId, memberId);

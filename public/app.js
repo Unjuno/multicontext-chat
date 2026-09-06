@@ -1041,7 +1041,7 @@ function memberCard(workspace, member) {
           ${memberStatusHtml(member.status)}
         </div>
         <div class="member-actions">
-          ${member.status === 'error' ? `<button class="sm primary" data-action="retry" title="${contextLimitError ? '履歴を整理してから、キューを保持したまま再試行' : 'キューを保持したまま再試行'}">${contextLimitError ? '整理後に再試行' : '再試行'}</button>` : ''}
+          ${member.status === 'error' ? `${contextLimitError ? '<button class="sm" data-action="trim-history" title="直近12件だけを残して履歴を整理">履歴を整理</button>' : ''}<button class="sm primary" data-action="retry" title="${contextLimitError ? '履歴を整理してから、キューを保持したまま再試行' : 'キューを保持したまま再試行'}">${contextLimitError ? '整理後に再試行' : '再試行'}</button>` : ''}
           ${member.inFlight ? '<button class="sm danger" data-action="stop" title="実行中の生成を停止">停止</button>' : ''}
           <button class="sm" data-action="edit" aria-expanded="${openEditors.has(member.id) ? 'true' : 'false'}" title="設定">設定</button>
           <button class="sm" data-action="copytool" title="Action URLをコピー">URL</button>
@@ -1486,6 +1486,15 @@ function wire(workspace) {
       }).catch((err) => toast(err.message, 'error'));
     };
     const retry = $('[data-action=retry]', card);
+    const trimHistory = $('[data-action=trim-history]', card);
+    if (trimHistory) trimHistory.onclick = async (e) => {
+      if (!confirm(`${member.name} の履歴を直近12件だけ残して整理しますか？\n現在の履歴はキューとともに保持されています。`)) return;
+      await withBusy(e.currentTarget, async () => {
+        const result = await request(`/api/workspaces/${workspace.id}/members/${memberId}/trim-history`, { method: 'POST', body: JSON.stringify({ max: 12 }) });
+        await refreshPreservingDrafts(workspace.id);
+        toast(`履歴を整理しました（${result.removed}件削除、${result.remaining}件保持）`, 'success');
+      }).catch((err) => toast(err.message, 'error'));
+    };
     if (retry) retry.onclick = async (e) => {
       await withBusy(e.currentTarget, async () => {
         await request(`/api/workspaces/${workspace.id}/members/${memberId}/retry`, { method: 'POST', body: '{}' });
