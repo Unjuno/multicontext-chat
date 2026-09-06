@@ -714,7 +714,7 @@ async function refreshList(expectedId = currentId) {
     archived.textContent = `アーカイブ ${archivedCount}件`;
     archived.setAttribute('aria-label', `アーカイブ済みのワークスペース ${archivedCount}件を見る`);
   }
-  const filterLabels = { all: 'すべての状態', RUNNING: '実行中', PENDING: 'キューあり', BLOCKED: '要対応', SETTLED: '完了', ARCHIVED: 'アーカイブ済み' };
+  const filterLabels = { all: 'すべての状態', RUNNING: '実行中', PENDING: 'キューあり', BLOCKED: '要対応', SETTLED: '処理完了', ARCHIVED: 'アーカイブ済み' };
   const activeWorkspaceCount = workspaces.filter((workspace) => !workspace.archived).length;
   $$('#workspaceFilter option').forEach((option) => {
     const value = option.value;

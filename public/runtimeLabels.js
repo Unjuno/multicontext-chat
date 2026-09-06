@@ -4,7 +4,7 @@ export function workspaceStatusLabel(state) {
     pending: 'キューあり',
     blocked: '要対応',
     error: '要対応',
-    settled: '完了',
+    settled: '処理完了',
     idle: '待機中',
   };
   const normalized = String(state || '').toLowerCase();
