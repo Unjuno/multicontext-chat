@@ -1243,8 +1243,8 @@ async function refresh(expectedId = currentId) {
           <div class="hint">指示の適用順: ワークスペース共通 → チャット固有 → 送信内容。各チャットの会話履歴は独立して保持されます。 · <span class="small">${activeMembers.length}件アクティブ / 全${members.length}件</span></div>
           <label for="defaultAgentId" class="field-label" style="margin-top:8px">既定エージェント <span class="scope-note">— 新しいチャットや「ワークスペース既定を使用」の解決先</span></label>
           <select id="defaultAgentId" aria-label="既定エージェント">${agentOptionsHtml(workspace.defaultAgentId, false)}</select>
-          <label for="agentSelectionMode" class="field-label" style="margin-top:8px">Agent未指定時の動作</label>
-          <select id="agentSelectionMode" aria-label="Agent未指定時の動作">
+          <label for="agentSelectionMode" class="field-label" style="margin-top:8px">Agent未指定時の選択ルール</label>
+          <select id="agentSelectionMode" aria-label="Agent未指定時の選択ルール">
             <option value="require_selection" ${workspace.settings?.agentSelectionMode !== 'auto_first' ? 'selected' : ''}>明示選択を要求（安全）</option>
             <option value="auto_first" ${workspace.settings?.agentSelectionMode === 'auto_first' ? 'selected' : ''}>先頭Agentを自動選択（簡易）</option>
           </select>
