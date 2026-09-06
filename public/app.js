@@ -1627,7 +1627,7 @@ function wire(workspace) {
     const unsavedWarning = isWorkspaceDirty() ? '\n入力中の未保存変更も失われます。' : '';
     if (!confirm(`「${name}」を削除しますか？\nチャット${memberCount}件（実行中${runningCount}件、待機中${queuedCount}件）と保存済みの会話が削除されます。${unsavedWarning}\nこの操作は取り消せません。`)) return;
     await withBusy(e.currentTarget, async () => {
-      await request(`/api/workspaces/${workspace.id}`, { method: 'DELETE' });
+      await request(`/api/workspaces/${workspace.id}`, { method: 'DELETE', body: JSON.stringify({ confirm_name: name }) });
       pinnedWorkspaceIds.delete(workspace.id);
       localStorage.setItem('mcc_pinned_workspaces', JSON.stringify([...pinnedWorkspaceIds]));
       if (localStorage.getItem('mcc_last_workspace') === String(workspace.id)) localStorage.removeItem('mcc_last_workspace');

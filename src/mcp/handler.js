@@ -87,10 +87,10 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
     });
 
     server.registerTool('multicontext_delete_workspace', {
-      description: 'Delete a workspace. Destructive.',
-      inputSchema: z.object({ workspace_id: z.string().min(1) }),
-    }, async ({ workspace_id }) => {
-      const res = await app.deleteWorkspace(workspace_id);
+      description: 'Delete a workspace. Destructive. Requires the exact workspace name as confirmation.',
+      inputSchema: z.object({ workspace_id: z.string().min(1), confirm_name: z.string().min(1) }),
+    }, async ({ workspace_id, confirm_name }) => {
+      const res = await app.deleteWorkspace(workspace_id, { confirmName: confirm_name });
       return { content: [{ type: 'text', text: JSON.stringify(res, null, 2) }], structuredContent: res };
     });
 

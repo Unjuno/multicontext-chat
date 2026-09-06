@@ -353,7 +353,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return getWorkspace(workspaceId);
   }
 
-  async function deleteWorkspace(workspaceId) {
+  async function deleteWorkspace(workspaceId, { confirmName = '' } = {}) {
+    const workspace = store.requireWorkspace(workspaceId);
+    if (String(confirmName).trim() !== String(workspace.name)) {
+      throw problem('削除確認のため、ワークスペース名を正確に指定してください', 400, 'DELETE_CONFIRMATION_REQUIRED');
+    }
     const runtimeState = store.runtimeState(workspaceId, scheduler.runningMemberIds(workspaceId));
     if (runtimeState === 'RUNNING' || runtimeState === 'PENDING') {
       throw problem('実行中またはキュー待ちのワークスペースは、全て停止してから削除してください', 409, 'WORKSPACE_ACTIVE');
