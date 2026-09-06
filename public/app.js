@@ -1403,5 +1403,8 @@ if (savedWorkspaceId) {
     const { workspaces = [] } = await request('/api/workspaces');
     if (workspaces.some((workspace) => String(workspace.id) === savedWorkspaceId)) await select(savedWorkspaceId);
     else localStorage.removeItem('mcc_last_workspace');
-  } catch { localStorage.removeItem('mcc_last_workspace'); }
+  } catch {
+    // Keep the last selection across transient startup/API failures.
+    // It can be validated again on the next successful launch.
+  }
 }
