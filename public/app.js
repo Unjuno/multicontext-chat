@@ -1279,6 +1279,10 @@ async function refresh(expectedId = currentId) {
   try {
     const workspace = await request(`/api/workspaces/${expectedId}`, { signal: controller.signal });
     if (controller.signal.aborted || expectedId !== currentId) return;
+    // A successful refresh is authoritative: remove any stale connection
+    // banner before rendering the fresh snapshot so recovered connectivity is
+    // visible immediately, including when the DOM was partially preserved.
+    app?.querySelectorAll('.warning-banner, .error-banner').forEach((banner) => banner.remove());
     lastWorkspace = workspace;
     document.title = `${workspace.name || 'ワークスペース'} — MultiContext`;
     const members = Object.values(workspace.members);
