@@ -1373,7 +1373,7 @@ async function refresh(expectedId = currentId) {
     if (error.status === 404) {
       currentId = null;
       lastWorkspace = null;
-      document.title = 'MultiContext Chat';
+      document.title = 'MultiContext — 並列AIワークスペース';
       $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースが見つかりません。左の一覧から選び直してください。</div>';
       refreshList();
     } else {
@@ -1591,7 +1591,7 @@ function wire(workspace) {
       if (localStorage.getItem('mcc_last_workspace') === String(workspace.id)) localStorage.removeItem('mcc_last_workspace');
       currentId = null;
       lastWorkspace = null;
-      document.title = 'MultiContext Chat';
+      document.title = 'MultiContext — 並列AIワークスペース';
       await refreshList(null);
       $('#app').innerHTML = '<div class="empty"><div class="empty-icon" aria-hidden="true">✦</div><p><strong>ワークスペースを削除しました</strong></p><p class="small">左の一覧から別のワークスペースを選択するか、新規作成してください。</p><button id="emptyNewWorkspace" class="primary">+ 新規ワークスペースを作成</button></div>';
       document.getElementById('emptyNewWorkspace')?.addEventListener('click', () => $('#newWorkspace').click());
