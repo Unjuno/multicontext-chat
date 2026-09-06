@@ -835,6 +835,7 @@ aside h3 {
   max-height: 300px;
   overflow-y: auto;
 }
+.compile-result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .compile hr {
   border: none;
   border-top: 1px solid var(--border);
