@@ -1571,7 +1571,8 @@ function wire(workspace) {
 
   const copyCompile = $('#copyCompile');
   if (copyCompile) copyCompile.onclick = async (e) => {
-    const output = $('#compileOutput')?.textContent || '';
+    // Copy the source Markdown so tables and intentional line breaks survive paste.
+    const output = workspace.lastCompile?.text || $('#compileOutput')?.textContent || '';
     try {
       if (!await copyText(output)) throw new Error('copy failed');
       const previous = e.currentTarget.textContent;
