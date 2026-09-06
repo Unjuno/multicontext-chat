@@ -23,6 +23,7 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
         name: w.name,
         runtimeState: w.runtimeState,
         settled: w.settled,
+        archived: Boolean(w.archived),
         activeChatCount: Object.values(w.members || {}).filter(m => m.active).length,
         totalChatCount: Object.keys(w.members || {}).length,
         defaultAgentId: w.defaultAgentId || null,
