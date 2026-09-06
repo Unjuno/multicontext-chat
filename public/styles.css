@@ -367,6 +367,9 @@ aside h3 {
 #app[aria-busy="true"] { position: relative; }
 #app[aria-busy="true"]::before { content: ""; position: absolute; top: 34px; left: 50%; width: 18px; height: 18px; margin-left: -9px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 #app[aria-busy="true"]::after { content: "ワークスペースを読み込んでいます…"; position: absolute; top: 62px; left: 0; right: 0; text-align: center; color: var(--text-muted); font-size: 12px; }
+.startup-error { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 72px 20px; text-align: center; color: var(--text-muted); }
+.startup-error strong { color: var(--text); font-size: 15px; }
+.startup-error span { font-size: 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .empty { color: var(--text-muted); text-align: center; padding: 56px 20px; font-size: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .empty-icon { width: 44px; height: 44px; border-radius: 50%; background: var(--idle-bg); border: 1px solid var(--border); display: grid; place-items: center; font-size: 20px; color: var(--text-muted); }

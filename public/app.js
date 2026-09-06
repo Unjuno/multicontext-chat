@@ -1501,7 +1501,14 @@ $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
 $('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInput').value); toast('トークンを保存しました', 'success'); setTimeout(() => { refreshHealth(); refreshList(); }, 0); };
 
 initRuntimeStatus();
-await Promise.all([refreshHealth(), refreshAgents(), refreshList().catch(() => {})]);
+await Promise.all([refreshHealth(), refreshAgents(), refreshList().catch((error) => {
+  const app = $('#app');
+  app?.setAttribute('aria-busy', 'false');
+  if (app) {
+    app.innerHTML = `<div class="startup-error" role="alert"><strong>ワークスペースを読み込めませんでした</strong><span>${esc(error.message || '一時的な通信エラーです。')}</span><button id="retryStartup" class="primary" type="button">再試行</button></div>`;
+    $('#retryStartup')?.addEventListener('click', () => location.reload());
+  }
+})]);
 const savedWorkspaceId = localStorage.getItem('mcc_last_workspace');
 const openLaunchWorkspace = async (workspace) => {
   const state = String(workspace.runtimeState || '').toUpperCase();
