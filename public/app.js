@@ -677,7 +677,10 @@ function snapshotScrollPositions() {
   if (appEl) snaps._app = appEl.scrollTop;
   document.querySelectorAll('[data-mid]').forEach((article) => {
     const msg = article.querySelector('.messages');
-    if (msg) snaps[article.dataset.mid] = msg.scrollTop;
+    if (msg) snaps[article.dataset.mid] = {
+      top: msg.scrollTop,
+      stickToBottom: msg.scrollHeight - msg.scrollTop - msg.clientHeight < 24,
+    };
   });
   return snaps;
 }
@@ -687,10 +690,12 @@ function restoreScrollPositions(snaps) {
     const appEl = document.getElementById('app');
     if (appEl) appEl.scrollTop = snaps._app;
   }
-  for (const [mid, top] of Object.entries(snaps)) {
-    if (mid === '_app' || top == null) continue;
+  for (const [mid, snapshot] of Object.entries(snaps)) {
+    if (mid === '_app' || snapshot == null) continue;
     const msg = document.querySelector(`[data-mid="${mid}"] .messages`);
-    if (msg) msg.scrollTop = top;
+    if (!msg) continue;
+    const top = typeof snapshot === 'number' ? snapshot : snapshot.top;
+    msg.scrollTop = snapshot.stickToBottom ? msg.scrollHeight : top;
   }
 }
 
