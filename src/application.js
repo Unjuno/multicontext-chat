@@ -312,6 +312,12 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   async function updateWorkspace(workspaceId, patch = {}) {
+    if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
+      const name = String(patch.name ?? '').trim();
+      if (!name) throw problem('ワークスペース名を入力してください', 400);
+      if (name.length > 120) throw problem('ワークスペース名は120文字以内で入力してください', 400);
+      patch = { ...patch, name };
+    }
     if (patch.archived === true) {
       const runtimeState = store.runtimeState(workspaceId, scheduler.runningMemberIds(workspaceId));
       if (runtimeState === 'RUNNING' || runtimeState === 'PENDING') {
