@@ -371,6 +371,14 @@ async function pollRuntime() {
       if (cachedModel?.state === 'ready' && baseModel && baseModel.state !== 'ready') {
         Object.assign(baseModel, cachedModel);
       }
+      // In the desktop flow, this page is reachable only after the startup
+      // gate accepted the model. A later browser-side re-probe cannot inspect
+      // the managed/external model reliably, so it must not downgrade that
+      // already-approved state to CHECKING.
+      if (window.location.protocol === 'tauri:' && baseModel && baseModel.state !== 'error') {
+        baseModel.state = 'ready';
+        baseModel.message = '準備完了';
+      }
     }
     if (controller.signal.aborted) return;
     // Always attempt to resolve agent availability as 4th row — never conflated with service health
