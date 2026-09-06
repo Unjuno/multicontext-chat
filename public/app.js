@@ -524,6 +524,7 @@ function handleWorkspaceSelect(id) {
 async function select(id) {
   if (refreshController) refreshController.abort();
   currentId = id;
+  localStorage.setItem('mcc_last_workspace', String(id));
   openEditors.clear();
   await Promise.all([refreshList(id), refreshAgents(id)]);
   if (currentId !== id) return;
@@ -1396,3 +1397,11 @@ $('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInp
 
 initRuntimeStatus();
 await Promise.all([refreshHealth(), refreshAgents(), refreshList().catch(() => {})]);
+const savedWorkspaceId = localStorage.getItem('mcc_last_workspace');
+if (savedWorkspaceId) {
+  try {
+    const { workspaces = [] } = await request('/api/workspaces');
+    if (workspaces.some((workspace) => String(workspace.id) === savedWorkspaceId)) await select(savedWorkspaceId);
+    else localStorage.removeItem('mcc_last_workspace');
+  } catch { localStorage.removeItem('mcc_last_workspace'); }
+}
