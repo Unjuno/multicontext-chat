@@ -216,7 +216,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     }
     if (parts.length === 3 && req.method === 'DELETE') {
       try { await app.deleteWorkspace(workspaceId); return json(res, 204, null); }
-      catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
 
     if (parts[3] === 'focus' && parts.length === 4 && req.method === 'POST') {
