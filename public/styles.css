@@ -53,6 +53,13 @@
 :root[data-theme="dark"] .member-error,
 :root[data-theme="dark"] .error-banner { background: #3b1616; border-color: #7f1d1d; color: #fecaca; }
 :root[data-theme="dark"] .member-error small { color: #fbbf24; }
+:root[data-theme="dark"] .workspace-link.active { border-color: #3b82f6; }
+:root[data-theme="dark"] .msg.assistant { border-color: #3730a3; }
+:root[data-theme="dark"] .status.running { color: #fde68a; }
+:root[data-theme="dark"] .status.pending { color: #ddd6fe; }
+:root[data-theme="dark"] .status.blocked,
+:root[data-theme="dark"] .status.error { color: #fecaca; }
+:root[data-theme="dark"] .status.settled { color: #bbf7d0; }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { height: 100%; }
