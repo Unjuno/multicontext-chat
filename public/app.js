@@ -1266,12 +1266,15 @@ async function refresh(expectedId = currentId) {
     const canBroadcast = activeMembers.length > 0 && allAgentsReady;
     const compileStateBlocked = workspace.runtimeState !== 'SETTLED';
     const compileAgentReady = Boolean(workspace.compileAgentId || workspace.defaultAgentId || agents.length === 1);
-    const compileDisabled = compileStateBlocked || !compileAgentReady;
+    const compileHasSource = assistantMessages > 0;
+    const compileDisabled = compileStateBlocked || !compileAgentReady || !compileHasSource;
     const archiveDisabled = !workspace.archived && ['RUNNING', 'PENDING'].includes(String(workspace.runtimeState || '').toUpperCase());
     const compileHint = compileStateBlocked
       ? `統合レポートは ${sharedWorkspaceLabel(workspace.runtimeState).label} の間は作成できません — 完了になるまで待ってください`
       : !compileAgentReady
         ? '統合レポートの作成担当を選択するか、ワークスペース既定Agentを設定してください'
+        : !compileHasSource
+          ? '統合レポートを作成するには、先にチャットから回答を取得してください'
         : '全チャットの直近メッセージを要約';
     const allMembersCollapsed = members.length > 1 && members.every((member) => collapsedMembers.has(String(member.id)));
     $('#app').innerHTML = `
