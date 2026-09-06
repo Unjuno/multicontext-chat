@@ -1626,8 +1626,14 @@ function wire(workspace) {
     const queuedCount = Object.values(workspace.members || {}).reduce((sum, member) => sum + (member.queue?.length || 0), 0);
     const unsavedWarning = isWorkspaceDirty() ? '\n入力中の未保存変更も失われます。' : '';
     if (!confirm(`「${name}」を削除しますか？\nチャット${memberCount}件（実行中${runningCount}件、待機中${queuedCount}件）と保存済みの会話が削除されます。${unsavedWarning}\nこの操作は取り消せません。`)) return;
+    const typedName = window.prompt(`削除を続けるには、ワークスペース名を正確に入力してください。\n\n${name}`);
+    if (typedName === null) return;
+    if (typedName !== name) {
+      toast('ワークスペース名が一致しないため、削除を中止しました', 'warn');
+      return;
+    }
     await withBusy(e.currentTarget, async () => {
-      await request(`/api/workspaces/${workspace.id}`, { method: 'DELETE', body: JSON.stringify({ confirm_name: name }) });
+      await request(`/api/workspaces/${workspace.id}`, { method: 'DELETE', body: JSON.stringify({ confirm_name: typedName }) });
       pinnedWorkspaceIds.delete(workspace.id);
       localStorage.setItem('mcc_pinned_workspaces', JSON.stringify([...pinnedWorkspaceIds]));
       if (localStorage.getItem('mcc_last_workspace') === String(workspace.id)) localStorage.removeItem('mcc_last_workspace');
