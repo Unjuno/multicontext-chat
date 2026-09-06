@@ -998,7 +998,7 @@ async function refresh(expectedId = currentId) {
       <div class="workspace-head">
         <div class="workspace-top">
           <div class="workspace-identity">
-            <input id="wname" value="${esc(workspace.name)}" aria-label="ワークスペース名">
+            <input id="wname" value="${esc(workspace.name)}" maxlength="120" aria-label="ワークスペース名" title="ワークスペース名は120文字以内です">
             ${workspaceStatusHtml(workspace.runtimeState)}
           </div>
           <div class="workspace-toolbar">
