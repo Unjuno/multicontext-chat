@@ -84,10 +84,12 @@ open src-tauri/target/release/bundle/macos/MultiContext.app
 3. Choose an Agent explicitly in safe mode, or use `auto_first` when first-Agent
    selection is acceptable. Safe mode rejects an unconfigured broadcast with
    `AGENT_SELECTION_REQUIRED`.
-4. On service/workspace refresh failure, use `Retry` / `再確認`. The last saved
+4. When creating a workspace, choose 1–4 initial chats (2 is recommended for
+   parallel comparison). Assign an Agent to each chat before broadcasting.
+5. On service/workspace refresh failure, use `Retry` / `再確認`. The last saved
    view remains visible, retry progress is shown, and privacy-safe diagnostics
    can be copied from the AI Stack status dialog.
-5. Archive/delete only inactive workspaces. Deletion requires typing the exact
+6. Archive/delete only inactive workspaces. Deletion requires typing the exact
    workspace name; state saves retain a `.bak` recovery copy.
 
 The product provides isolated chat contexts with per-chat FIFO queues and
