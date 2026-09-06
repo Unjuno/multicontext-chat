@@ -574,7 +574,12 @@ function initRuntimeStatus() {
     });
     refreshBtn?.addEventListener('click', () => {
       refreshBtn.disabled = true;
-      pollRuntime().finally(() => { refreshBtn.disabled = false; });
+      Promise.all([
+        pollRuntime(),
+        refreshAgents(currentId),
+      ]).then(async () => {
+        if (currentId) await refreshPreservingDrafts(currentId);
+      }).catch(() => {}).finally(() => { refreshBtn.disabled = false; });
     });
     logsBtn?.addEventListener('click', async () => {
       const inv = getTauriInvoke();
