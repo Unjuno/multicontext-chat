@@ -900,6 +900,7 @@ async function refresh(expectedId = currentId) {
     const workspace = await request(`/api/workspaces/${expectedId}`, { signal: controller.signal });
     if (controller.signal.aborted || expectedId !== currentId) return;
     lastWorkspace = workspace;
+    document.title = `${workspace.name || 'ワークスペース'} — MultiContext`;
     const members = Object.values(workspace.members);
     const activeMembers = members.filter((m) => m.active !== false);
     const queuedMessages = members.reduce((sum, member) => sum + (member.queue?.length || 0), 0);
@@ -1000,6 +1001,7 @@ async function refresh(expectedId = currentId) {
     if (error.status === 404) {
       currentId = null;
       lastWorkspace = null;
+      document.title = 'MultiContext Chat';
       $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースが見つかりません。左の一覧から選び直してください。</div>';
       refreshList();
     } else {
