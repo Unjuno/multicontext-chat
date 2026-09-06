@@ -35,6 +35,12 @@ updateThemeToggle();
 const helpToggle = document.getElementById('helpToggle');
 const helpDialog = document.getElementById('helpDialog');
 const helpClose = document.getElementById('helpClose');
+const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+const shortcutModifier = isMac ? '⌘' : 'Ctrl+';
+document.querySelectorAll('[data-modifier-shortcut]').forEach((key) => {
+  const shortcut = key.dataset.modifierShortcut;
+  key.textContent = shortcut === 'Enter' ? `${shortcutModifier}↵` : `${shortcutModifier}${shortcut}`;
+});
 function closeHelp() {
   if (helpDialog?.close) helpDialog.close(); else helpDialog?.removeAttribute('open');
   helpToggle?.setAttribute('aria-expanded', 'false');
@@ -971,7 +977,7 @@ function memberCard(workspace, member) {
         <div class="member-footer">
           <div class="small" style="font-size:10px; color:var(--text-muted); margin-bottom:4px; letter-spacing:0.02em">このチャットだけに送信</div>
           <form data-action="direct">
-            <input placeholder="プロンプトを入力 — ⌘+↵" aria-label="このチャットだけに送信するプロンプト" ${member.active ? '' : 'disabled'}>
+            <input placeholder="プロンプトを入力 — ${shortcutModifier}↵" aria-label="このチャットだけに送信するプロンプト" ${member.active ? '' : 'disabled'}>
             <button class="sm primary" ${member.active ? '' : 'disabled'} title="このチャットだけに送信" aria-label="このチャットだけに送信">送信</button>
           </form>
         </div>
