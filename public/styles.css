@@ -371,6 +371,34 @@ aside h3 {
   color: var(--text-muted);
 }
 
+.workspace-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.overview-item {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.overview-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.overview-item strong { font-size: 19px; letter-spacing: -.02em; }
+.overview-item small { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+.overview-item strong.has-work { color: var(--pending); }
+.overview-action strong { color: var(--text-secondary); font-size: 14px; }
+
 /* ── Status Badge ────────────────────────────────────────────── */
 .status {
   display: inline-flex;
@@ -834,6 +862,7 @@ dialog menu { display: flex; gap: 6px; justify-content: flex-end; }
   .compile-head { flex-direction: column; align-items: stretch; }
   .compile-head .toolbar { justify-content: flex-start; }
   .compile-head input { max-width: none; }
+  .workspace-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) {
   header { padding: 0 12px; }

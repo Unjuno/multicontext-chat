@@ -843,6 +843,8 @@ async function refresh(expectedId = currentId) {
     lastWorkspace = workspace;
     const members = Object.values(workspace.members);
     const activeMembers = members.filter((m) => m.active !== false);
+    const queuedMessages = members.reduce((sum, member) => sum + (member.queue?.length || 0), 0);
+    const assistantMessages = members.reduce((sum, member) => sum + (member.messages || []).filter((message) => message.role === 'assistant').length, 0);
     const agentOptions = agents.map((agent) => `<option value="${esc(agent.id)}">${esc(agent.name || agent.id)}${agent.provider ? ` · ${esc(agent.provider)}` : ''}</option>`).join('');
     const canBroadcast = activeMembers.length > 0;
     const compileDisabled = workspace.runtimeState !== 'SETTLED';
@@ -876,6 +878,13 @@ async function refresh(expectedId = currentId) {
           ${agents.length ? '' : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
         </div>
       </div>
+
+      <section class="workspace-overview" aria-label="ワークスペース概要">
+        <div class="overview-item"><span class="overview-label">稼働中</span><strong>${activeMembers.length}<small> / ${members.length} チャット</small></strong></div>
+        <div class="overview-item"><span class="overview-label">待機キュー</span><strong class="${queuedMessages ? 'has-work' : ''}">${queuedMessages}<small> 件</small></strong></div>
+        <div class="overview-item"><span class="overview-label">回答数</span><strong>${assistantMessages}<small> 件</small></strong></div>
+        <div class="overview-item overview-action"><span class="overview-label">統合レポート</span><strong>${workspace.lastCompile ? '利用可能' : '未作成'}</strong></div>
+      </section>
 
       <div id="orchestratorBar" class="orchestrator-bar" style="display:none"></div>
       <dialog id="orchestratorDrawer"><div class="orchestrator-drawer-head"><strong>Orchestrator</strong><button id="orchestratorClose" class="sm">閉じる</button></div><div id="orchestratorDrawerBody" class="orchestrator-drawer-body"><div class="small">読み込み中...</div></div></dialog>
