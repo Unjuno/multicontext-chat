@@ -9,7 +9,14 @@ let refreshController = null;
 let workspaceSearchTimer = null;
 const openEditors = new Set();
 const openDeveloperPrompts = new Set();
-const collapsedMembers = new Set(JSON.parse(localStorage.getItem('mcc_collapsed_members') || '[]'));
+const collapsedMembers = (() => {
+  try {
+    const value = JSON.parse(localStorage.getItem('mcc_collapsed_members') || '[]');
+    return new Set(Array.isArray(value) ? value.map(String) : []);
+  } catch {
+    return new Set();
+  }
+})();
 let workspaceSearchQuery = '';
 let workspaceListExpanded = false;
 const workspaceFilterValues = new Set(['all', 'RUNNING', 'PENDING', 'BLOCKED', 'SETTLED', 'ARCHIVED']);
