@@ -341,9 +341,10 @@ async function pollRuntime() {
       const mcMsg = health.ok ? '準備完了' : (health.librechat && !health.librechat.ok ? 'LibreChat 接続を確認してください' : 'MultiContext が利用できません');
       const lcState = health.librechat && health.librechat.ok ? 'ready' : 'error';
       const lcMsg = health.librechat && health.librechat.ok ? '接続済み' : 'LibreChat 接続を確認';
-      // GPT-OSS: browser cannot verify directly; Desktop runtime provides actual model health.
-      const modelState = 'error';
-      const modelMsg = 'Desktop runtimeで確認できません';
+      // GPT-OSS: browser cannot verify directly; lack of desktop telemetry is
+      // not itself a service failure. Keep the aggregate status non-error.
+      const modelState = 'checking';
+      const modelMsg = 'デスクトップランタイムで確認中';
       base = [
         { name: 'モデル', state: modelState, message: modelMsg, ownership: null, attempt_id: 0 },
         { name: 'LibreChat', state: lcState, message: lcMsg, ownership: null, attempt_id: 0 },
