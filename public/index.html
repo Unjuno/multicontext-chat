@@ -69,16 +69,10 @@
     </aside>
 
     <section id="app" aria-busy="true">
-      <div class="empty">
-        <div class="empty-icon" aria-hidden="true">✦</div>
-        <p><strong>考える仕事を、複数の視点で前に進める</strong></p>
-        <p class="small empty-lead">MultiContextは、役割の異なるAgentを同じワークスペースで動かし、回答・反論・統合までを一つの流れにします。</p>
-        <div class="empty-features" aria-label="主な機能">
-          <div><b>並列</b><span>複数の専門Agentが独立して分析</span></div>
-          <div><b>対話</b><span>チャット間で知見を共有・検証</span></div>
-          <div><b>統合</b><span>最後に一つのレポートへ整理</span></div>
-        </div>
-        <button id="emptyNewWorkspace" class="primary">+ 新規ワークスペースを作成</button>
+      <div class="startup-loading" role="status" aria-live="polite">
+        <div class="startup-loading-icon" aria-hidden="true"></div>
+        <strong>ワークスペースを読み込んでいます</strong>
+        <span class="small">保存済みのチャットとAgent設定を準備しています…</span>
       </div>
     </section>
   </main>
