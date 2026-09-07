@@ -2179,6 +2179,8 @@ const updateWorkspaceChatCountHint = () => {
       : '多視点で回答を比較する構成です。実行時間とAgent使用量はチャット数に応じて増えます。';
 };
 newWorkspaceName?.addEventListener('input', updateWorkspaceNameCount);
+newWorkspaceName?.addEventListener('input', () => newWorkspaceName.setCustomValidity(''));
+newWorkspaceName?.addEventListener('invalid', () => newWorkspaceName.setCustomValidity('ワークスペース名を入力してください。'));
 newWorkspaceChatCount?.addEventListener('change', updateWorkspaceChatCountHint);
 $('#newWorkspaceDialog')?.addEventListener('close', () => $('#newWorkspace')?.focus());
 $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
