@@ -66,3 +66,25 @@ The reviewed copy is retained in `data/experiments/gui-review.F9HJ4M/state.json`
 (ignored local evidence). Automated check: 327 total / 324 passed / 0 failed /
 3 skipped. UI unit tests cover exact target mapping, invalid input boundaries,
 HTML escaping, bounded disclosure content, and preserved expansion markup.
+
+## MCP knowledge handoff
+
+`orchestrate_extract_findings` and both scopes of `orchestrate_distill_context`
+now retain review annotations and explicitly label output `UNREVIEWED`. These
+operations extract records, not verified knowledge. Previously the excerpts lost
+the review context. Chat-message reads also retain scheduler search evidence;
+legacy messages are explicitly unrecorded rather than inferred to have searched.
+
+The latest eight scoped reviews are retained with an omitted count. Distilled text
+contains rationale excerpts capped at 400 characters with explicit truncation;
+the structured review records retain full rationales. Distilled text is capped at
+8000 characters (not tokens) and marks whole-output truncation. Source excerpts
+include message ID, role, pending status, and search evidence. Read omitted records
+before reuse; none of these labels prevent a model from ignoring a rejection.
+
+`node scripts/smoke-research-handoff.mjs data/experiments/ns-structure-1788822328816/state.json`
+passed against a copied real experiment using the actual MCP HTTP transport:
+three rejection notes survived workspace extraction/distillation, and the selected
+chat retained its one scoped note. Source and copied state bytes stayed unchanged;
+model requests were zero. This is extraction verification, not new mathematical
+verification or an updated running desktop installation.

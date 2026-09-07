@@ -53,6 +53,33 @@ async function jsonRequest(base, route, opts = {}) {
 const mockAgents = [{ id: 'agent-1', name: 'ChatA', provider: 'gpt-oss' }, { id: 'agent-2', name: 'ChatB', provider: 'gpt-oss' }];
 const singleAgent = [{ id: 'solo', name: 'Solo', provider: 'gpt-oss' }];
 
+test('MCP research handoffs retain rejected assessments, source IDs and search evidence without mutation', async () => {
+  await withMcpServer({ listAgents: async () => singleAgent }, async ({ store, client: mcp }) => {
+    const ws = store.createWorkspace({});
+    const member = store.addMember(ws.id, { name: 'Researcher' });
+    member.messages.push({ id: 'claim', role: 'assistant', content: 'Unproved claim '.repeat(100),
+      searchEvidence: { scope: 'MULTICONTEXT_SEARCH_THIS_ATTEMPT', attempted: 0, succeeded: 0 } });
+    const note = store.addReviewNote(ws.id, { memberId: member.id, messageId: 'claim', verdict: 'rejected', rationale: 'Exponent is incorrect.', reviewer: 'Auditor' });
+    const before = JSON.stringify(store.state);
+    for (const [name, args] of [
+      ['multicontext_orchestrate_extract_findings', {}],
+      ['multicontext_orchestrate_distill_context', {}],
+      ['multicontext_orchestrate_distill_context', { chat_id: member.id }],
+    ]) {
+      const response = await mcp.callTool({ name, arguments: { workspace_id: ws.id, ...args } });
+      assert.ok(!response.isError);
+      assert.equal(response.structuredContent.verificationStatus, 'UNREVIEWED');
+      assert.equal(response.structuredContent.reviewNotes[0].id, note.id);
+      assert.match(response.content[0].text, /rejected/);
+      assert.match(response.content[0].text, /Exponent is incorrect/);
+      assert.match(response.content[0].text, /claim/);
+      assert.match(response.content[0].text, /MULTICONTEXT_SEARCH_THIS_ATTEMPT/);
+      if (name.endsWith('distill_context')) assert.ok(response.content[0].text.length <= 8000);
+    }
+    assert.equal(JSON.stringify(store.state), before);
+  });
+});
+
 test('review notes have REST/MCP parity and rejected writes leave state unchanged', async () => {
   const provider = { listAgents: async () => singleAgent, runAgent: async () => { throw new Error('review must not dispatch'); } };
   await withMcpServer(provider, async ({ store, base, client: mcp }) => {

@@ -856,7 +856,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const bounded = Math.max(1, Math.min(Number(limit) || 50, 200));
     msgs = msgs.slice(-bounded);
     // Strip pending internal fields
-    return msgs.map(m => ({ id: m.id, role: m.role, content: String(m.content || ''), at: m.at }));
+    return msgs.map(m => ({ id: m.id, role: m.role, content: String(m.content || ''), at: m.at,
+      ...(m.searchEvidence ? { searchEvidence: structuredClone(m.searchEvidence) } : {}) }));
   }
 
   async function getCompileResult(workspaceId) {

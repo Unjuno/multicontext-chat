@@ -1,5 +1,6 @@
 import * as z from 'zod';
 import { createRunEngine, targetFromArgs } from '../orchestrator-engine.js';
+import { reviewContext, distilledContext, messageHandoff } from '../research-handoff.js';
 
 // In-memory Q fallback for tests without store
 const QStore = new Map();
@@ -165,18 +166,22 @@ export function registerOrchestratorTools(server, app, store) {
   });
 
   server.registerTool('multicontext_orchestrate_distill_context', {
-    description: 'Distill a chat or workspace context into a token-bounded summary for handoff to a sub-agent. Uses bounded history without an extra LLM call.',
+    description: 'Return character-bounded UNREVIEWED excerpts with source IDs, search telemetry, and review annotations. No LLM call or proof verification. Inspect truncation and omitted-review counts before reuse.',
     inputSchema: z.object({ workspace_id: z.string().min(1), chat_id: z.string().optional(), limit: z.number().int().min(1).max(50).optional() }),
   }, async ({ workspace_id, chat_id, limit }) => {
     const lim = limit ?? 12;
     if (chat_id) {
       const msgs = await app.getChatMessages(workspace_id, chat_id, { limit: lim });
-      const distilled = msgs.map(m => `${m.role}: ${m.content.slice(0,400)}`).join('\n---\n');
-      return { content: [{ type: 'text', text: distilled }], structuredContent: { messages: msgs, distilled } };
+      const ws = await app.getWorkspace(workspace_id, { includeMessages: false });
+      const review = reviewContext(ws, chat_id);
+      const context = distilledContext(msgs.map(m => JSON.stringify(messageHandoff(m, 400))).join('\n'), review);
+      return { content: [{ type: 'text', text: context.distilled }], structuredContent: { messages: msgs, ...review, ...context } };
     }
     const ws = await app.getWorkspace(workspace_id, { includeMessages: true, boundedMessages: lim });
-    const all = Object.values(ws.members).map(m => `## ${m.name} (${m.id})\n${(m.messages || []).slice(-lim).map(x => `${x.role}: ${String(x.content).slice(0,300)}`).join('\n')}`).join('\n\n');
-    return { content: [{ type: 'text', text: all.slice(0,8000) }], structuredContent: { workspace: ws, distilled: all.slice(0,8000) } };
+    const all = Object.values(ws.members).map(m => `## ${m.name} (${m.id})\n${(m.messages || []).slice(-lim).map(x => JSON.stringify(messageHandoff(x, 300))).join('\n')}`).join('\n\n');
+    const review = reviewContext(ws);
+    const context = distilledContext(all, review);
+    return { content: [{ type: 'text', text: context.distilled }], structuredContent: { workspace: ws, ...review, ...context } };
   });
 
   server.registerTool('multicontext_orchestrate_extract_findings', {
@@ -185,8 +190,11 @@ export function registerOrchestratorTools(server, app, store) {
   }, async ({ workspace_id }) => {
     const ws = await app.getWorkspace(workspace_id, { includeMessages: true, boundedMessages: 20 });
     const findings = {
+      ...reviewContext(ws),
       workspace: { id: ws.id, name: ws.name, runtimeState: ws.runtimeState },
-      members: Object.values(ws.members).map(m => ({ id: m.id, name: m.name, lastMessage: (m.messages || []).slice(-1)[0]?.content?.slice(0,500) || null, messageCount: m.messages?.length || 0, status: m.status })),
+      members: Object.values(ws.members).map(m => ({ id: m.id, name: m.name, lastMessage: (m.messages || []).slice(-1)[0]?.content?.slice(0,500) || null,
+        lastMessageSource: m.messages?.length ? messageHandoff(m.messages.at(-1), 500) : null,
+        messageCount: m.messages?.length || 0, status: m.status })),
       compile: ws.lastCompile,
       stats: ws.stats,
       q: hasStore ? store.peekOrchestratorQueue(workspace_id) : peekQ(workspace_id),
