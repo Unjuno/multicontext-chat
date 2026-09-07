@@ -59,13 +59,13 @@ describe('e2e deterministic coverage (no external LibreChat)', () => {
     const b = store.addMember(w.id, { name: 'B', active: true });
     const c = store.addMember(w.id, { name: 'C', active: false });
     const items = store.broadcast(w.id, 'hello');
-    assert.equal(items.length, 2);
+    assert.equal(items.items.length, 2);
     assert.equal(store.getMember(w.id, a.id).queue.length, 1);
     assert.equal(store.getMember(w.id, c.id).queue.length, 0);
     store.updateMember(w.id, a.id, { active: false });
     store.clearQueues(w.id);
     const items2 = store.broadcast(w.id, 'second');
-    assert.equal(items2.length, 1);
+    assert.equal(items2.items.length, 1);
   });
 
   it('direct isolates to one chat', async () => {

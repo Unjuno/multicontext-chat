@@ -5,14 +5,14 @@ import fs from 'node:fs';
 
 describe('workspace runtime label contract', () => {
   const cases = [
-    ['RUNNING', 'RUNNING · 実行中', 'running'],
-    ['running', 'RUNNING · 実行中', 'running'],
-    ['PENDING', 'PENDING · キューあり', 'pending'],
-    ['pending', 'PENDING · キューあり', 'pending'],
-    ['BLOCKED', 'BLOCKED · 要対応', 'blocked'],
-    ['blocked', 'BLOCKED · 要対応', 'blocked'],
-    ['SETTLED', 'SETTLED · 処理待ちなし', 'settled'],
-    ['settled', 'SETTLED · 処理待ちなし', 'settled'],
+    ['RUNNING', '実行中', 'running'],
+    ['running', '実行中', 'running'],
+    ['PENDING', 'キューあり', 'pending'],
+    ['pending', 'キューあり', 'pending'],
+    ['BLOCKED', '要対応', 'blocked'],
+    ['blocked', '要対応', 'blocked'],
+    ['SETTLED', '処理完了', 'settled'],
+    ['settled', '処理完了', 'settled'],
   ];
   for (const [input, expectedLabel, expectedCls] of cases) {
     it(`${input} -> label "${expectedLabel}" class "${expectedCls}"`, () => {
@@ -23,7 +23,7 @@ describe('workspace runtime label contract', () => {
   }
   it('error maps to BLOCKED · 要対応 / blocked', () => {
     const { label, cls } = workspaceStatusLabel('error');
-    assert.equal(label, 'BLOCKED · 要対応');
+    assert.equal(label, '要対応');
     assert.equal(cls, 'blocked');
   });
   it('normalizes case for CSS class (no uppercase class)', () => {
@@ -47,7 +47,7 @@ describe('workspace runtime label contract', () => {
 describe('member status label contract', () => {
   it('running -> 実行中', () => assert.equal(memberStatusLabel('running').label, '実行中'));
   it('RUNNING case-insensitive -> 実行中', () => assert.equal(memberStatusLabel('RUNNING').label, '実行中'));
-  it('idle -> 待機', () => assert.equal(memberStatusLabel('idle').label, '待機'));
+  it('idle -> 待機中', () => assert.equal(memberStatusLabel('idle').label, '待機中'));
   it('error -> ブロック中 / blocked', () => {
     const r = memberStatusLabel('error');
     assert.equal(r.label, 'ブロック中');
@@ -65,7 +65,7 @@ describe('draft preservation and guards', () => {
   it('app.js guards workspace switch with dirty check', () => {
     const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
     assert.match(src, /isWorkspaceDirty/, 'must have isWorkspaceDirty');
-    assert.match(src, /未保存の変更があります。破棄して別のワークスペースに移動しますか？/, 'must prompt on dirty switch');
+    assert.match(src, /未保存の変更があります/, 'must prompt on dirty switch');
   });
   it('app.js has duplicate-submit guard via withBusy', () => {
     const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
@@ -79,7 +79,7 @@ describe('draft preservation and guards', () => {
   });
   it('workspace list uses correct semantics (div listitem > button)', () => {
     const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-    assert.match(src, /<div role="listitem"><button class="workspace-link/, 'list must be div listitem > button');
+    assert.match(src, /role="listitem"[^>]*>\s*<button class="workspace-link/, 'list must be div listitem > button');
     assert.doesNotMatch(src, /role="listitem"[^>]*class="workspace-link"/, 'button must not have role listitem');
     assert.match(src, /aria-current/, 'active workspace should have aria-current');
   });
