@@ -10,6 +10,7 @@ let refreshController = null;
 let workspaceRetryTimer = null;
 let workspaceRetryAttempt = 0;
 let workspaceSearchTimer = null;
+let selectedCompileIndex = 0;
 const openEditors = new Set();
 const openDeveloperPrompts = new Set();
 const collapsedMembers = (() => {
@@ -1410,6 +1411,11 @@ async function refresh(expectedId = currentId) {
         : !compileHasSource
           ? '統合レポートを作成するには、先にチャットから回答を取得してください'
         : '全チャットの直近メッセージを要約';
+    const compileHistory = Array.isArray(workspace.compileHistory) && workspace.compileHistory.length
+      ? workspace.compileHistory
+      : (workspace.lastCompile ? [workspace.lastCompile] : []);
+    selectedCompileIndex = Math.max(0, Math.min(selectedCompileIndex, Math.max(0, compileHistory.length - 1)));
+    const selectedCompile = compileHistory[selectedCompileIndex] || workspace.lastCompile;
     const allMembersCollapsed = members.length > 1 && members.every((member) => collapsedMembers.has(String(member.id)));
     $('#app').innerHTML = `
       <datalist id="agentOptions">${agentOptions}</datalist>
@@ -1501,8 +1507,8 @@ async function refresh(expectedId = currentId) {
         </div>
         <label for="compilePrompt" class="field-label small">まとめ方の指示 <span class="scope-note">— レポートの作成方法（保存してから作成）</span></label>
         <textarea id="compilePrompt" placeholder="まとめ方の指示（例: 主な結論と未解決点を分けて整理）" aria-label="統合レポートのまとめ方の指示">${esc(workspace.compilePrompt || '')}</textarea>
-        ${workspace.lastCompile
-          ? `<hr><div class="compile-result-head"><div class="compile-result-meta"><strong>作成済み</strong><span class="small">${esc(displayTimestamp(workspace.lastCompile.at))}</span><span class="small">スナップショット: ${esc(displayTimestamp(workspace.lastCompile.snapshotAt || workspace.lastCompile.at))}</span><span class="small">${workspace.lastCompile.sourceMemberCount ?? members.filter((member) => member.messages.some((message) => message.role === 'assistant')).length}チャット・${workspace.lastCompile.sourceMessageCount ?? '不明'}メッセージを使用</span></div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdownで保存</button></div></div><div class="compile-output" id="compileOutput" role="region" aria-label="統合レポートの結果" tabindex="0">${renderCompileText(workspace.lastCompile.text)}</div>${(workspace.compileHistory || []).length > 1 ? `<details class="compile-history"><summary>過去のCompile（${workspace.compileHistory.length}件）</summary><div class="small">過去の結果は保存されています。現在表示中の結果を上のボタンから保存できます。</div>${workspace.compileHistory.slice(1).map((item, index) => `<div class="compile-history-item"><strong>#${workspace.compileHistory.length - index - 1}</strong><span>${esc(displayTimestamp(item.at))}</span><span>${item.sourceMemberCount ?? '不明'}チャット・${item.sourceMessageCount ?? '不明'}メッセージ</span></div>`).join('')}</details>` : ''}`
+        ${selectedCompile
+          ? `<hr><div class="compile-result-head"><div class="compile-result-meta"><strong>${selectedCompileIndex === 0 ? '最新の結果' : `過去の結果 #${selectedCompileIndex}`}</strong><span class="small">${esc(displayTimestamp(selectedCompile.at))}</span><span class="small">スナップショット: ${esc(displayTimestamp(selectedCompile.snapshotAt || selectedCompile.at))}</span><span class="small">${selectedCompile.sourceMemberCount ?? members.filter((member) => member.messages.some((message) => message.role === 'assistant')).length}チャット・${selectedCompile.sourceMessageCount ?? '不明'}メッセージを使用</span></div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdownで保存</button></div></div><div class="compile-output" id="compileOutput" role="region" aria-label="統合レポートの結果" tabindex="0">${renderCompileText(selectedCompile.text)}</div>${compileHistory.length > 1 ? `<details class="compile-history" open><summary>Compile履歴（${compileHistory.length}件）</summary><div class="small">結果を選択すると、上の表示・コピー・Markdown保存の対象が切り替わります。</div>${compileHistory.map((item, index) => `<button type="button" class="compile-history-item${index === selectedCompileIndex ? ' selected' : ''}" data-action="select-compile" data-index="${index}" aria-pressed="${index === selectedCompileIndex}"><strong>${index === 0 ? '最新' : `#${index}`}</strong><span>${esc(displayTimestamp(item.at))}</span><span>${item.sourceMemberCount ?? '不明'}チャット・${item.sourceMessageCount ?? '不明'}メッセージ</span></button>`).join('')}</details>` : ''}`
           : `<div class="small">手動のみ。${compileStateBlocked ? `現在は${workspace.runtimeState || '処理中'}のため待機中です。` : !compileAgentReady ? '作成担当を選択してから実行してください。' : '結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">レポートを作成</span>を押して回答をまとめます。'}</div>`}
       </div>
     `;
@@ -1824,6 +1830,7 @@ function wire(workspace) {
         body: JSON.stringify({ compileAgentId: $('#compileAgentId').value, compilePrompt: $('#compilePrompt').value }),
       });
       await request(`/api/workspaces/${workspace.id}/compile`, { method: 'POST', body: '{}' });
+      selectedCompileIndex = 0;
       await refreshPreservingDrafts(workspace.id);
       toast('コンパイルが完了しました', 'success');
     }).catch((err) => toast(err.message, 'error')).finally(() => {
@@ -1834,7 +1841,8 @@ function wire(workspace) {
   const copyCompile = $('#copyCompile');
   if (copyCompile) copyCompile.onclick = async (e) => {
     // Copy the source Markdown so tables and intentional line breaks survive paste.
-    const output = workspace.lastCompile?.text || $('#compileOutput')?.textContent || '';
+    const history = workspace.compileHistory || (workspace.lastCompile ? [workspace.lastCompile] : []);
+    const output = history[selectedCompileIndex]?.text || workspace.lastCompile?.text || $('#compileOutput')?.textContent || '';
     try {
       if (!await copyText(output)) throw new Error('copy failed');
       const previous = e.currentTarget.textContent;
@@ -1846,7 +1854,8 @@ function wire(workspace) {
   const downloadCompile = $('#downloadCompile');
   if (downloadCompile) downloadCompile.onclick = () => {
     // Keep the original Markdown for export; the rendered HTML is display-only.
-    const output = workspace.lastCompile?.text || $('#compileOutput')?.textContent || '';
+    const history = workspace.compileHistory || (workspace.lastCompile ? [workspace.lastCompile] : []);
+    const output = history[selectedCompileIndex]?.text || workspace.lastCompile?.text || $('#compileOutput')?.textContent || '';
     const blob = new Blob([`# ${workspace.name || 'MultiContext Compile'}\n\n${output}\n`], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -1856,6 +1865,13 @@ function wire(workspace) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast('統合レポートをMarkdownで保存しました', 'success');
   };
+
+  $$('[data-action=select-compile]').forEach((button) => {
+    button.addEventListener('click', () => {
+      selectedCompileIndex = Number(button.dataset.index) || 0;
+      refreshPreservingDrafts(workspace.id).catch((err) => toast(err.message, 'error'));
+    });
+  });
 
   $('[data-action=toggle-all-collapse]')?.addEventListener('click', () => {
     const ids = Object.keys(workspace.members || {}).map(String);
