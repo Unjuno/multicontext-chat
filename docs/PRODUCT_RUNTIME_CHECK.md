@@ -78,6 +78,7 @@
 - Agent未設定の専用ワークスペースで個別送信を試行した。複数Agent環境ではHTTP 400／`AGENT_SELECTION_REQUIRED`となり、エラーをキューや会話履歴へ混入させず、ワークスペースは`SETTLED`・`idle`のまま維持された。確認名付きDELETE 204で後片付けした。
 - 最新フロント変更後にLibreChat実Agentを指定したNativeスモークを実行した。Agent 2体の検出、通常生成、同一conversation IDでの会話継続が成功した（`npm run smoke`）。MultiContextの保存データは変更していない。
 - 専用ワークスペースを初期チャット4件で作成し、4チャットへ同時Broadcastした。HTTP 202で受理され、4件すべてが`idle`／`SETTLED`、4件すべてが回答保持、待機キュー0となった。確認名付きDELETE 204で後片付けした。
+- 専用ワークスペースを初期チャット8件で作成し、8チャットへ同時Broadcastした。HTTP 202で受理され、8件すべてが`idle`／`SETTLED`、8件すべてが回答保持、待機キュー0となった。確認名付きDELETE 204で後片付けした。
 
 ## 未確認
 
