@@ -162,3 +162,10 @@
 - Short `get_state` polling observed member completion events, but after 18 polls (180 seconds) one queue item remained and no `run.settled` event was observed.
 - Compile was correctly not invoked because the workspace was not confirmed `SETTLED`; the temporary workspace was deleted through MCP (`CLEANUP=ok`).
 - This is an accepted long-running behavior under the current user-only Stop policy, and demonstrates why the UI must continue to expose progress and user Stop without MCP forcibly terminating inference.
+
+# 2026-09-07 — Adversarial persona preset MCP run
+
+- Rebuilt and restarted the packaged macOS app, then created the new `navier-stokes-adversarial-4` preset through production MCP.
+- Confirmed personas: Harmonic Analyst, Numerical Skeptic, Blow-up Hunter, and Proof Auditor.
+- The run emitted peer-tool and member-completion events, but after 18 short polls (180 seconds) one orchestrator queue item remained; no settlement was claimed.
+- Compile was not invoked because SETTLED was not proven. The temporary workspace was deleted through MCP (`CLEANUP=ok`).
