@@ -136,6 +136,14 @@
     <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <div class="sheet">
         <h2 id="settingsTitle">MultiContext の設定</h2>
+        <div class="field">
+          <label for="backend">接続方式</label>
+          <select id="backend">
+            <option value="local">ローカルLMへ直接接続（登録不要）</option>
+            <option value="librechat">LibreChat連携（既存環境）</option>
+          </select>
+          <div class="hint">方式ごとに会話の保存先を分離します。切り替え後はアプリを再起動してください。</div>
+        </div>
         <p class="lead">通常は以下のパスを設定して保存するだけで、あとは自動で起動します。</p>
 
         <div class="field">
@@ -396,6 +404,11 @@
       async function refreshConnState() {
         const badge = document.getElementById("connState");
         if (!invoke) return;
+        if (document.getElementById("backend").value === "local") {
+          badge.textContent = "登録・接続キー不要";
+          badge.className = "conn-badge ok";
+          return;
+        }
         try {
           const st = await invoke("connection_status");
           const text = UI.librechatConnectionText(st);
@@ -454,6 +467,7 @@
 
       async function openSettings() {
         const c = state.config || {};
+        document.getElementById("backend").value = c.backend || "librechat";
         document.getElementById("manageLibrechat").checked = !!c.manage_librechat;
         document.getElementById("librechatPath").value = c.librechat_path || "";
         document.getElementById("manageModel").checked = !!c.manage_model;
@@ -487,6 +501,7 @@
       }
       function readSettings() {
         return {
+          backend: document.getElementById("backend").value,
           librechat_url: document.getElementById("librechatUrl").value.trim(),
           manage_librechat: document.getElementById("manageLibrechat").checked,
           librechat_path: document.getElementById("librechatPath").value.trim() || null,
@@ -512,7 +527,7 @@
         const checks = [
           [!isHttpUrl(cfg.librechat_url), "librechatUrl", "LibreChat URLはhttp://またはhttps://で指定してください。"],
           [!isHttpUrl(cfg.model_url), "modelUrl", "モデル URLはhttp://またはhttps://で指定してください。"],
-          [cfg.manage_librechat && !cfg.librechat_path, "librechatPath", "LibreChatをDesktopで管理する場合は、LibreChatディレクトリを選択してください。"],
+          [cfg.backend !== "local" && cfg.manage_librechat && !cfg.librechat_path, "librechatPath", "LibreChatをDesktopで管理する場合は、LibreChatディレクトリを選択してください。"],
           [cfg.manage_model && !cfg.llama_path, "llamaPath", "モデルをDesktopで管理する場合は、llama-server実行ファイルを選択してください。"],
           [cfg.manage_model && !cfg.model_path, "modelFilePath", "モデルをDesktopで管理する場合は、GGUFモデルファイルを選択してください。"],
           [!Number.isInteger(cfg.multicontext_port) || cfg.multicontext_port < 1 || cfg.multicontext_port > 65535, "port", "MultiContextポートは1〜65535の整数で指定してください。"],

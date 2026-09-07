@@ -227,7 +227,9 @@ async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<Service
         .lock()
         .unwrap()
         .contains_key("LibreChat");
-    let (librechat_state, librechat_msg, librechat_healthy) = match keychain::get_key() {
+    let (librechat_state, librechat_msg, librechat_healthy) = if cfg.backend == "local" {
+        (ServiceState::Ready, "不要（ローカルLMへ直接接続）".to_string(), false)
+    } else { match keychain::get_key() {
         Some(key) if !key.is_empty() => {
             match health::librechat_auth(&cfg.librechat_url, &key).await {
                 AuthStatus::Ok => (ServiceState::Ready, "接続済み".to_string(), true),
@@ -252,6 +254,7 @@ async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<Service
                 (ServiceState::NeedsSetup, "要設定".to_string(), false)
             }
         }
+    }
     };
     let librechat_ownership = ownership_from(librechat_started, librechat_healthy);
     out.push(ServiceStatus {
@@ -429,7 +432,10 @@ fn open_data_dir(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn backup_data(app: tauri::AppHandle) -> Result<String, String> {
+fn backup_data(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<String, String> {
+    if state.config.lock().unwrap().backend == "local" {
+        return Err("ローカル会話の一括バックアップは準備中です。アプリ終了後にデータフォルダー全体をコピーしてください。".into());
+    }
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let source = dir.join("state.json");
     if !source.exists() {
@@ -528,7 +534,7 @@ fn start_multicontext(
     }
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    let data_file = data_dir.join("state.json");
+    let data_file = data_dir.join(cfg.state_filename());
     let mut envs: HashMap<String, String> = HashMap::new();
     envs.insert(
         "MULTICONTEXT_PORT".into(),
@@ -539,6 +545,8 @@ fn start_multicontext(
         data_file.to_string_lossy().to_string(),
     );
     envs.insert("MULTICONTEXT_LIBRECHAT_MODE".into(), "native".into());
+    envs.insert("MULTICONTEXT_BACKEND".into(), cfg.backend.clone());
+    envs.insert("MULTICONTEXT_LOCAL_MODEL_URL".into(), cfg.model_url.clone());
     envs.insert("LIBRECHAT_BASE_URL".into(), cfg.librechat_url.clone());
     // LibreChat API key: prefer the Keychain value the user saved in Settings
     // (preferred, since it survives Finder launches without `launchctl`), then
@@ -1067,6 +1075,11 @@ async fn ensure_librechat(
     node: &str,
     attempt_id: u64,
 ) -> Result<(), String> {
+    if cfg.backend == "local" {
+        emit_service(app, state, "LibreChat", ServiceState::Ready,
+            "不要（ローカルLMへ直接接続）", false, attempt_id);
+        return Ok(());
+    }
     emit_service(
         app,
         state,
@@ -1168,6 +1181,7 @@ async fn ensure_multicontext(
         false,
         attempt_id,
     );
+    health::require_backend_match(client, &mc_url, &cfg.backend).await?;
     match health::multicontext_health(client, &mc_url).await {
         McHealth::Ready => {
             emit_service(

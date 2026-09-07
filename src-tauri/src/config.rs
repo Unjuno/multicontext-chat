@@ -69,7 +69,7 @@ fn default_true() -> bool {
 impl Default for DesktopConfig {
     fn default() -> Self {
         Self {
-            backend: "librechat".to_string(),
+            backend: "local".to_string(),
             librechat_path: None,
             librechat_url: "http://127.0.0.1:3080".to_string(),
             multicontext_port: 4317,
@@ -86,6 +86,9 @@ impl Default for DesktopConfig {
 }
 
 impl DesktopConfig {
+    pub fn state_filename(&self) -> &'static str {
+        if self.backend == "local" { "local-state.json" } else { "state.json" }
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.backend != "local" && self.backend != "librechat" {
             return Err("接続方式は local または librechat を指定してください".into());
@@ -184,6 +187,7 @@ mod tests {
     #[test]
     fn test_config_validation_managed_librechat_missing_path() {
         let cfg = DesktopConfig {
+            backend: "librechat".into(),
             manage_librechat: true,
             librechat_path: None,
             ..Default::default()
@@ -194,6 +198,7 @@ mod tests {
     #[test]
     fn test_config_validation_managed_librechat_invalid_path() {
         let cfg = DesktopConfig {
+            backend: "librechat".into(),
             manage_librechat: true,
             librechat_path: Some("/nonexistent/librechat".to_string()),
             ..Default::default()
@@ -229,6 +234,8 @@ mod tests {
     #[test]
     fn test_config_default_managed_true() {
         let cfg = DesktopConfig::default();
+        assert_eq!(cfg.backend, "local");
+        assert_eq!(cfg.state_filename(), "local-state.json");
         assert!(
             cfg.manage_model,
             "new installs must default to managed GPT-OSS"

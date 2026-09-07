@@ -42,3 +42,16 @@ backup/delete lifecycle integration, crash-window/retry tests, long-context poli
 and built-in computation tools. This is a working server path, not yet a completed
 registration-free desktop onboarding experience. Old LibreChat workspaces must not
 be blindly opened against the local backend: their conversation IDs are incompatible.
+
+Desktop integration checkpoint: new configurations now default to local while
+existing saved configurations without a backend remain LibreChat. The settings
+page exposes backend choice; startup skips LibreChat for local and launches the
+Node server with the model URL. Desktop local state is `local-state.json`, separate
+from legacy `state.json`. Reuse of a server reporting another backend is refused.
+Rust suite: 48 passed. Packaged GUI verification remains pending.
+
+The old backup button copied only `state.json`; in local mode it now reports an
+explicit unsupported-operation error rather than falsely backing up legacy data.
+Until a complete snapshot is implemented, close the application and copy the data
+folder including `local-state.json.local-conversations/`. Do not treat this
+checkpoint as completed desktop release readiness.
