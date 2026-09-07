@@ -67,3 +67,22 @@ checkout correctly fails this new gate; no LibreChat restart or saved Agent
 mutation was performed during this check. Reapply the patch and rebuild/restart
 before attempting the remaining real mixed-model acceptance test. A passing
 source gate alone would still not establish running-process or model E2E parity.
+
+### Local checkout upgrade completed
+
+The next check backed up both existing patched files to
+`/tmp/mcc-librechat-upgrade.Ft0kW4` and applied the current patch to the actual
+LibreChat checkout. Only `responses.js` changed: nine lines validating missing,
+blank, or duplicate tool call IDs before any provider side effect. The existing
+`service.ts` was unchanged. Reapplying the patch reported already patched;
+`node --check` passed, and the installed-source gate plus executor/SDK contract
+probe now pass. This supersedes the on-disk mismatch above, not the live-process
+verification gap: listener PID 18506 was not restarted by this operation.
+
+Read-only Agent management probes for both discovered Agents returned HTTP 401
+using the existing Remote Responses credential. Discovery succeeds, but that
+credential does not establish authority to inspect/configure saved provider tools.
+No account, credential, database record, or Agent configuration was modified.
+Real LibreChat provider-calculator/search plus cross-chat model E2E therefore
+remains pending authenticated Agent setup and safe live-server reload. The
+registration-free direct-local backend does not require this LibreChat setup.
