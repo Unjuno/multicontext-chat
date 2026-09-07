@@ -17,6 +17,7 @@
     "verify:bundle": "npm run build:server && node scripts/verify-bundle.mjs",
     "patch:librechat": "node scripts/patch-librechat.mjs",
     "smoke": "node --env-file-if-exists=.env scripts/smoke.mjs",
+    "stress": "node stress-test.mjs",
     "e2e:real": "node --env-file-if-exists=.env scripts/e2e-real.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",

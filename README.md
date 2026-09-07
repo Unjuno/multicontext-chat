@@ -165,6 +165,11 @@ Compile is available only when the workspace is `SETTLED` and only runs when the
 
 Run `npm run smoke` against a real LibreChat deployment. Set `MULTICONTEXT_SMOKE_AGENT_ID` to include real generation and native thread-continuation checks.
 
+For the long-running MCP user flow, set `MULTICONTEXT_STRESS_URL` and
+`MULTICONTEXT_STRESS_TOKEN`, then run `npm run stress`. The stress flow is
+skipped by ordinary `npm test` unless both values are explicitly supplied, so
+it cannot accidentally send work to a running local instance.
+
 ## License
 
 MIT. LibreChat remains a separate MIT-licensed upstream dependency.

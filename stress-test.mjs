@@ -1,8 +1,13 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
-const base = 'http://127.0.0.1:4317';
+const base = process.env.MULTICONTEXT_STRESS_URL || '';
+const token = process.env.MULTICONTEXT_STRESS_TOKEN || '';
+if (!base || !token) {
+  console.log('stress-test skipped: set MULTICONTEXT_STRESS_URL and MULTICONTEXT_STRESS_TOKEN to run against an explicit MCP server');
+  process.exit(0);
+}
 const transport = new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
-  requestInit: { headers: { Authorization: 'Bearer parity-token' } },
+  requestInit: { headers: { Authorization: `Bearer ${token}` } },
 });
 const mcp = new Client({ name: 'stress-test', version: '1.0.0' });
 await mcp.connect(transport);
