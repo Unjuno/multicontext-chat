@@ -123,3 +123,20 @@ Build/check logs: `/tmp/mcc-current-desktop-build.log` and
 `verify:signing` still exits 1 (ad-hoc signature or no TeamIdentifier). No signed
 artifact, notarization, fresh native-window QA, or real LibreChat mixed-model E2E
 is implied by this package refresh.
+
+### Native window observation and process-version boundary
+
+Computer Use identified two apps sharing `com.unjuno.multicontext` (installed
+and build-output paths); selecting the bundle ID was ambiguous. Selecting the
+build-output path exposed the actual native Tauri window, `DesktopApp E2E`, at
+`tauri://localhost/index.html?desktop_ready=1`. It showed 32 saved workspaces,
+six needing attention, and the selected workspace with two chats, no running
+executions, no queued items, and Stop disabled. This is an observation only;
+no settings, prompts, workspace data, or generation controls were changed.
+
+PID 31015 started at 2026-09-08 06:44:20, whereas the rebuilt executable was
+modified at 08:36:03. Thus the visible window cannot establish that the latest
+native code is loaded, even though its executable path matches the new bundle.
+The selected workspace's idle state does not establish that all 32 workspaces
+are idle. No app quit/relaunch was performed. Fresh native verification remains
+pending a safe restart; do not count this observation as final-artifact GUI QA.
