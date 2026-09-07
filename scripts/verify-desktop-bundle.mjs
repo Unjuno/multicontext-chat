@@ -31,13 +31,20 @@ for (const [file, marker] of markers) {
   }
 }
 
-for (const file of ['index.html', 'app.js', 'desktop-startup.html']) {
+for (const file of ['index.html', 'app.js', 'desktop-startup.html', 'activity-feed.js']) {
   const source = path.join(root, 'public', file);
   const packaged = path.join(resourceRoot, file);
   if (digest(source) !== digest(packaged)) {
     console.error(`desktop bundle is stale: ${file}`);
     process.exit(1);
   }
+}
+
+const serverSource = path.join(root, 'dist/server.bundle.mjs');
+const serverPackaged = path.join(app, 'Contents/Resources/multicontext/dist/server.bundle.mjs');
+if (!fs.existsSync(serverPackaged) || digest(serverSource) !== digest(serverPackaged)) {
+  console.error('desktop bundle server is missing or stale');
+  process.exit(1);
 }
 
 console.log(`desktop bundle verified: ${app}`);

@@ -228,3 +228,13 @@ assertions but reported interrupted background index creation at disconnect.
 The verifier now disables automatic index/collection initialization and the
 second run exited cleanly. This is actual MongoDB round-trip evidence with
 synthetic inputs, not an actual model/search invocation or live deployment.
+
+## Desktop build checkpoint
+
+After commit 1e397b7, `npm run verify:bundle`, `npm run desktop:check`, and
+`npm run desktop:build -- --bundles app` passed. The build produced
+`src-tauri/target/release/bundle/macos/MultiContext.app` without installing or
+opening it. `npm run verify:desktop` also passed after extending its checksum
+checks to activity-feed.js and dist/server.bundle.mjs, covering the observer
+and scheduler artifacts changed in this audit. Signing/notarization and a
+direct GUI pass are not established by these build results.
