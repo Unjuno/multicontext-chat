@@ -63,3 +63,15 @@ this mapping. This backs up conversation data, not model binaries, OS Keychain,
 desktop settings, or proof of mathematical correctness. Restore UI and packaged
 GUI click verification remain pending. Only one server may own a state directory;
 the synchronous snapshot does not coordinate independent processes writing it.
+
+Verification checkpoint: a backup/restore regression now copies the snapshot into
+a separate state/transcript directory, creates a fresh LocalModelClient, and
+continues a pending tool call. Assistant call ID and real fixture output remain
+paired; the original transcript is unchanged. This uses a deterministic model
+transport, not a real-model restore test.
+
+The packaged `.app` was rebuilt and `verify:desktop` passed. Native accessibility
+inspection confirmed the built app reaches the main workspace screen with the
+existing saved LibreChat configuration (32 workspaces retained). No existing
+workspace was edited. This verifies legacy startup only; it does not certify fresh
+local onboarding, backup-button clicking, or a restored real-model GUI session.
