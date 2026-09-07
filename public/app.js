@@ -1043,9 +1043,13 @@ function tick() {
   // Keep the normal cadence while typing to avoid visual churn.
   const hasFocusedDraft = Boolean(active && active.closest && active.closest('#app'));
   ticking = true;
+  const requestedId = currentId;
   const snap = snapshotFormState();
   const scrolls = snapshotScrollPositions();
   refresh().then(() => {
+    // A 404 can recover to a different workspace while refresh() is in
+    // flight. Never restore the old workspace's draft into that replacement.
+    if (currentId !== requestedId) return;
     restoreFormState(snap);
     restoreScrollPositions(scrolls);
     for (const id of ['wname','globalPrompt','compileAgentId','compilePrompt','defaultAgentId','agentSelectionMode']) {
