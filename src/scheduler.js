@@ -1,4 +1,4 @@
-import { CrossChatToolExecutor, extractToolCalls } from './cross-chat-executor.js';
+import { CrossChatToolExecutor, extractToolCalls, extractProviderToolResults, isCrossChatToolCall } from './cross-chat-executor.js';
 export class Scheduler {
   constructor({ store, client, app, maxHistoryMessages = 120, maxNativeToolIterations = 10, maxConcurrentRequests = Number.POSITIVE_INFINITY }) {
     this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.maxNativeToolIterations = maxNativeToolIterations; this.maxConcurrentRequests = Math.max(1, Number(maxConcurrentRequests) || 4); this.activeRequests = 0; this.requestWaiters = []; this.running = new Map(); this.executor = null;
@@ -191,7 +191,8 @@ export class Scheduler {
           let currentResult = result;
           let currentConversationId = result.conversationId;
           let toolCalls = extractToolCalls(currentResult.raw);
-          if (this.client.mode !== 'compat' && toolCalls.length > 0) {
+          const crossToolCalls = toolCalls.filter(isCrossChatToolCall);
+          if (this.client.mode !== 'compat' && crossToolCalls.length > 0) {
             if (!this.executor) throw new Error('CrossChatToolExecutor not initialized — call setApp(app)');
             // Bound the native tool loop: a model that keeps emitting function
             // calls would otherwise recurse unboundedly within one queue item
@@ -214,7 +215,7 @@ export class Scheduler {
                 // may attach orchestrator provenance just after this child began executing.
                 sourceOrchestratorRunId: liveCurrent.orchestratorRunId || item.orchestratorRunId || null,
                 sourceOrchestratorQId: liveCurrent.orchestratorQId || item.orchestratorQId || null,
-                toolCalls,
+                toolCalls: crossToolCalls,
                 signal: controller.signal,
               });
               for (const r of toolResults) {
@@ -252,7 +253,10 @@ export class Scheduler {
                 } catch {}
               }
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
-              const functionCallOutput = toolResults.map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
+              const providerToolResults = extractProviderToolResults(currentResult.raw);
+              const functionCallOutput = [...providerToolResults, ...toolResults]
+                .filter((result, index, all) => all.findIndex((candidate) => candidate.call_id === result.call_id) === index)
+                .map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
               if (this.client.mode === 'native' && typeof this.client.continueAgent === 'function') {
                 currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, toolCalls, toolResults: functionCallOutput, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
               } else {
@@ -263,6 +267,7 @@ export class Scheduler {
               const nextToolCalls = extractToolCalls(currentResult.raw);
               if (nextToolCalls.length === 0) break;
               toolCalls = nextToolCalls;
+              crossToolCalls.splice(0, crossToolCalls.length, ...toolCalls.filter(isCrossChatToolCall));
             }
           }
           this.store.completeRun(workspaceId, memberId, item.id, currentResult);

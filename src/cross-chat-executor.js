@@ -5,6 +5,18 @@ export function extractToolCalls(raw) {
   return raw.output.filter(x => x.type === 'tool_call' || x.type === 'function_call');
 }
 
+export function isCrossChatToolCall(call) {
+  const name = call?.name || call?.function?.name || '';
+  return CROSS_CHAT_TOOLS.some((tool) => tool?.function?.name === name);
+}
+
+export function extractProviderToolResults(raw) {
+  if (!raw || !Array.isArray(raw.output)) return [];
+  return raw.output
+    .filter((item) => item?.type === 'function_call_output' && item.call_id)
+    .map((item) => ({ call_id: item.call_id, output: String(item.output ?? '') }));
+}
+
 export { CROSS_CHAT_TOOLS };
 
 export class StructuredToolError extends Error {
