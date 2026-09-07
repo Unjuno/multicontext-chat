@@ -104,3 +104,17 @@ are not verified. Missing provider outputs are rejected before external
 delivery; this fail-closed guard is not implementation of mixed execution.
 The live LibreChat process has not been upgraded or restarted. Local fixes
 and test success must not be described as deployed production behavior.
+
+## Deployed legacy guard spelling regression
+
+Further inspection found the live LibreChat source still uses
+`toolNames.every((n) => cross.has(n))`. The previous migration only matched
+the callback identifier `name`; its passing fixture did not cover this actual
+deployed spelling. Migration now matches the bound callback identifier and
+normalizes the guard to `some`. Regression cases for both `name` and `n`
+pass, including a second idempotent application (4 patch tests total).
+Copies of the actual two LibreChat files were patched in
+`/tmp/mcc-patch-upgrade.FPZl2J`: controller syntax passed, the resulting guard
+uses `some`, and a second patch reports already patched. Live source/process
+was left unchanged. This strengthens upgrade coverage, not mixed execution
+correctness or runtime deployment evidence.

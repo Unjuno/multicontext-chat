@@ -175,9 +175,12 @@ function save(rel, text, didChange) {
   // Migrate already-patched checkouts as well as fresh installations. The
   // helper class is deliberately retained by old patches, so this cannot be
   // gated on the helper's absence.
-  const legacyBatchGuard = 'toolNames.every((name) => cross.has(name))';
-  if (text.includes(legacyBatchGuard)) {
-    text = text.replaceAll(legacyBatchGuard, 'toolNames.some((name) => cross.has(name))');
+  // Historical deployed patches also used `n` as the callback parameter.
+  // Match the same bound identifier, not one spelling of it.
+  const legacyBatchGuard = /toolNames\.every\(\s*\(([A-Za-z_$][\w$]*)\)\s*=>\s*cross\.has\(\1\)\s*\)/g;
+  if (legacyBatchGuard.test(text)) {
+    legacyBatchGuard.lastIndex = 0;
+    text = text.replace(legacyBatchGuard, 'toolNames.some((name) => cross.has(name))');
     dirty = true;
   }
   const guard = '          throwIfExternalCrossChatTools(req, toolNames);';
