@@ -61,8 +61,8 @@
   <dialog id="unsavedDialog" aria-labelledby="unsavedDialogTitle" aria-describedby="unsavedDialogDescription">
     <form method="dialog">
       <h3 id="unsavedDialogTitle">未保存の変更があります</h3>
-      <p id="unsavedDialogDescription">移動すると、ワークスペース設定やチャット設定の未保存内容は破棄されます。Escキーでも戻れます。</p>
-      <menu><button value="cancel" aria-label="移動をキャンセルして編集に戻る">戻る</button><button value="discard" class="danger" aria-label="未保存の変更を破棄して移動する">破棄して移動</button></menu>
+      <p id="unsavedDialogDescription">続けると、ワークスペース設定やチャット設定の未保存内容は破棄されます。Escキーでも戻れます。</p>
+      <menu><button value="cancel" aria-label="操作をキャンセルして編集に戻る">戻る</button><button id="discardUnsaved" value="discard" class="danger" aria-label="未保存の変更を破棄して続ける">破棄して続ける</button></menu>
     </form>
   </dialog>
 

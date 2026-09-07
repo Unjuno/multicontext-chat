@@ -48,9 +48,16 @@ themeToggle?.addEventListener('click', () => {
 updateThemeToggle();
 const helpToggle = document.getElementById('helpToggle');
 const desktopSettings = document.getElementById('desktopSettings');
-async function confirmDiscardUnsaved() {
+async function confirmDiscardUnsaved(destination = '移動') {
   const dialog = document.getElementById('unsavedDialog');
   if (!dialog) return window.confirm('未保存の変更があります。破棄して移動しますか？');
+  const description = document.getElementById('unsavedDialogDescription');
+  const discard = document.getElementById('discardUnsaved');
+  if (description) description.textContent = `「${destination}」を続けると、ワークスペース設定やチャット設定の未保存内容は破棄されます。Escキーでも戻れます。`;
+  if (discard) {
+    discard.textContent = `破棄して${destination}`;
+    discard.setAttribute('aria-label', `未保存の変更を破棄して${destination}`);
+  }
   return new Promise((resolve) => {
     const onClose = () => resolve(dialog.returnValue === 'discard');
     dialog.addEventListener('close', onClose, { once: true });
@@ -58,7 +65,7 @@ async function confirmDiscardUnsaved() {
   });
 }
 desktopSettings?.addEventListener('click', async () => {
-  if (isWorkspaceDirty() && currentId && !(await confirmDiscardUnsaved())) return;
+  if (isWorkspaceDirty() && currentId && !(await confirmDiscardUnsaved('設定へ移動'))) return;
   if (!window.__TAURI__ && !window.__TAURI_INTERNALS__) {
     toast('デスクトップアプリでのみ設定を開けます', 'warn');
     return;
@@ -864,7 +871,7 @@ async function handleWorkspaceSelect(id) {
   // Clicking the already-open workspace must never refresh away unsaved edits.
   if (id === currentId) return;
   if (isWorkspaceDirty() && currentId) {
-    const ok = await confirmDiscardUnsaved();
+    const ok = await confirmDiscardUnsaved('別のワークスペースへ移動');
     if (!ok) return;
   }
   return select(id);
@@ -2090,7 +2097,7 @@ async function createWorkspaceFromDialog(name, button, initialChatCount = 2) {
 }
 $('#newWorkspace').onclick = async (e) => {
   if (isWorkspaceDirty() && currentId) {
-    const ok = await confirmDiscardUnsaved();
+    const ok = await confirmDiscardUnsaved('新規ワークスペースの作成');
     if (!ok) return;
   }
   const dialog = $('#newWorkspaceDialog');
