@@ -15,7 +15,8 @@ if (!fs.existsSync(bundle)) {
 
 // Use a random port to avoid collision
 const port = 4321 + Math.floor(Math.random() * 1000);
-const env = { ...process.env, MULTICONTEXT_PORT: String(port), MULTICONTEXT_HOST: '127.0.0.1', MULTICONTEXT_MCP_TOKEN: 'ci-verify-token', MULTICONTEXT_MCP_ENABLED: 'true', LIBRECHAT_BASE_URL: 'http://127.0.0.1:1', MULTICONTEXT_DATA_FILE: '/tmp/mc-verify-bundle.json' };
+const stateFile = `/tmp/mc-verify-bundle-${process.pid}-${Date.now()}.json`;
+const env = { ...process.env, MULTICONTEXT_PORT: String(port), MULTICONTEXT_HOST: '127.0.0.1', MULTICONTEXT_MCP_TOKEN: 'ci-verify-token', MULTICONTEXT_MCP_ENABLED: 'true', LIBRECHAT_BASE_URL: 'http://127.0.0.1:1', MULTICONTEXT_DATA_FILE: stateFile };
 try { fs.unlinkSync(env.MULTICONTEXT_DATA_FILE); } catch {}
 
 const child = spawn(process.execPath, [bundle], { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -78,4 +79,5 @@ try {
 child.kill('SIGTERM');
 await new Promise(r => setTimeout(r, 500));
 try { child.kill('SIGKILL'); } catch {}
+try { fs.unlinkSync(stateFile); } catch {}
 console.log('bundle verification passed');
