@@ -1172,16 +1172,17 @@ function renderOrchestratorBar(data) {
   const barStateLabels = { IDLE: '待機中', PAUSED: '一時停止', RUNNING: '実行中', QUEUED: 'キューあり', BLOCKED: '要対応', FAILED: '失敗' };
   const liveMembers = Object.values(lastWorkspace?.members || {}).filter(member => member.active !== false);
   const runningMembers = liveMembers.filter(member => member.status === 'running').length;
+  const memberQueued = liveMembers.reduce((sum, member) => sum + (member.queue?.length || 0), 0);
   const answeredMembers = liveMembers.filter(member => (member.messages || []).some(message => message.role === 'assistant')).length;
   const progress = liveMembers.length ? Math.round((answeredMembers / liveMembers.length) * 100) : 0;
   const followTag = following && cur ? ` <span class="ob-follow" title="この実行の進行状況を表示中">◎追跡中 ${esc(cur.id.slice(0,8))}</span>` : '';
   const canPause = Boolean(data.paused || qPending.length || (cur && ['running', 'queued'].includes(cur.status)));
   const pauseLabel = data.paused ? '再開' : '一時停止';
-  const pauseTitle = data.paused ? '実行キューを再開' : canPause ? '実行中の処理とキューを一時停止' : '実行中または待機中の処理はありません';
+  const pauseTitle = data.paused ? 'オーケストレーターの実行キューを再開' : canPause ? 'オーケストレーターの実行中処理とキューを一時停止' : memberQueued ? 'オーケストレーターの処理はありません。チャットの待機キューは「全て停止」で停止できます' : '実行中または待機中の処理はありません';
   bar.innerHTML = `
     <span class="ob-dot ${esc(dotCls)}"></span>
     <strong>実行管理</strong> <span class="ob-sep">·</span> ${esc(barStateLabels[barState] || '状態確認中')}${followTag}
-    <span class="ob-sep">·</span> 優先度 高 ${q0} <span class="ob-sep">|</span> 標準 ${q1} <span class="ob-sep">|</span> 低 ${q2}
+    <span class="ob-sep">·</span> 優先度 高 ${q0} <span class="ob-sep">|</span> 標準 ${q1} <span class="ob-sep">|</span> 低 ${q2}${memberQueued ? ` <span class="ob-sep">·</span> チャット待機 ${memberQueued}` : ''}
     <span class="ob-sep">·</span> ${curText}
     <span class="ob-progress" title="回答済み ${answeredMembers} / ${liveMembers.length} チャット"><span class="ob-progress-track"><span style="width:${progress}%"></span></span><span>${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
     <span style="flex:1"></span>
