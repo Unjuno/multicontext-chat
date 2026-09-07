@@ -62,6 +62,7 @@
 - BLOCKED相当のチャットエラー表示に「原因」と「次に選べる操作（再試行／停止）」を明示し、保持される履歴・キューの説明と分離した。画面の情報順を、状態 → 原因 → 保持データ → 操作に揃えた。
 - 最新macOSバンドルで `DesktopApp E2E` を検索・選択し、Compile済み画面を実表示とAXツリーで確認した。`作成済み`、作成日時、`直近回答 2件を使用`、`結果をコピー`、`Markdownで保存` が表示され、メンバー履歴と統合レポートが分離されていた。検索後も既存ワークスペース件数30件を維持した。
 - Tauri稼働サーバーで `PRODUCT_UX_BROADCAST_SMOKE` を作成し、2チャットへ同一プロンプトをBroadcastした。HTTP 202、両チャットが1秒で `SETTLED`／`idle`、各メッセージ2件、両回答が `PRODUCT_BROADCAST_OK` で一致することを確認した。確認名付き削除204で後片付けした。
+- Tauri稼働サーバーで `PRODUCT_UX_COMPILE_SMOKE` を作成し、2チャットのBroadcast完了後にCompileを実行した。Broadcast後の各履歴2件がCompile前後で変わらず、CompileはHTTP 200・`lastCompile`生成で完了した。確認名付き削除204で後片付けした。
 
 ## 未確認
 
