@@ -252,6 +252,9 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       if (parts.length === 5 && req.method === 'PATCH') {
         try {
           const body = await readBody(req);
+          if (!body || typeof body !== 'object' || Array.isArray(body)) {
+            throw Object.assign(new Error('チャット更新の入力はJSONオブジェクトで指定してください'), { status: 400, code: 'INVALID_REQUEST_BODY' });
+          }
           const view = await app.updateChat(workspaceId, memberId, body);
           return json(res, 200, enrichView(view, req));
         } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
