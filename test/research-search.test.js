@@ -4,6 +4,17 @@ import { ResearchSearch, parseWebResults } from '../src/research-search.js';
 import { CrossChatToolExecutor, isCrossChatToolCall } from '../src/cross-chat-executor.js';
 import { LibreChatClient } from '../src/librechat.js';
 
+test('native tool continuation rebinds persona instructions without replaying user history', async () => {
+  let body;
+  const client = new LibreChatClient({ baseUrl: 'http://localhost', apiKey: 'test', mode: 'native', fetchImpl: async (_, options) => {
+    body = JSON.parse(options.body);
+    return Response.json({ id: 'r', output: [] }, { headers: { 'X-LibreChat-Conversation-Id': 'conv' } });
+  } });
+  await client.continueAgent({ agentId: 'a', conversationId: 'conv', globalPrompt: 'global', developerPrompt: 'persona', orderedItems: [] });
+  assert.deepEqual(body.input, [{ role: 'system', content: 'global' }, { role: 'developer', content: 'persona' }]);
+  assert.equal(body.previous_response_id, 'conv');
+});
+
 test('native client advertises standard search and supports opting out', () => {
   const args = { baseUrl: 'http://localhost:3080', apiKey: 'test', mode: 'native' };
   assert.ok(new LibreChatClient(args).tools.some(tool => tool.function.name === 'search_sources'));

@@ -60,15 +60,18 @@ export class LibreChatClient {
     } finally { clearTimeout(timer); signal?.removeEventListener('abort', relayAbort); }
   }
 
-  async continueAgent({ agentId, conversationId, toolCalls = [], toolResults = [], orderedItems = null, signal, metadata = {} }) {
+  async continueAgent({ agentId, conversationId, globalPrompt = '', developerPrompt = '', toolCalls = [], toolResults = [], orderedItems = null, signal, metadata = {} }) {
     if (!conversationId) throw new Error('conversationId is required for continueAgent'); this.assertConfigured();
     if (!agentId) throw new Error('LibreChat agentId is required');
     // Native continuation replays the answered function_call items first so the
     // provider sees a coherent tool round trip (assistant tool_calls -> tool
     // outputs). LibreChat persists only message text, so without this the
     // function_call_output items would dangle and gpt-oss returns empty text.
-    // System/developer/user/history are still never replayed here.
+    // Instructions are request-scoped: LibreChat does not persist these roles.
+    // Rebind them while leaving ordinary user/assistant history server-owned.
     const input = [];
+    if (globalPrompt) input.push({ role: 'system', content: globalPrompt });
+    if (developerPrompt) input.push({ role: 'developer', content: developerPrompt });
     if (Array.isArray(orderedItems)) {
       for (const item of orderedItems) input.push(item);
     }

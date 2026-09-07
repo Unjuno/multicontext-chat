@@ -49,5 +49,12 @@ node --env-file=.env scripts/smoke-builtin-search.mjs YOUR_AGENT_ID
 The probe checks actual tool invocation and returned results, not factual
 correctness of the final prose. See `NS_AUDIT_EXPERIMENT.md` for observations.
 
+`scripts/smoke-research-flywheel.mjs YOUR_AGENT_ID` exercises the full
+application/scheduler search-to-peer path and retains state/traces under
+`data/experiments/`. Its latest run is **not passing**: delivery occurred, but
+researcher completion and source-grounded prose remain unverified. Native
+scheduler continuations now rebind global/developer instructions explicitly,
+because those request-scoped roles are not stored by LibreChat.
+
 Official interfaces: [DuckDuckGo HTML/Lite](https://duckduckgo.com/duckduckgo-help-pages/features/non-javascript),
 [Crossref public access](https://www.crossref.org/documentation/retrieve-metadata/rest-api/access-and-authentication/).

@@ -267,7 +267,7 @@ export class Scheduler {
                 .map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
               const orderedItems = buildOrderedContinuation(currentResult.raw, toolResults);
               if (this.client.mode === 'native' && typeof this.client.continueAgent === 'function') {
-                currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, toolCalls, toolResults: functionCallOutput, orderedItems, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
+                currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, globalPrompt: workspace.globalPrompt, developerPrompt: current.developerPrompt, toolCalls, toolResults: functionCallOutput, orderedItems, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
               } else {
                 currentResult = await this.client.runAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id }, toolResults: functionCallOutput });
               }

@@ -275,3 +275,32 @@ fixed-host requests, caching, CAPTCHA/format failure, size limits, provenance
 and external executor call IDs. The live probes use the existing LibreChat
 with request-owned search; they do not establish provider-owned mixed-batch
 correctness, the new desktop GUI path, or deployment of the pending host patch.
+
+## Search-to-peer runtime test and instruction continuity
+
+Added `smoke-research-flywheel.mjs`: real native client, canonical application,
+FIFO scheduler, independent researcher/auditor personas and isolated durable
+state under `data/experiments/` (git-ignored, retained locally). Model request/
+response traces are recorded; no production workspace is overwritten.
+
+Baseline `research-flywheel-1788813938286`, workspace
+`c1cbd9f0-e421-4ea6-b66e-9c44ab9e28c0`: searches occurred but no delivery;
+researcher repeatedly targeted nonexistent `auditor` instead of supplied UUID
+and exhausted ten tool rounds. No completion is claimed.
+
+LibreChat does not persist request system/developer roles. Scheduler native
+continuations now explicitly rebind the original global/developer instructions
+without replaying ordinary user history. Regression tests verify both client
+body roles and scheduler forwarding. This is a request-contract fix, not proof
+that the model follows the instructions.
+
+Retest `research-flywheel-1788814017531`, workspace
+`683382cd-4799-4576-9905-686ddad01cb9`: one delivery and one completed auditor,
+but researcher again exhausted ten rounds. The researcher eventually sent a
+DOI/title/author claim not supported by the recorded search results. Auditor
+searched Crossref and challenged that citation, but falsely also claimed a
+general web search, which its trace does not contain. Runtime test therefore
+fails its both-members-complete condition, and scientific correctness fails.
+The running LibreChat still uses the old text-only persistence path; the new
+host patch must be exercised before attributing all continuation behavior to
+the model alone. `npm run check`: 299 total, 296 pass, 0 fail, 3 skip.

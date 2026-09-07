@@ -17,8 +17,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 test('scheduler preserves search transcript and stops after provider-only final response', async () => {
   const store = makeStore();
-  const ws = store.createWorkspace({ name: 'mixed regression' });
-  const member = store.addMember(ws.id, { name: 'A', agentId: 'a' });
+  const ws = store.createWorkspace({ name: 'mixed regression', globalPrompt: 'Research policy' });
+  const member = store.addMember(ws.id, { name: 'A', agentId: 'a', developerPrompt: 'Source auditor' });
   const provider = { type: 'function_call', call_id: 'p', name: 'web_search', arguments: '{}' };
   const providerResult = { type: 'function_call_output', call_id: 'p', output: 'actual search' };
   const cross = { type: 'function_call', call_id: 'c', name: 'list_chats', arguments: '{}' };
@@ -29,6 +29,8 @@ test('scheduler preserves search transcript and stops after provider-only final 
     runAgent: async () => ({ conversationId: 'conv', text: '', raw: { output: [provider, providerResult, cross] } }),
     continueAgent: async args => {
       continuations++;
+      assert.equal(args.globalPrompt, 'Research policy');
+      assert.equal(args.developerPrompt, 'Source auditor');
       transcript = args.orderedItems;
       return { conversationId: 'conv', text: 'final research', raw: { output: [provider, providerResult] } };
     },

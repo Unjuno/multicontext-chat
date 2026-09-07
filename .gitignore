@@ -2,6 +2,7 @@
 data/*.json
 data/*.tmp
 data/*.bak
+data/experiments/
 .DS_Store
 node_modules/
 coverage/
