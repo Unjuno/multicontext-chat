@@ -136,6 +136,11 @@
 - Compile was launched only after `SETTLED`. The client command exceeded its display timeout while the server continued; a later REST check found the workspace already removed, confirming server-side completion and exact-name cleanup.
 - This smaller research unit avoided cross-chat growth (`toolEnqueues: 0`) and provides a better repeatable flywheel unit than the broad open-ended prompt.
 
+# 2026-09-08 — Scaling-gap sprint (live MCP)
+
+- Started workspace `ea7cc572-303e-4062-96fc-36edbec04a64` with the geometric preset and a single target: verify scale-critical norm behavior in an epsilon-regularity route.
+- Run `3352d39e-83ab-4e4f-99c9-c506ced147f3` remained `RUNNING` after eight five-second polls. A later state check showed all four members active, `toolEnqueues: 9`, `inspections: 2`, and no member errors. This is a live, expanding research run; Compile is intentionally deferred until `SETTLED`.
+
 # Product UX evidence — compile history
 
 - Compile結果を最大5件保持し、最新結果と過去結果をUIで選択できるようにした。選択した結果は同じ画面からコピー／Markdown保存できる。既存の `lastCompile` を維持し、履歴未保持の旧データは起動時に自動移行する。`node --check public/app.js`、サーバーバンドル生成、`git diff --check` を確認済み。
