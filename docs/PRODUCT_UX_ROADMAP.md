@@ -57,3 +57,9 @@ Acceptance: changing Agent policy is observable in the UI and API, and a Windows
 ## Manual release loop
 
 For each UX change, run a focused manual flow on the macOS bundle: launch, create or select a workspace, perform the affected action, force one recovery path where safe, and inspect the resulting state. Record evidence in `docs/PRODUCT_RUNTIME_CHECK.md`. Unit and regression suites are intentionally outside this product-validation loop.
+
+## Shipped product safeguards
+
+- Desktop settings can create a timestamped `state.json` backup before configuration changes.
+- A settled workspace can be duplicated as a separate working copy. Conversation history, roles, Agent choices, and Compile results are preserved; active queues, run state, and provider conversation IDs are reset.
+- Running or queued workspaces cannot be duplicated, preventing a copy from being mistaken for an active continuation.
