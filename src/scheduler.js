@@ -257,17 +257,40 @@ export class Scheduler {
               const functionCallOutput = [...providerToolResults, ...toolResults]
                 .filter((result, index, all) => all.findIndex((candidate) => candidate.call_id === result.call_id) === index)
                 .map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
+              const resultByCallId = new Map(functionCallOutput.map((result) => [result.call_id, result]));
+              const orderedItems = [];
+              for (const outputItem of (currentResult.raw?.output || [])) {
+                if (outputItem?.type === 'function_call' || outputItem?.type === 'tool_call') {
+                  const callId = outputItem.call_id || outputItem.callId;
+                  orderedItems.push({
+                    type: 'function_call',
+                    call_id: callId,
+                    name: outputItem.name || outputItem.function?.name || '',
+                    arguments: typeof (outputItem.arguments || outputItem.function?.arguments) === 'string'
+                      ? (outputItem.arguments || outputItem.function.arguments)
+                      : JSON.stringify(outputItem.arguments || outputItem.args || {}),
+                  });
+                  const result = resultByCallId.get(callId);
+                  if (result) orderedItems.push(result);
+                } else if (outputItem?.type === 'function_call_output' && outputItem.call_id) {
+                  orderedItems.push({ type: 'function_call_output', call_id: outputItem.call_id, output: String(outputItem.output ?? '') });
+                }
+              }
+              for (const result of functionCallOutput) {
+                if (!orderedItems.some((item) => item.type === 'function_call_output' && item.call_id === result.call_id)) orderedItems.push(result);
+              }
               if (this.client.mode === 'native' && typeof this.client.continueAgent === 'function') {
-                currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, toolCalls, toolResults: functionCallOutput, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
+                currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, toolCalls, toolResults: functionCallOutput, orderedItems, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
               } else {
                 currentResult = await this.client.runAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id }, toolResults: functionCallOutput });
               }
               if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId) || this.store.getMember(workspaceId, memberId)?.current?.item?.id !== item.id) break;
               currentConversationId = currentResult.conversationId;
               const nextToolCalls = extractToolCalls(currentResult.raw);
-              if (nextToolCalls.length === 0) break;
+              const nextCrossToolCalls = nextToolCalls.filter(isCrossChatToolCall);
+              if (nextCrossToolCalls.length === 0) break;
               toolCalls = nextToolCalls;
-              crossToolCalls.splice(0, crossToolCalls.length, ...toolCalls.filter(isCrossChatToolCall));
+              crossToolCalls.splice(0, crossToolCalls.length, ...nextCrossToolCalls);
             }
           }
           this.store.completeRun(workspaceId, memberId, item.id, currentResult);

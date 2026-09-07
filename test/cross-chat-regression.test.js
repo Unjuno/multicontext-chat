@@ -241,6 +241,28 @@ test('Phase6 native continuation without original calls stays outputs-only (back
   assert.equal(b1.input[0].type, 'function_call_output');
 });
 
+test('native continuation preserves ordered call/output transcript', async () => {
+  const bodies = [];
+  const fakeFetch = async (url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ id: 'r1', output: [] }), { status: 200, headers: { 'x-librechat-conversation-id': 'conv1' } });
+  };
+  const client = new LibreChatClient({ baseUrl: 'http://x', apiKey: 'k', mode: 'native', fetchImpl: fakeFetch });
+  await client.continueAgent({
+    agentId: 'a', conversationId: 'conv1',
+    orderedItems: [
+      { type: 'function_call', call_id: 'provider-1', name: 'web_search', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'provider-1', output: 'provider result' },
+      { type: 'function_call', call_id: 'cross-1', name: 'send_to_chat', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'cross-1', output: 'cross result' },
+    ],
+  });
+  assert.deepEqual(bodies[0].input.map((item) => [item.type, item.call_id]), [
+    ['function_call', 'provider-1'], ['function_call_output', 'provider-1'],
+    ['function_call', 'cross-1'], ['function_call_output', 'cross-1'],
+  ]);
+});
+
 test('Phase6 native multi-round does not duplicate user prompt', async () => {
   const inputs = [];
   const client = {

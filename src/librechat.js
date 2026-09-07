@@ -59,7 +59,7 @@ export class LibreChatClient {
     } finally { clearTimeout(timer); signal?.removeEventListener('abort', relayAbort); }
   }
 
-  async continueAgent({ agentId, conversationId, toolCalls = [], toolResults, signal, metadata = {} }) {
+  async continueAgent({ agentId, conversationId, toolCalls = [], toolResults = [], orderedItems = null, signal, metadata = {} }) {
     if (!conversationId) throw new Error('conversationId is required for continueAgent'); this.assertConfigured();
     if (!agentId) throw new Error('LibreChat agentId is required');
     // Native continuation replays the answered function_call items first so the
@@ -68,13 +68,18 @@ export class LibreChatClient {
     // function_call_output items would dangle and gpt-oss returns empty text.
     // System/developer/user/history are still never replayed here.
     const input = [];
-    for (const tc of toolCalls) {
+    if (Array.isArray(orderedItems)) {
+      for (const item of orderedItems) input.push(item);
+    }
+    for (const tc of Array.isArray(orderedItems) ? [] : toolCalls) {
       const callId = tc?.call_id ?? tc?.callId;
       if (!callId) continue;
       const args = tc?.arguments ?? tc?.args ?? tc?.function?.arguments ?? {};
       input.push({ type: 'function_call', call_id: callId, name: tc?.name ?? tc?.function?.name ?? '', arguments: typeof args === 'string' ? args : JSON.stringify(args) });
     }
-    for (const tr of toolResults) input.push({ type: 'function_call_output', call_id: tr.call_id, output: tr.output });
+    if (!Array.isArray(orderedItems)) {
+      for (const tr of toolResults) input.push({ type: 'function_call_output', call_id: tr.call_id, output: tr.output });
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('LibreChat request timed out')), this.timeoutMs);
