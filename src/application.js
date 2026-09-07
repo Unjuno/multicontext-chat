@@ -3,6 +3,8 @@ import { createRunEngine, targetFromArgs } from './orchestrator-engine.js';
 
 const AGENT_SELECTION_REQUIRED = 'AGENT_SELECTION_REQUIRED';
 const AGENT_NOT_AVAILABLE = 'AGENT_NOT_AVAILABLE';
+const INVALID_CHAT_COUNT = 'INVALID_CHAT_COUNT';
+const CHAT_COUNT_CONFLICT = 'CHAT_COUNT_CONFLICT';
 const WORKSPACE_NOT_FOUND = 'WORKSPACE_NOT_FOUND';
 const CHAT_NOT_FOUND = 'CHAT_NOT_FOUND';
 const NO_ACTIVE_CHATS = 'NO_ACTIVE_CHATS';
@@ -315,11 +317,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const isChatCountValue = (value) => (typeof value === 'number' && Number.isInteger(value))
       || (typeof value === 'string' && /^\d+$/.test(value.trim()));
     const chatCountValues = chatCountFields.map((field) => isChatCountValue(input[field]) ? Number(input[field]) : NaN);
-    if (new Set(chatCountValues).size > 1) throw problem('初期チャット数の指定が一致していません', 400);
+    if (new Set(chatCountValues).size > 1) throw problem('初期チャット数の指定が一致していません', 400, CHAT_COUNT_CONFLICT);
     const requestedChatCount = chatCountFields.length ? input[chatCountFields[0]] : 0;
     const parsedChatCount = Number(requestedChatCount);
     if (!isChatCountValue(requestedChatCount) || parsedChatCount < 0 || parsedChatCount > 10) {
-      throw problem('初期チャット数は0〜10の整数で指定してください', 400);
+      throw problem('初期チャット数は0〜10の整数で指定してください', 400, INVALID_CHAT_COUNT);
     }
 
     const workspace = store.createWorkspace(input);
