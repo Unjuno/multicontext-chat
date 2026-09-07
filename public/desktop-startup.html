@@ -230,6 +230,7 @@
         <div class="actions">
           <button class="primary" id="startBtn">保存して開始</button>
           <button id="saveBtn">保存</button>
+          <button id="dataDirBtn">データ保存場所を開く</button>
           <button id="closeBtn">閉じる</button>
         </div>
         <div class="err-text" id="settingsErr"></div>
@@ -571,6 +572,14 @@
       document.getElementById("closeBtn").onclick = closeSettings;
       document.getElementById("saveBtn").onclick = () => saveAndMaybeStart(false);
       document.getElementById("startBtn").onclick = () => saveAndMaybeStart(true);
+      document.getElementById("dataDirBtn").onclick = async () => {
+        try {
+          await invoke("open_data_dir");
+          document.getElementById("settingsErr").textContent = "データ保存場所を開きました。state.json と state.json.bak を安全な場所へコピーできます。";
+        } catch (err) {
+          document.getElementById("settingsErr").textContent = String(err);
+        }
+      };
       document.getElementById("retryBtn").onclick = runStartup;
       document.getElementById("logsBtn").onclick = async () => {
         try {

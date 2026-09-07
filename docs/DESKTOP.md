@@ -53,6 +53,10 @@ next to it at `~/Library/Application Support/com.unjuno.multicontext/state.json`
 separate from a dev checkout's `./data/state.json` — workspaces created inside
 the app do not appear under `node src/server.js` and vice versa. Defaults:
 
+Settings の「データ保存場所を開く」からこのディレクトリを Finder で開けます。
+手動バックアップはアプリ終了後に `state.json` と `state.json.bak` を別の安全な場所へコピーしてください。
+`state.json.bak` は自動復元用の直前バックアップです。復元が必要な場合は、アプリを終了して元の `state.json` を退避してから、バックアップしたファイルを `state.json` に戻してください。
+
 - `librechat_url: http://127.0.0.1:3080`
 - `model_url: http://127.0.0.1:8080/v1`
 - `multicontext_port: 4317` (canonical; the old misspelling `multicontent_port` is still accepted as a backward-compatible alias)

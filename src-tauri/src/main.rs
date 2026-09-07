@@ -407,6 +407,20 @@ fn open_logs_dir(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn open_data_dir(app: tauri::AppHandle) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn resolve_node(state: &tauri::State<AppState>) -> Option<String> {
     let cfg = state.config.lock().unwrap().clone();
     cfg.node_path.or_else(runtime::find_node)
@@ -1362,6 +1376,7 @@ fn main() {
             runtime_status,
             get_logs,
             open_logs_dir,
+            open_data_dir,
             validate_executable,
             pick_path,
             frontend_ready,
