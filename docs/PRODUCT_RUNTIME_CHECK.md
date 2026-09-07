@@ -122,3 +122,4 @@
 - 停止直後の状態遅延対策後、稼働中APIで完了済みの専用ワークスペースへユーザー停止を送り、`HTTP 200`、`runtimeState: SETTLED`、`settled: true` を確認した。停止は冪等に扱われ、生成中・待機キュー・履歴を追加変更していない。
 - 長時間の外部ツール継続処理について、UIの「長時間実行中」説明を「自動停止せず、必要な場合だけユーザーが全て停止で中断」と統一した。8チャットの収束しないケースを許容しつつ、ユーザー主導の停止経路を残す方針である。
 - `npm run verify:release` を継続実行として最後まで完走した。`cargo check`、macOS `.app`／`.dmg` ビルド、配布UIのSHA-256検証、bundled serverの起動、MCP initialize／`list_workspaces` がすべて成功した。
+- 稼働中APIへJSON body `null` のワークスペース作成要求を送り、`HTTP 400 / INVALID_REQUEST_BODY` で拒否され、前後のワークスペース数が30件で不変だった。入力不備で空のワークスペースを作らないことを確認した。
