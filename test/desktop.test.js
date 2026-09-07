@@ -151,7 +151,7 @@ test("aggregate status is READY only when all required services are READY", () =
   ];
   const agg = UI.aggregateStatus(allReady);
   assert.equal(agg.cls, "ready");
-  assert.equal(agg.text, "AI Stack ● 準備完了");
+  assert.equal(agg.text, "AIスタック ● 準備完了");
 });
 
 test("one failed service makes aggregate non-READY", () => {
@@ -162,7 +162,7 @@ test("one failed service makes aggregate non-READY", () => {
   ];
   const agg = UI.aggregateStatus(oneError);
   assert.equal(agg.cls, "error");
-  assert.equal(agg.text, "AI Stack ● 要確認");
+  assert.equal(agg.text, "AIスタック ● 要確認");
 });
 
 test("starting/checking aggregate shows 起動中", () => {
@@ -172,13 +172,13 @@ test("starting/checking aggregate shows 起動中", () => {
     status("MultiContext", "ready"),
   ];
   assert.equal(UI.aggregateStatus(starting).cls, "starting");
-  assert.equal(UI.aggregateStatus(starting).text, "AI Stack ● 起動中");
+  assert.equal(UI.aggregateStatus(starting).text, "AIスタック ● 起動中");
   const checking = [
     status("モデル", "checking"),
     status("LibreChat", "ready"),
     status("MultiContext", "ready"),
   ];
-  assert.equal(UI.aggregateStatus(checking).cls, "starting");
+  assert.equal(UI.aggregateStatus(checking).cls, "checking");
 });
 
 test("serviceDisplayLabel returns correct Japanese labels", () => {

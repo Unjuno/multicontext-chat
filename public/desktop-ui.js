@@ -139,6 +139,10 @@
     const states = list.map((s) => normalizeState(s.state));
     const coreNames = new Set(["モデル", "LibreChat", "MultiContext"]);
     const core = list.filter((s) => coreNames.has(s.name));
+    // Surface a confirmed failure immediately, even when startup has not yet
+    // reported every required service. Staying at "確認中" hides a useful
+    // recovery path from the user.
+    if (states.some((s) => s === "error")) return { label: "要確認", cls: "error", text: "AIスタック ● 要確認" };
     // Optional rows must never make the stack look ready while a required
     // service is missing. This matters during startup and partial API replies.
     if (core.length < 3) return { label: "確認中", cls: "checking", text: "AIスタック ● 確認中" };
@@ -146,7 +150,6 @@
       return { label: "準備完了", cls: "ready", text: "AIスタック ● 準備完了" };
     }
     if (states.every((s) => s === "ready")) return { label: "準備完了", cls: "ready", text: "AIスタック ● 準備完了" };
-    if (states.some((s) => s === "error")) return { label: "要確認", cls: "error", text: "AIスタック ● 要確認" };
     if (states.some((s) => s === "needs_setup")) return { label: "要設定", cls: "needs_setup", text: "AIスタック ● 要設定" };
     if (states.some((s) => s === "checking")) return { label: "一部確認中", cls: "checking", text: "AIスタック ● 一部確認中" };
     return { label: "起動中", cls: "starting", text: "AIスタック ● 起動中" };

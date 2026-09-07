@@ -187,7 +187,7 @@ test('AI Stack aggregate READY when all prerequisites pass', () => {
   ];
   const agg = UI.aggregateStatus(statuses);
   assert.equal(agg.cls, 'ready');
-  assert.equal(agg.text, 'AI Stack ● 準備完了');
+  assert.equal(agg.text, 'AIスタック ● 準備完了');
 });
 // 11
 test('Agent missing makes aggregate 要確認 while GPT-OSS remains READY', () => {
@@ -196,7 +196,7 @@ test('Agent missing makes aggregate 要確認 while GPT-OSS remains READY', () =
   ];
   const agg = UI.aggregateStatus(statuses);
   assert.equal(agg.cls, 'error');
-  assert.equal(agg.text, 'AI Stack ● 要確認');
+  assert.equal(agg.text, 'AIスタック ● 要確認');
   // individual GPT-OSS remains ready
   const gpt = UI.serviceDisplayLabel('モデル','ready');
   assert.equal(gpt, '準備完了');
@@ -210,7 +210,7 @@ test('status polling converges from checking to ready', () => {
   statuses = UI.applyStartupEvent(statuses, status('モデル','checking',{attempt_id:1}), 1);
   statuses = UI.applyStartupEvent(statuses, status('LibreChat','checking',{attempt_id:1}), 1);
   statuses = UI.applyStartupEvent(statuses, status('MultiContext','checking',{attempt_id:1}), 1);
-  assert.equal(UI.aggregateStatus(Object.values(statuses)).cls, 'starting');
+  assert.equal(UI.aggregateStatus(Object.values(statuses)).cls, 'checking');
   statuses = UI.applyStartupEvent(statuses, status('モデル','ready',{attempt_id:1}), 1);
   statuses = UI.applyStartupEvent(statuses, status('LibreChat','ready',{attempt_id:1}), 1);
   statuses = UI.applyStartupEvent(statuses, status('MultiContext','ready',{attempt_id:1}), 1);
@@ -224,12 +224,12 @@ test('status polling failure does not permanently stick at checking', () => {
   // Simulate a failed poll: no new events arrive, but aggregate should not be ready and next poll should retry
   // Our UI treats pure checking as starting, but a persistent error should become 要確認 after fallback
   const aggChecking = UI.aggregateStatus(Object.values(statuses));
-  assert.equal(aggChecking.cls, 'starting');
+  assert.equal(aggChecking.cls, 'checking');
   // Simulate fallback error synthesis after failure: error entry for MultiContext
   statuses = UI.applyStartupEvent(statuses, status('MultiContext','error',{attempt_id:1}), 1);
   const aggError = UI.aggregateStatus(Object.values(statuses));
   assert.equal(aggError.cls, 'error');
-  assert.equal(aggError.text, 'AI Stack ● 要確認');
+  assert.equal(aggError.text, 'AIスタック ● 要確認');
   // Now success on retry should converge to ready
   statuses = UI.applyStartupEvent(statuses, status('LibreChat','ready',{attempt_id:1}), 1);
   statuses = UI.applyStartupEvent(statuses, status('MultiContext','ready',{attempt_id:1}), 1);

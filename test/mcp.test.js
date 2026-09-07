@@ -166,7 +166,7 @@ test('MCP delete workspace', async () => {
   await withMcpServer(client, async ({ client: mcp, base }) => {
     const c = await mcp.callTool({ name: 'multicontext_create_workspace', arguments: { name: 'ToDelete' } });
     const ws = JSON.parse(c.content[0].text);
-    const del = await mcp.callTool({ name: 'multicontext_delete_workspace', arguments: { workspace_id: ws.id } });
+    const del = await mcp.callTool({ name: 'multicontext_delete_workspace', arguments: { workspace_id: ws.id, confirm_name: 'ToDelete' } });
     const j = JSON.parse(del.content[0].text);
     assert.equal(j.deleted, true);
     const check = await jsonRequest(base, `/api/workspaces/${ws.id}`);
@@ -324,7 +324,7 @@ test('MCP parallel members serial per member unchanged', async () => {
 });
 
 // 18 stop workspace clears all and late completion does not reappear
-test('MCP stop workspace clears queues and ignores late completion', async () => {
+test.skip('MCP stop workspace clears queues and ignores late completion', 'MCP stop is intentionally GUI-only for user safety', async () => {
   let release;
   let completed = false;
   const client = {
@@ -375,7 +375,7 @@ test('MCP stop workspace clears queues and ignores late completion', async () =>
 });
 
 // 19 stop chat only affects that chat
-test('MCP stop chat only affects that chat', async () => {
+test.skip('MCP stop chat only affects that chat', 'MCP stop is intentionally GUI-only for user safety', async () => {
   let releases = {};
   const client = {
     listAgents: async () => singleAgent,

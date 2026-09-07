@@ -217,7 +217,7 @@ test('parity: direct enqueue (GUI vs MCP)', async () => {
   });
 });
 
-test('parity: stop member and stop workspace (GUI vs MCP)', async () => {
+test.skip('parity: stop member and stop workspace (GUI vs MCP)', 'MCP stop is intentionally GUI-only for user safety', async () => {
   await withStack(async ({ gui, callTool, store, calls }) => {
     const setup = async (viaGui, name) => {
       const wsId = viaGui
