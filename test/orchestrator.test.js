@@ -47,6 +47,7 @@ test('orchestrator create_session preset creates 4 members', async () => {
   assert.deepEqual(PRESETS['navier-stokes-geometric-4'].members.map((m) => m.name), [
     'A — Geometric Measure Analyst', 'B — Harmonic Analyst', 'C — Computer-Assisted Skeptic', 'D — Adversarial Auditor',
   ]);
+  assert.match(PRESETS['navier-stokes-geometric-4'].seedPrompt, /THEOREM/);
 });
 
 test('orchestrator distill truncates', async () => {

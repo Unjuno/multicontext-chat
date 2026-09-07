@@ -92,6 +92,8 @@ Clearly distinguish known results, heuristic reasoning, and unresolved questions
   },
 };
 
+const RESEARCH_SEARCH_PROTOCOL = 'When Web Search or another research tool is available, use it for the key mathematical claims. Prefer primary sources and original papers; record the URL or citation, hypotheses, and exact scope. If no search tool is available, say so. Never treat a search snippet or numerical result as a proof, and label sourced theorem, inference, heuristic, and open gap separately.';
+
 export function registerOrchestratorTools(server, app, store) {
   const hasStore = store && typeof store.createOrchestratorRun === 'function';
   // Single canonical run engine (same module the application API uses), so
@@ -114,7 +116,7 @@ export function registerOrchestratorTools(server, app, store) {
     const members = [];
     for (const [index, member] of preset.members.entries()) {
       const agentId = agents.length ? String(agents[index % agents.length].id || '') : '';
-      const result = await app.addChat(workspaceId, { name: member.name, developerPrompt: member.developerPrompt, agentId });
+      const result = await app.addChat(workspaceId, { name: member.name, developerPrompt: `${member.developerPrompt} ${RESEARCH_SEARCH_PROTOCOL}`, agentId });
       members.push(result.member);
     }
     return members;
