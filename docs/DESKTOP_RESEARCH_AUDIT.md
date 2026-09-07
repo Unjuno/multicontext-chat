@@ -103,3 +103,23 @@ cancellation tests also pass; the focused suite is 12/12. They use an injected
 transport, not a live-model Stop test. GUI-only user Stop policy is unchanged.
 The running servers and built desktop bundle have not been updated with this
 client change; the prior packaged-artifact evidence does not cover it.
+
+### Post-cancellation package refresh
+
+Rebuilt the macOS `.app` from application commit `dc54610`; this supersedes the
+outdated generated-bundle status above, but does not update an already-running
+server or the `/Applications` installation. Final `npm run check` now includes
+all twelve cancellation tests: **344 total / 341 passed / 0 failed / 3 skipped**.
+`desktop:build -- --bundles app` succeeded, and `verify:desktop` matched all ten
+public files plus the bundled server.
+
+The freshly packaged server passed the actual HTTP MCP research-handoff probe
+against a copied recorded NS experiment: all three routes retained rejection
+notes and `UNREVIEWED`, with zero model requests and original state unchanged.
+Probe directory: `/var/folders/pz/8_nc5kp109z8f36jl0172xzw0000gn/T/mcc-handoff-sPV4bB`.
+Build/check logs: `/tmp/mcc-current-desktop-build.log` and
+`/tmp/mcc-current-full-check.log`.
+
+`verify:signing` still exits 1 (ad-hoc signature or no TeamIdentifier). No signed
+artifact, notarization, fresh native-window QA, or real LibreChat mixed-model E2E
+is implied by this package refresh.
