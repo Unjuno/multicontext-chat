@@ -306,6 +306,24 @@ test('compile output does not modify histories', async () => {
   assert.equal(before, after);
 });
 
+test('compile bounds long cross-chat histories before model call', async () => {
+  const single = [{ id: 'solo' }];
+  let compilePrompt = '';
+  const store = makeStore();
+  const app = createApplication({ config: makeConfig(), store, client: mock(single, async ({ prompt, metadata }) => {
+    if (metadata?.purpose === 'compile') compilePrompt = prompt;
+    return { id: 'c', text: 'compiled' };
+  }), scheduler: new Scheduler({ store, client: mock(single) }) });
+  const ws = await app.createWorkspace({ name: 'CompBound' });
+  const { member } = await app.addChat(ws.id, { name: 'M' });
+  const saved = store.requireWorkspace(ws.id).members[member.id];
+  saved.messages = Array.from({ length: 40 }, (_, i) => ({ role: 'assistant', content: `long-${i}-` + 'x'.repeat(4000), at: new Date().toISOString() }));
+  store.save();
+  await app.compile(ws.id);
+  assert.ok(compilePrompt.length < 12000);
+  assert.equal((compilePrompt.match(/long-/g) || []).length, 4);
+});
+
 // Migration
 test('legacy workspace gains new fields without overwriting explicit IDs', async () => {
   const store = makeStore();
