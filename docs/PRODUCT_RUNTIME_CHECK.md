@@ -116,6 +116,13 @@
 ## 未確認
 
 - Macの画面ロック中に実施できなかった、設定保存、再試行、メニュー開閉、ログ導線の通し操作。
+# 2026-09-08 — Constructive Navier–Stokes sprint (live MCP)
+
+- Production MCP created workspace `a18d20eb-dc79-47fe-ad6f-23ffddcab73c` with the proof-builder personas: Lemma Architect, Energy Method, Critical Spaces, and Proof Verifier. The workspace returned four members and one expected seed Q item.
+- Started run `a87a7aef-dffb-47f4-84a5-e05fd4d605aa` with a bounded construct→attack→sanity-check→audit prompt. After 18 five-second polls, three members were `idle` with two messages each; Critical Spaces remained `running` with one message. The run remained `running`, runtime was `RUNNING`, and Q length was 1.
+- No Compile was attempted because the shared SETTLED precondition was not met. MCP deletion was also not attempted beyond the initial validation response; the tool requires the exact `confirm_name`, and the running workspace must not be force-stopped through MCP. This is retained as a user-GUI stop/cleanup follow-up, not classified as an application defect.
+- Result: persona assignment, bounded parallel dispatch, runtime polling, and Compile gating behaved as designed. The experiment produced partial research output but no mathematical solution claim.
+
 # Product UX evidence — compile history
 
 - Compile結果を最大5件保持し、最新結果と過去結果をUIで選択できるようにした。選択した結果は同じ画面からコピー／Markdown保存できる。既存の `lastCompile` を維持し、履歴未保持の旧データは起動時に自動移行する。`node --check public/app.js`、サーバーバンドル生成、`git diff --check` を確認済み。
