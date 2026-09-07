@@ -1,4 +1,5 @@
 import { CrossChatToolExecutor, extractToolCalls, extractProviderToolResults, isCrossChatToolCall, buildOrderedContinuation, assertProviderResultsComplete } from './cross-chat-executor.js';
+import { createSearchEvidence, recordSearchEvidence } from './search-evidence.js';
 export class Scheduler {
   constructor({ store, client, app, maxHistoryMessages = 120, maxNativeToolIterations = 10, maxConcurrentRequests = Number.POSITIVE_INFINITY }) {
     this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.maxNativeToolIterations = maxNativeToolIterations; this.maxConcurrentRequests = Math.max(1, Number(maxConcurrentRequests) || 4); this.activeRequests = 0; this.requestWaiters = []; this.running = new Map(); this.executor = null;
@@ -189,6 +190,7 @@ export class Scheduler {
           });
           if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId)) continue;
           let currentResult = result;
+          const searchEvidence = createSearchEvidence();
           let currentConversationId = result.conversationId;
           let toolCalls = extractToolCalls(currentResult.raw);
           const crossToolCalls = toolCalls.filter(isCrossChatToolCall);
@@ -219,6 +221,7 @@ export class Scheduler {
                 toolCalls: crossToolCalls,
                 signal: controller.signal,
               });
+              recordSearchEvidence(searchEvidence, crossToolCalls, toolResults);
               for (const r of toolResults) {
                 try {
                   const tc = toolCalls.find(t => (t.call_id || t.call_id === r.call_id) && t.call_id === r.call_id) || toolCalls[0];
@@ -280,7 +283,7 @@ export class Scheduler {
               crossToolCalls.splice(0, crossToolCalls.length, ...nextCrossToolCalls);
             }
           }
-          this.store.completeRun(workspaceId, memberId, item.id, currentResult);
+          this.store.completeRun(workspaceId, memberId, item.id, { ...currentResult, searchEvidence });
           try { this.store.appendEvent(workspaceId, { type: 'member.completed', origin: 'system', memberId, qId: item.id }); } catch {}
           this.store.trimMessages(workspaceId, memberId, this.maxHistoryMessages);
         } catch (inner) {

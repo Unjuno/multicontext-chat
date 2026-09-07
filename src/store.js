@@ -580,7 +580,8 @@ export class StateStore {
     if (member.current?.item?.id !== queueItemId) return false;
     const orchestratorRunId = member.current.item.orchestratorRunId;
     const pending = member.messages.find((m) => m.id === member.current.pendingMessageId); if (pending) delete pending.pending;
-    member.messages.push({ id: randomUUID(), at: now(), role: 'assistant', content: String(result.text || ''), responseId: result.id || null, usage: result.usage ?? null });
+    member.messages.push({ id: randomUUID(), at: now(), role: 'assistant', content: String(result.text || ''), responseId: result.id || null, usage: result.usage ?? null,
+      ...(result.searchEvidence ? { searchEvidence: structuredClone(result.searchEvidence) } : {}) });
     if (result.conversationId) member.conversationId = result.conversationId;
     member.current = null; member.status = 'idle'; member.lastError = null; member.lastRun = { ...member.lastRun, finishedAt: now(), responseId: result.id || null };
     workspace.stats.executions += 1; member.updatedAt = now(); workspace.updatedAt = now(); this.save();

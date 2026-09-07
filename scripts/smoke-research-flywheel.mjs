@@ -56,6 +56,11 @@ fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, nul
 assert.ok(final.orchestratorEvents.some(event => event.type === 'tool.search_sources'), 'No successful search event');
 assert.ok(final.stats.toolEnqueues >= 1, 'No actual peer delivery');
 assert.ok(Object.values(final.members).every(member => member.status === 'idle' && member.messages.some(message => message.role === 'assistant')), 'Both members must complete');
+if (config.backend === 'local') {
+  assert.ok(Object.values(final.members).every(member => member.messages.some(message =>
+    message.role === 'assistant' && message.searchEvidence?.succeeded > 0 && message.searchEvidence.fullTextVerified === false)),
+  'Both local research roles must retain actual search evidence, without claiming full-text verification');
+}
 assert.ok(final.members[reviewer.id].messages.some(message => message.role === 'user' && message.content.includes('10.')), 'Reviewer did not receive a DOI');
 const auditLookups = trace.filter(turn => turn.method === 'continueAgent' && turn.input.metadata?.member_id === reviewer.id)
   .flatMap(turn => (turn.input.orderedItems || []).filter(item => item.type === 'function_call_output').map(item => {
