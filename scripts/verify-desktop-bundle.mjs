@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,11 +20,22 @@ const markers = [
   ['desktop-startup.html', 'データ保存場所を開く'],
 ];
 
+const digest = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
 for (const [file, marker] of markers) {
   const target = path.join(resourceRoot, file);
   const content = fs.readFileSync(target, 'utf8');
   if (!content.includes(marker)) {
     console.error(`desktop bundle marker missing: ${file} -> ${marker}`);
+    process.exit(1);
+  }
+}
+
+for (const file of ['index.html', 'app.js', 'desktop-startup.html']) {
+  const source = path.join(root, 'public', file);
+  const packaged = path.join(resourceRoot, file);
+  if (digest(source) !== digest(packaged)) {
+    console.error(`desktop bundle is stale: ${file}`);
     process.exit(1);
   }
 }
