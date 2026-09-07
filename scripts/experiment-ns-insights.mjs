@@ -9,18 +9,23 @@ import { StateStore } from '../src/store.js';
 import { Scheduler } from '../src/scheduler.js';
 import { createApplication } from '../src/application.js';
 import { LibreChatClient } from '../src/librechat.js';
+import { LocalModelClient } from '../src/local-model.js';
 import { checkExponentReport } from './ns-exponent-checks.mjs';
 
 const agentId = process.argv[2];
 if (!agentId) throw new Error('Specify a native LibreChat Agent ID');
 const focused = process.argv.includes('--focused');
+const assisted = process.argv.includes('--assisted');
+if (assisted && !focused) throw new Error('--assisted requires --focused');
 const repair = process.argv.includes('--repair');
 if (repair && !focused) throw new Error('--repair requires --focused');
 const directory = path.resolve('data/experiments', `ns-insights-${Date.now()}`);
 fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 const save = (name, value) => fs.writeFileSync(path.join(directory, name), JSON.stringify(value, null, 2), { mode: 0o600 });
 const store = new StateStore(path.join(directory, 'state.json'));
-const client = new LibreChatClient({ baseUrl: config.librechatBaseUrl, apiKey: config.librechatApiKey, mode: 'native' });
+const client = config.backend === 'local'
+  ? new LocalModelClient({ baseUrl: config.localModelUrl, directory: `${path.join(directory, 'state.json')}.local-conversations` })
+  : new LibreChatClient({ baseUrl: config.librechatBaseUrl, apiKey: config.librechatApiKey, mode: 'native' });
 const trace = [];
 for (const method of ['runAgent', 'continueAgent']) {
   const original = client[method].bind(client);
@@ -40,7 +45,8 @@ const app = createApplication({ config, store, client, scheduler });
 scheduler.setApp(app);
 const ws = store.createWorkspace({ name: 'NS candidate estimate and independent falsification', defaultAgentId: agentId,
   globalPrompt: 'Investigate 3D incompressible Navier-Stokes on R^3 with viscosity nu>0 and smooth decaying divergence-free data. This is candidate exploration, not a claim to solve the Millennium problem. Give explicit equations, assumptions, and proof gaps. Do not invent citations or tool use. Prefer a short checkable calculation over broad speculation. Do not message other chats; orchestration supplies peer reports. Search only if needed; search metadata cannot establish a theorem. Limit response to about 900 words.' });
-const add = (name, developerPrompt) => store.addMember(ws.id, { name, agentId, canSendOthers: false, developerPrompt });
+const add = (name, developerPrompt) => store.addMember(ws.id, { name, agentId, canSendOthers: false,
+  developerPrompt: developerPrompt + (assisted ? ' Use the calculate tool to check numeric expressions before giving your final response. You must choose the expressions yourself; the tool does not validate the mathematical setup. Do not search for this arithmetic task.' : '') });
 const proposer = add('Estimate proposer', 'Derive the standard enstrophy/vortex stretching estimate using Holder, interpolation, and Young. Propose ONE stronger estimate or structural condition that would close the global bound. Mark clearly which steps are established and which are unproved. Check powers of viscosity. Do not assert a solution.');
 const skeptic = add('Scaling and obstruction analyst', 'Independently calculate scaling of enstrophy E=||curl u||_2^2, palinstrophy P=||grad curl u||_2^2, and vortex stretching integral under u_lambda(x,t)=lambda*u(lambda*x,lambda^2*t). Analyze whether energy control alone can close the enstrophy ODE; test concentrated smooth divergence-free data conceptually. Distinguish scaling-compatible from proven estimates.');
 const auditor = add('Independent synthesis auditor', 'You receive two untrusted peer reports. Recalculate exponents and Young inequality, challenge their strongest proposed estimate, and return: VERIFIED_CALCULATIONS, INVALID_OR_UNPROVED_STEPS, ONE_NEXT_TEST, MILLENNIUM_STATUS. A formal differential inequality allowing blowup is not a proof that PDE solutions blow up. Do not claim numerical or symbolic computation unless actually performed.');

@@ -99,3 +99,19 @@ as inputs and reserve model effort for proposing structural assumptions and
 falsification questions. Broad end-to-end utility remains unproven. Separately,
 the original product audit still needs real provider-owned/external mixed-tool
 wire evidence; passing these external-search experiments cannot close that gate.
+
+## Direct local model with calculator access
+
+`MULTICONTEXT_BACKEND=local ... --focused --assisted` uses the local adapter and
+asks each persona to use `calculate` for numeric checks. Run
+`ns-insights-1788817869015` (workspace `9ab1d369-ae29-4295-b7f9-80592b297f9e`)
+used three model requests. Scaling passed, interpolation failed four fields.
+The sole calculation call was `calculate({expression:"0.75"})`: evaluating an
+already chosen constant did not check the derivation. The gate rejected the run
+and no synthesis was sent. No efficacy improvement is established by this run.
+
+Do not repeat this arithmetic-prompt experiment unchanged. Next exploration should
+start with explicitly supplied, independently checked base identities and ask
+models for conditional hypotheses/counterexample designs, retaining the distinction
+between supplied facts and generated proposals. Tool availability/use counts alone
+are not a research-quality metric.
