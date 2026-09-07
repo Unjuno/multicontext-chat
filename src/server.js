@@ -196,6 +196,13 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     }
 
     const workspaceId = parts[2]; if (parts[0] !== 'api' || parts[1] !== 'workspaces' || !workspaceId) return false;
+    if (parts.length === 4 && parts[3] === 'duplicate' && req.method === 'POST') {
+      try {
+        const body = await readBody(req);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) throw Object.assign(new Error('複製の入力はJSONオブジェクトで指定してください'), { status: 400, code: 'INVALID_REQUEST_BODY' });
+        return json(res, 201, enrichView(await app.duplicateWorkspace(workspaceId, body.name), req));
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
+    }
     if (parts.length === 3 && req.method === 'GET') {
       try { return json(res, 200, await getEnrichedWorkspace(workspaceId, req)); }
       catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }

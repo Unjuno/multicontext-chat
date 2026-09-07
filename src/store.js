@@ -176,6 +176,35 @@ export class StateStore {
   }
   deleteWorkspace(id) { this.requireWorkspace(id); delete this.state.workspaces[id]; this.save(); }
 
+  duplicateWorkspace(id, name = '') {
+    const source = this.requireWorkspace(id);
+    const copy = JSON.parse(JSON.stringify(source));
+    copy.id = randomUUID();
+    copy.name = String(name || `${source.name}（複製）`).trim().slice(0, 120);
+    copy.createdAt = now();
+    copy.updatedAt = copy.createdAt;
+    copy.archived = false;
+    copy.crossChatReceipts = {};
+    copy.broadcastReceipts = {};
+    copy.orchestratorQueue = [];
+    copy.orchestratorRuns = {};
+    copy.orchestratorEvents = [];
+    copy.orchestratorPaused = false;
+    for (const member of Object.values(copy.members || {})) {
+      member.id = randomUUID();
+      member.status = 'idle';
+      member.queue = [];
+      member.current = null;
+      member.lastError = null;
+      member.lastRun = null;
+      member.updatedAt = copy.updatedAt;
+      member.conversationId = null;
+    }
+    this.state.workspaces[copy.id] = copy;
+    this.save();
+    return copy;
+  }
+
   // Orchestrator: Q, Runs, Events (persistent, bounded) — P0/P1 fixes + P1 target preservation
   enqueueOrchestrator(workspaceId, prompt, { priority = 1, origin = 'mcp', actor = null, runId = null, target = null } = {}) {
     const ws = this.requireWorkspace(workspaceId);

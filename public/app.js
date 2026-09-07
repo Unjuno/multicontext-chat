@@ -1432,6 +1432,7 @@ async function refresh(expectedId = currentId) {
             <button id="addMember" class="sm" title="新しいチャットを追加">+ チャット</button>
             <button id="stop" class="sm danger" ${hasWorkToStop ? '' : 'disabled'} title="${hasWorkToStop ? `実行中${runningMembers}件・キュー${queuedMessages}件を停止` : '停止する生成やキューはありません'}">全て停止</button>
             <button id="archiveWorkspace" class="sm" ${archiveDisabled ? 'disabled' : ''} title="${archiveDisabled ? '実行中またはキュー待ちのためアーカイブできません' : workspace.archived ? 'ワークスペースを通常一覧へ戻す' : 'ワークスペースをアーカイブ一覧へ移す'}">${workspace.archived ? '復元' : 'アーカイブ'}</button>
+            <button id="duplicateWorkspace" class="sm" title="履歴と設定を複製して別案を作成">複製</button>
             <button id="deleteWorkspace" class="sm danger" ${deleteDisabled ? 'disabled' : ''} title="${deleteDisabled ? '実行中またはキュー待ちのため、先に全て停止してください' : 'このワークスペースを削除'}">削除</button>
           </div>
         </div>
@@ -1637,6 +1638,18 @@ function wire(workspace) {
       await request(`/api/workspaces/${workspace.id}`, { method: 'PATCH', body: JSON.stringify({ archived: !workspace.archived }) });
       localStorage.setItem('mcc_last_workspace', workspace.id);
       location.reload();
+    }).catch((err) => toast(err.message, 'error'));
+  });
+  $('#duplicateWorkspace')?.addEventListener('click', async (event) => {
+    if (isWorkspaceDirty() && !(await confirmDiscardUnsaved('ワークスペースの複製'))) return;
+    const name = window.prompt('複製後のワークスペース名を入力してください。', `${workspace.name}（複製）`);
+    if (name === null) return;
+    if (!name.trim()) return toast('ワークスペース名を入力してください', 'error');
+    await withBusy(event.currentTarget, async () => {
+      const copy = await request(`/api/workspaces/${workspace.id}/duplicate`, { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+      await refreshList();
+      await select(copy.id);
+      toast('ワークスペースを複製しました', 'success');
     }).catch((err) => toast(err.message, 'error'));
   });
   const saveBtn = $('#saveWorkspace');

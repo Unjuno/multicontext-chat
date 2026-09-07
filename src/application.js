@@ -356,6 +356,15 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     return getWorkspace(workspace.id);
   }
 
+  async function duplicateWorkspace(workspaceId, name = '') {
+    const source = store.requireWorkspace(workspaceId);
+    const activeWork = Object.values(source.members || {}).some((member) => member.inFlight || member.queue?.length)
+      || Object.values(source.orchestratorRuns || {}).some((run) => run.status === 'queued' || run.status === 'running');
+    if (activeWork) throw problem('実行中またはキュー待ちのワークスペースは複製できません。処理完了後に再実行してください。', 409, 'WORKSPACE_BUSY');
+    const copy = store.duplicateWorkspace(workspaceId, name);
+    return getWorkspace(copy.id);
+  }
+
   async function updateWorkspace(workspaceId, patch = {}) {
     if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
       const name = String(patch.name ?? '').trim();
@@ -851,6 +860,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     listWorkspaces,
     getWorkspace,
     createWorkspace,
+    duplicateWorkspace,
     updateWorkspace,
     deleteWorkspace,
     listAgents,
