@@ -319,7 +319,11 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     // Accept the canonical snake_case field plus common REST/UI aliases so a
     // successful create request cannot silently produce an empty workspace.
     const requestedChatCount = input.initial_chat_count ?? input.initialChatCount ?? input.member_count ?? input.memberCount ?? 0;
-    const count = Math.max(0, Math.min(Number(requestedChatCount) || 0, 10));
+    const parsedChatCount = Number(requestedChatCount);
+    if (!Number.isInteger(parsedChatCount) || parsedChatCount < 0 || parsedChatCount > 10) {
+      throw problem('初期チャット数は0〜10の整数で指定してください', 400);
+    }
+    const count = parsedChatCount;
     for (let i = 0; i < count; i++) {
       store.addMember(workspace.id, { name: `チャット ${i + 1}` });
     }
