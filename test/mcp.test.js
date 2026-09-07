@@ -53,6 +53,45 @@ async function jsonRequest(base, route, opts = {}) {
 const mockAgents = [{ id: 'agent-1', name: 'ChatA', provider: 'gpt-oss' }, { id: 'agent-2', name: 'ChatB', provider: 'gpt-oss' }];
 const singleAgent = [{ id: 'solo', name: 'Solo', provider: 'gpt-oss' }];
 
+test('review notes have REST/MCP parity and rejected writes leave state unchanged', async () => {
+  const provider = { listAgents: async () => singleAgent, runAgent: async () => { throw new Error('review must not dispatch'); } };
+  await withMcpServer(provider, async ({ store, base, client: mcp }) => {
+    const workspace = store.createWorkspace({});
+    const member = store.addMember(workspace.id, { name: 'Author' });
+    member.messages.push({ id: 'source-review', role: 'assistant', content: 'A claim requiring review' });
+    store.save();
+    const membersBefore = JSON.stringify(workspace.members);
+    const input = { memberId: member.id, messageId: 'source-review', verdict: 'needs_check', rationale: 'Check the assumptions.', reviewer: 'Orchestrator' };
+    const route = `/api/workspaces/${workspace.id}/reviews`;
+    const post = (body, authenticated = true) => jsonRequest(base, route, {
+      method: 'POST', body: JSON.stringify(body),
+      headers: authenticated ? { Authorization: 'Bearer review-app-token' } : {},
+    });
+    const beforeUnauthorized = JSON.stringify(store.state);
+    assert.equal((await post(input, false)).res.status, 401);
+    assert.equal(JSON.stringify(store.state), beforeUnauthorized);
+    const rest = await post(input);
+    assert.equal(rest.res.status, 201);
+    const result = await mcp.callTool({ name: 'multicontext_add_review_note', arguments: { workspace_id: workspace.id, ...input } });
+    assert.ok(!result.isError);
+    const note = JSON.parse(result.content[0].text);
+    const comparable = ({ id, at, ...record }) => record;
+    assert.deepEqual(comparable(rest.data), comparable(note));
+    assert.notEqual(rest.data.id, note.id);
+    assert.equal(note.reviewerIdentity, 'SELF_REPORTED');
+    assert.equal(note.assessmentNotProof, true);
+    assert.equal(workspace.reviewNotes.length, 2);
+    assert.equal(JSON.stringify(workspace.members), membersBefore);
+    for (const invalid of [{ ...input, messageId: 'missing' }, { ...input, verdict: 'verified' }]) {
+      const before = JSON.stringify(store.state);
+      assert.ok((await post(invalid)).res.status >= 400);
+      const rejected = await mcp.callTool({ name: 'multicontext_add_review_note', arguments: { workspace_id: workspace.id, ...invalid } });
+      assert.equal(rejected.isError, true);
+      assert.equal(JSON.stringify(store.state), before);
+    }
+  }, { appToken: 'review-app-token' });
+});
+
 // 1
 test('MCP initialize/connect succeeds with correct auth', async () => {
   const client = { listAgents: async () => mockAgents, health: async () => ({ ok: true, agents: 2, mode: 'compat' }), runAgent: async () => ({ id: 'r', text: 'ok' }) };

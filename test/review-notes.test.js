@@ -6,6 +6,30 @@ import path from 'node:path';
 import { StateStore } from '../src/store.js';
 import { researchSnapshots } from '../src/research-summary.js';
 
+test('workspace duplication rekeys members and preserves attributable review references', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcc-review-copy-'));
+  try {
+    const file = path.join(dir, 'state.json');
+    const store = new StateStore(file);
+    const source = store.createWorkspace({});
+    const member = store.addMember(source.id, { name: 'Author' });
+    member.messages.push({ id: 'claim', role: 'assistant', content: 'Candidate estimate' });
+    const note = store.addReviewNote(source.id, { memberId: member.id, messageId: 'claim', verdict: 'needs_check', rationale: 'Check assumptions', reviewer: 'Reviewer' });
+    const before = JSON.stringify(source);
+    const copy = store.duplicateWorkspace(source.id);
+    const copiedMember = Object.values(copy.members).find(m => m.name === 'Author');
+    assert.notEqual(copiedMember.id, member.id);
+    for (const [key, value] of Object.entries(copy.members)) assert.equal(key, value.id);
+    assert.equal(copy.reviewNotes[0].memberId, copiedMember.id);
+    assert.deepEqual(copy.reviewNotes[0].copiedFrom, { workspaceId: source.id, reviewId: note.id, memberId: member.id });
+    assert.equal(copy.reviewNotes[0].sourceHash, note.sourceHash);
+    assert.equal(researchSnapshots(copy).find(s => s.member.id === copiedMember.id).assessments[0].id, note.id);
+    store.addReviewNote(copy.id, { memberId: copiedMember.id, messageId: 'claim', verdict: 'rejected', rationale: 'Counterexample', reviewer: 'Reviewer' });
+    assert.equal(JSON.stringify(source), before);
+    assert.equal(new StateStore(file).getWorkspace(copy.id).reviewNotes.length, 2);
+  } finally { fs.rmSync(dir, { recursive: true }); }
+});
+
 test('review records persist provenance without changing messages or queue', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcc-review-'));
   try {

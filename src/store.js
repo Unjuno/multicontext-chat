@@ -190,8 +190,13 @@ export class StateStore {
     copy.orchestratorRuns = {};
     copy.orchestratorEvents = [];
     copy.orchestratorPaused = false;
-    for (const member of Object.values(copy.members || {})) {
+    const memberIds = new Map();
+    const members = {};
+    for (const [oldKey, member] of Object.entries(copy.members || {})) {
+      const oldId = member.id;
       member.id = randomUUID();
+      memberIds.set(oldKey, member.id);
+      memberIds.set(oldId, member.id);
       member.status = 'idle';
       member.queue = [];
       member.current = null;
@@ -199,7 +204,14 @@ export class StateStore {
       member.lastRun = null;
       member.updatedAt = copy.updatedAt;
       member.conversationId = null;
+      members[member.id] = member;
     }
+    copy.members = members;
+    copy.reviewNotes = (copy.reviewNotes || []).map(note => ({
+      ...note,
+      memberId: memberIds.get(note.memberId) || note.memberId,
+      copiedFrom: { workspaceId: source.id, reviewId: note.id, memberId: note.memberId },
+    }));
     this.state.workspaces[copy.id] = copy;
     this.save();
     return copy;
