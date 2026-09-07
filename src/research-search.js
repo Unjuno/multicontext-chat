@@ -138,7 +138,16 @@ export class ResearchSearch {
       return value;
     });
     this.tail = task.catch(() => {}).finally(() => { this.pending--; });
-    return task;
+    if (!signal) return task;
+    // Release the caller immediately when its queued search is cancelled.
+    // The queued closure still observes the aborted signal before any fetch.
+    return new Promise((resolve, reject) => {
+      const aborted = () => { signal.removeEventListener('abort', aborted); reject(signal.reason); };
+      signal.addEventListener('abort', aborted, { once: true });
+      if (signal.aborted) aborted();
+      task.then(value => { signal.removeEventListener('abort', aborted); resolve(value); },
+        error => { signal.removeEventListener('abort', aborted); reject(error); });
+    });
   }
 }
 

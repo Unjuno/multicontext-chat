@@ -51,6 +51,35 @@ test('native client advertises standard search and supports opting out', () => {
 });
 
 const html = '<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Fpaper">A &amp; B</a><a class="result__snippet">Real <b>snippet</b></a>';
+
+test('cancelling a queued search returns before an earlier fetch finishes and never dispatches it', async () => {
+  let release;
+  let entered;
+  let requests = 0;
+  const started = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const search = new ResearchSearch({ intervalMs: 0, fetchImpl: async () => {
+    requests++;
+    entered();
+    await gate;
+    return new Response(html);
+  } });
+  const first = search.search({ query: 'first' });
+  await started;
+  const controller = new AbortController();
+  const second = search.search({ query: 'second' }, { signal: controller.signal });
+  const rejected = assert.rejects(second, /user stopped/);
+  controller.abort(new Error('user stopped'));
+  let timer;
+  try {
+    await Promise.race([rejected, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Queued cancellation did not return promptly')), 500);
+    })]);
+  } finally { clearTimeout(timer); release(); }
+  await first;
+  await search.tail;
+  assert.equal(requests, 1);
+});
 test('web parsing decodes citation links and rejects challenges instead of inventing results', () => {
   assert.deepEqual(parseWebResults(html, 5), [{ title: 'A & B', url: 'https://example.org/paper', snippet: 'Real snippet' }]);
   assert.throws(() => parseWebResults('<form action="anomaly.js">challenge</form>', 5), { code: 'SEARCH_BLOCKED' });

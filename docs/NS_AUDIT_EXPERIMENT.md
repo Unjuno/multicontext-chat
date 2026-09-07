@@ -360,3 +360,11 @@ not verification of the contents of the paper or a mathematical result.
 Raw trace/state/results remain under the corresponding data/experiments path.
 The reusable smoke test additionally requires an auditor exact lookup and
 citation of its returned DOI; runtime completion alone is insufficient.
+
+Reproducibility run `research-flywheel-1788814892450`, workspace
+`850ccbbb-a7b4-4ad2-92f1-ec1cd04ce31a`, passes the strengthened exact-lookup
+assertion with both members completing. Latest local safety change lets a
+cancelled queued search return promptly without waiting for the preceding
+network request; its regression test verifies no cancelled request is sent.
+`npm run check`: 302 total, 299 pass, 0 fail, 3 skip. A rebuilt macOS app and
+`verify:desktop` pass with that change. No installation/GUI claim follows.
