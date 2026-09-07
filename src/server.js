@@ -197,6 +197,9 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (parts.length === 3 && req.method === 'PATCH') {
       try {
         const body = await readBody(req);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+          throw Object.assign(new Error('ワークスペース更新の入力はJSONオブジェクトで指定してください'), { status: 400, code: 'INVALID_REQUEST_BODY' });
+        }
         // Map legacy names
         const patch = {};
         if (body.name !== undefined) patch.name = body.name;
