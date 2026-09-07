@@ -513,7 +513,9 @@ test('Observer tool events carry send targets and inspect target from existing d
   assert.ok(send, 'send_to_chat event stored');
   assert.deepEqual(send.detail.targets, ['B']);
   assert.equal(send.memberId, a.id);
-  const inspect = events.find(e => e.type === 'tool.inspect_chat');
-  assert.ok(inspect, 'inspect_chat event stored');
+  // The recipient B emits the second call targeting itself, which is denied.
+  const inspect = events.find(e => e.type === 'tool.failed' && e.detail.tool === 'inspect_chat');
+  assert.ok(inspect, 'denied self-inspection must be recorded as failure');
+  assert.ok(inspect.detail.code);
   assert.equal(inspect.detail.target, b.id);
 });

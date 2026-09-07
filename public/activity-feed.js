@@ -43,6 +43,7 @@ export function formatActivityEvent(ev, memberNames = {}) {
     case 'member.cancelled': return { ...base, action: 'メンバーをキャンセル' };
     case 'member.failed': return { ...base, action: 'メンバーの実行に失敗', detail: detail.code ? String(detail.code) : null };
     case 'tool.list_chats': return { ...base, action: 'チャット一覧を取得' };
+    case 'tool.failed': return { ...base, action: 'ツール実行に失敗', target: detail.target || null, detail: detail.code || null };
     case 'tool.inspect_chat':
       return { ...base, action: 'チャットを確認', target: detail.target ? String(detail.target) : null };
     case 'tool.send_to_chat':

@@ -10,6 +10,13 @@ test('mechanical lifecycle events render with actor and time', () => {
   assert.equal(formatActivityEvent({ type: 'member.completed', memberId: 'missing-id', ts: '2026-09-03T17:00:02.000Z' }, names).actor, 'missing-');
 });
 
+test('failed tool calls display failure and error code', () => {
+  const row = formatActivityEvent({ type: 'tool.failed', detail: { tool: 'send_to_chat', code: 'NOT_FOUND', target: 'auditor' } });
+  assert.equal(row.action, 'ツール実行に失敗');
+  assert.equal(row.detail, 'NOT_FOUND');
+  assert.equal(row.target, 'auditor');
+});
+
 test('cross-chat tool events expose source and target without new channels', () => {
   const send = formatActivityEvent({
     type: 'tool.send_to_chat', origin: 'system', memberId: 'a1', ts: '2026-09-03T17:00:03.000Z',

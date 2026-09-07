@@ -224,11 +224,17 @@ export class Scheduler {
                   const tc = toolCalls.find(t => (t.call_id || t.call_id === r.call_id) && t.call_id === r.call_id) || toolCalls[0];
                   const tname = tc?.name || tc?.function?.name || 'unknown';
                   let replayed = false;
+                  let failed = false;
+                  let errorCode = null;
                   let targets = null;
                   try {
                     const parsed = JSON.parse(r.output);
                     if (parsed && parsed.replayed === true) replayed = true;
-                    if (parsed && parsed.ok === false) replayed = false;
+                    if (parsed && parsed.ok === false) {
+                      replayed = false;
+                      failed = true;
+                      errorCode = parsed.error?.code || 'TOOL_ERROR';
+                    }
                     // Surface send_to_chat deliveries (target ids/names) so the
                     // observer activity feed can show source → target without
                     // inventing a new event channel.
@@ -247,9 +253,10 @@ export class Scheduler {
                     if (typeof t === 'string' && t) argTarget = t.slice(0, 120);
                   } catch {}
                   const detail = { callId: r.call_id, tool: tname, replayed };
+                  if (failed) detail.code = errorCode;
                   if (targets) detail.targets = targets;
                   if (argTarget) detail.target = argTarget;
-                  const evType = replayed ? 'tool.replayed' : `tool.${tname}`;
+                  const evType = failed ? 'tool.failed' : replayed ? 'tool.replayed' : `tool.${tname}`;
                   this.store.appendEvent(workspaceId, { type: evType, origin: 'system', memberId, qId: item.id, detail });
                 } catch {}
               }
