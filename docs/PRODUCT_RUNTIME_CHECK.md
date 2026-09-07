@@ -124,6 +124,12 @@
 - Result: persona assignment, bounded parallel dispatch, runtime polling, and Compile gating behaved as designed. The experiment produced partial research output but no mathematical solution claim.
 - Follow-up: the first Compile client timed out while the server-side Compile continued; a duplicate Compile request was correctly rejected by `compilingWorkspaces`. After 15 seconds, `multicontext_get_compile_result` returned a completed Proof Auditor synthesis. It retained `Gap` and `Low/Medium` confidence labels rather than claiming a proof. The workspace was then deleted through MCP with the exact confirmation name.
 
+# 2026-09-08 — Geometric verification preset (live MCP)
+
+- Rebuilt and restarted the macOS app through the native GUI. Production MCP then exposed `navier-stokes-geometric-4` with four members: Geometric Measure Analyst, Harmonic Analyst, Computer-Assisted Skeptic, and Adversarial Auditor.
+- Created workspace `916bc378-04ef-4c90-b058-e29b9b3c0e75` and run `47209d93-102d-4f45-aa18-0d7ab1171513`. After 12 five-second polls the run remained `running` with the expected orchestrator seed Q item. No force-stop or Compile was issued while it was non-terminal.
+- This confirms the new preset is present in the packaged app and can enter the real parallel research path. Final settlement and cleanup remain a live follow-up for this run.
+
 # Product UX evidence — compile history
 
 - Compile結果を最大5件保持し、最新結果と過去結果をUIで選択できるようにした。選択した結果は同じ画面からコピー／Markdown保存できる。既存の `lastCompile` を維持し、履歴未保持の旧データは起動時に自動移行する。`node --check public/app.js`、サーバーバンドル生成、`git diff --check` を確認済み。
