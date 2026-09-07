@@ -86,3 +86,20 @@ No account, credential, database record, or Agent configuration was modified.
 Real LibreChat provider-calculator/search plus cross-chat model E2E therefore
 remains pending authenticated Agent setup and safe live-server reload. The
 registration-free direct-local backend does not require this LibreChat setup.
+
+## Cancellation-before-dispatch regression
+
+The LibreChat client forwarded future abort events to its request controller but
+did not check an already-aborted caller signal. Six deterministic regression
+cases initially failed: discovery, direct native initial/continuation calls,
+both native `runAgent` routes, and compat generation could still invoke fetch.
+Each public request entry now calls `signal.throwIfAborted()` before constructing
+the request/timer, preserving the original cancellation reason and sending zero
+requests. The direct-local client already performs this preflight check.
+
+`npm run check` after the production fix and six pre-cancellation tests passed
+(338 total / 335 passed / 0 failed / 3 skipped). Six subsequent in-flight
+cancellation tests also pass; the focused suite is 12/12. They use an injected
+transport, not a live-model Stop test. GUI-only user Stop policy is unchanged.
+The running servers and built desktop bundle have not been updated with this
+client change; the prior packaged-artifact evidence does not cover it.

@@ -11,6 +11,7 @@ export class LibreChatClient {
   assertConfigured() { if (!this.apiKey) throw new Error('LIBRECHAT_API_KEY is not configured'); }
 
   async listAgents({ signal } = {}) {
+    signal?.throwIfAborted();
     this.assertConfigured();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('LibreChat agents probe timed out')), Math.min(this.timeoutMs, 10_000));
@@ -29,6 +30,7 @@ export class LibreChatClient {
   }
 
   async runAgentInitial({ agentId, globalPrompt, developerPrompt, history = [], prompt, conversationId, signal, metadata = {} }) {
+    signal?.throwIfAborted();
     if (!agentId) throw new Error('LibreChat agentId is required'); this.assertConfigured();
     const input = [];
     if (globalPrompt?.trim()) input.push({ type: 'message', role: 'system', content: globalPrompt.trim() });
@@ -61,6 +63,7 @@ export class LibreChatClient {
   }
 
   async continueAgent({ agentId, conversationId, globalPrompt = '', developerPrompt = '', toolCalls = [], toolResults = [], orderedItems = null, signal, metadata = {} }) {
+    signal?.throwIfAborted();
     if (!conversationId) throw new Error('conversationId is required for continueAgent'); this.assertConfigured();
     if (!agentId) throw new Error('LibreChat agentId is required');
     // Native continuation replays the answered function_call items first so the
@@ -104,6 +107,7 @@ export class LibreChatClient {
   }
 
   async runAgent({ agentId, globalPrompt, developerPrompt, history = [], prompt, conversationId, signal, metadata = {}, toolCalls = [], toolResults = [] }) {
+    signal?.throwIfAborted();
     if (this.mode === 'native') {
       if (toolResults.length === 0) {
         return this.runAgentInitial({ agentId, globalPrompt, developerPrompt, history, prompt, conversationId, signal, metadata });
