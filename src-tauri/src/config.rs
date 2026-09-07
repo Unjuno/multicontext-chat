@@ -38,9 +38,13 @@ fn default_false() -> bool {
     false
 }
 
+fn legacy_backend() -> String { "librechat".to_string() }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DesktopConfig {
+    #[serde(default = "legacy_backend")]
+    pub backend: String,
     pub librechat_path: Option<String>,
     pub librechat_url: String,
     #[serde(rename = "multicontext_port", alias = "multicontent_port")]
@@ -65,6 +69,7 @@ fn default_true() -> bool {
 impl Default for DesktopConfig {
     fn default() -> Self {
         Self {
+            backend: "librechat".to_string(),
             librechat_path: None,
             librechat_url: "http://127.0.0.1:3080".to_string(),
             multicontext_port: 4317,
@@ -82,6 +87,16 @@ impl Default for DesktopConfig {
 
 impl DesktopConfig {
     pub fn validate(&self) -> Result<(), String> {
+        if self.backend != "local" && self.backend != "librechat" {
+            return Err("接続方式は local または librechat を指定してください".into());
+        }
+        if self.backend == "local" {
+            let url = reqwest::Url::parse(&self.model_url).map_err(|_| "モデル URL が無効です")?;
+            if url.scheme() != "http" || !matches!(url.host_str(), Some("127.0.0.1") | Some("[::1]"))
+                || !url.username().is_empty() || url.password().is_some() || url.query().is_some() || url.fragment().is_some() {
+                return Err("ローカル接続には認証情報なしの HTTP loopback IP URL を指定してください".into());
+            }
+        }
         if !self.librechat_url.starts_with("http://") && !self.librechat_url.starts_with("https://")
         {
             return Err("LibreChat URL は http(s) で指定してください".to_string());
@@ -92,7 +107,7 @@ impl DesktopConfig {
         if self.multicontext_port == 0 {
             return Err("MultiContext ポートは 1 以上にしてください".to_string());
         }
-        if self.manage_librechat {
+        if self.backend == "librechat" && self.manage_librechat {
             match &self.librechat_path {
                 None => {
                     return Err(
@@ -131,6 +146,18 @@ impl DesktopConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_backend_needs_no_librechat_and_preserves_legacy_configs() {
+        let old: DesktopConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.backend, "librechat");
+        let mut local = DesktopConfig { backend: "local".into(), manage_model: false, ..Default::default() };
+        assert!(local.validate().is_ok());
+        local.model_url = "http://example.com/v1".into();
+        assert!(local.validate().is_err());
+        local.backend = "unknown".into();
+        assert!(local.validate().is_err());
+    }
 
     #[test]
     fn test_config_validation_ok() {
