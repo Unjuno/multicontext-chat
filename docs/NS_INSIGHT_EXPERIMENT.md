@@ -55,3 +55,26 @@ tasks (Jacobian, interpolation equation, Young exponents) before soliciting a ne
 estimate. Do not feed the failed synthesis back as trusted knowledge. The raw
 reports remain preserved for later error analysis. No token-efficiency claim can
 be made: the provider returned zero-valued usage counters.
+
+## Focused arithmetic gate
+
+Run the same script with `--focused`. The two initial prompts request numeric JSON
+for scaling and interpolation/Young exponents. `scripts/ns-exponent-checks.mjs`
+checks these against independently derived task-specific values. This is **not**
+a general proof verifier. Only when both checks pass is the synthesis task sent;
+otherwise the recorded result is `REJECTED_AT_ARITHMETIC_GATE` and exit status 2.
+Raw reports are retained whether they pass or fail. This is experiment orchestration,
+not a new automatic Stop capability available to MCP agents.
+
+Run `ns-insights-1788815500240`, workspace
+`c1df55c9-26bc-4589-8446-0e837f4221a0`, completed with two model requests.
+The scaling report got all four exponents correct. The interpolation report got
+theta=0.75 correct, but confused norms with squared norms (1.5 rather than 0.75)
+and got Young/viscosity/final powers wrong. The gate rejected it and no synthesis
+request was made. This prevents this known error from propagating, but does not
+demonstrate successful insight discovery or efficient end-to-end theorem research.
+
+Regression checks cover observed wrong values, missing fields, invalid JSON,
+null, numeric strings, and correct exponent records. Next targeted repair should
+ask the failing worker to distinguish `||w||` from `E=||w||^2` and solve conjugacy
+equations explicitly, without supplying the expected answers as discoveries.
