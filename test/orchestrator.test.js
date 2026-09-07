@@ -37,6 +37,10 @@ test('orchestrator Q priority ordering', async () => {
 test('orchestrator create_session preset creates 4 members', async () => {
   assert.equal(PRESETS['navier-stokes-4'].members.length, 4);
   assert.ok(PRESETS['navier-stokes-4'].members[0].developerPrompt.includes('PDE'));
+  assert.equal(PRESETS['navier-stokes-adversarial-4'].members.length, 4);
+  assert.deepEqual(PRESETS['navier-stokes-adversarial-4'].members.map((m) => m.name), [
+    'A — Harmonic Analyst', 'B — Numerical Skeptic', 'C — Blow-up Hunter', 'D — Proof Auditor',
+  ]);
 });
 
 test('orchestrator distill truncates', async () => {

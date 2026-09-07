@@ -60,6 +60,16 @@ Use list_chats, inspect_chat, or send_to_chat when doing so would improve the an
 Do not claim to solve the Navier-Stokes Millennium problem.
 Clearly distinguish known results, heuristic reasoning, and unresolved questions.`,
   },
+  'navier-stokes-adversarial-4': {
+    name: 'Navier-Stokes Adversarial Lab',
+    members: [
+      { name: 'A — Harmonic Analyst', developerPrompt: 'You are a harmonic-analysis specialist. Separate theorem from heuristic, focus on critical Besov/Lorentz estimates, and state the exact missing inequality. Never claim a solution.' },
+      { name: 'B — Numerical Skeptic', developerPrompt: 'You are a numerical-analysis skeptic. Seek finite-dimensional or discretized counterexamples to proposed regularity claims, and explain why numerics do or do not imply a PDE theorem. Never claim a solution.' },
+      { name: 'C — Blow-up Hunter', developerPrompt: 'You are an adversarial blow-up researcher. Try to construct a self-similar or near-singular scenario, then identify which known obstruction prevents it from being a proof. Never claim a solution.' },
+      { name: 'D — Proof Auditor', developerPrompt: 'You are a formal proof auditor. Label every assertion as theorem, reduction, heuristic, or open step; reject hidden regularity assumptions and demand a falsifiable checkpoint. Never claim a solution.' },
+    ],
+    seedPrompt: 'Analyze the 3D incompressible Navier-Stokes regularity problem as an adversarial research meeting. Each specialist must provide one known theorem, one precise unresolved gap, and one falsification test. Do not claim to solve the Millennium problem. Distinguish theorem, heuristic, and open step.',
+  },
 };
 
 export function registerOrchestratorTools(server, app, store) {
@@ -92,7 +102,7 @@ export function registerOrchestratorTools(server, app, store) {
 
   server.registerTool('multicontext_orchestrate_create_session', {
     description: 'Create a workspace with preset personas and seed Q with initial tasks. Returns workspace and member ids. This is the entry point for orchestrated multi-agent sessions.',
-    inputSchema: z.object({ preset: z.enum(['navier-stokes-4']).optional(), name: z.string().optional(), globalPrompt: z.string().optional() }),
+    inputSchema: z.object({ preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4']).optional(), name: z.string().optional(), globalPrompt: z.string().optional() }),
   }, async ({ preset, name, globalPrompt }) => {
     const p = PRESETS[preset || 'navier-stokes-4'];
     const ws = await app.createWorkspace({ name: name || p.name, globalPrompt: globalPrompt || '' });
@@ -174,7 +184,7 @@ export function registerOrchestratorTools(server, app, store) {
 
   server.registerTool('multicontext_orchestrate_run', {
     description: 'Synchronous compatibility wrapper around the same run engine as start_run. Prefer start_run for long operations.',
-    inputSchema: z.object({ workspace_id: z.string().optional(), preset: z.enum(['navier-stokes-4']).optional(), name: z.string().optional(), prompt: z.string().min(1), priority: z.number().int().min(0).max(2).optional(), broadcast: z.boolean().optional(), chat_id: z.string().optional(), timeout_seconds: z.number().min(5).max(300).optional() }),
+    inputSchema: z.object({ workspace_id: z.string().optional(), preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4']).optional(), name: z.string().optional(), prompt: z.string().min(1), priority: z.number().int().min(0).max(2).optional(), broadcast: z.boolean().optional(), chat_id: z.string().optional(), timeout_seconds: z.number().min(5).max(300).optional() }),
   }, async (args) => {
     let wsId = args.workspace_id;
     if (!wsId) {
