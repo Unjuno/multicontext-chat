@@ -1,5 +1,6 @@
 import { CROSS_CHAT_TOOLS, EXTERNAL_TOOLS } from './cross-chat-tools.js';
 import { researchSearch } from './research-search.js';
+import { calculate } from './calculation.js';
 
 export function extractToolCalls(raw) {
   if (!raw || !raw.output) return [];
@@ -83,7 +84,9 @@ export class CrossChatToolExecutor {
         throw e;
       }
       try {
-        if (name === 'search_sources') {
+        if (name === 'calculate') {
+          results.push({ call_id: callId, output: JSON.stringify(calculate(parsed)) });
+        } else if (name === 'search_sources') {
           const result = await this.search.search(parsed, { signal });
           results.push({ call_id: callId, output: JSON.stringify(result) });
         } else if (name === 'list_chats') {

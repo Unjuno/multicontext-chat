@@ -1,4 +1,5 @@
 import { SEARCH_TOOL } from './research-search.js';
+import { CALCULATION_TOOL } from './calculation.js';
 
 export const CROSS_CHAT_TOOLS = [
   {
@@ -44,7 +45,7 @@ export const CROSS_CHAT_TOOLS = [
   },
 ];
 
-export const EXTERNAL_TOOLS = [...CROSS_CHAT_TOOLS, SEARCH_TOOL];
+export const EXTERNAL_TOOLS = [...CROSS_CHAT_TOOLS, SEARCH_TOOL, CALCULATION_TOOL];
 
 export function findCrossChatTool(name) {
   return CROSS_CHAT_TOOLS.find(t => t.function.name === name) ?? null;
