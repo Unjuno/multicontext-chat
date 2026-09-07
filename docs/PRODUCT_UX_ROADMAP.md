@@ -33,7 +33,7 @@ Acceptance: an interrupted run can be diagnosed, retried, or stopped without dup
 
 1. Add clear visual separation between member answers and the compiled report.
 2. Show which messages were included in a compile and when the snapshot was taken.
-3. Make “latest” navigation and copy/export actions visible at the result level.
+3. Make “latest” navigation and copy/export actions visible at the result level. Compile history keeps the latest five reports selectable and exportable.
 4. Preserve the report prompt and make re-compilation deliberate.
 
 Acceptance: a user can explain which independent answers produced a report and can reproduce the report without changing member history.

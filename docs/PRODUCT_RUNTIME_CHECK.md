@@ -110,3 +110,6 @@
 ## 未確認
 
 - Macの画面ロック中に実施できなかった、設定保存、再試行、メニュー開閉、ログ導線の通し操作。
+# Product UX evidence — compile history
+
+- Compile結果を最大5件保持し、最新結果と過去結果をUIで選択できるようにした。選択した結果は同じ画面からコピー／Markdown保存できる。既存の `lastCompile` を維持し、履歴未保持の旧データは起動時に自動移行する。`node --check public/app.js`、サーバーバンドル生成、`git diff --check` を確認済み。
