@@ -22,7 +22,7 @@
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
     "verify:desktop": "node scripts/verify-desktop-bundle.mjs",
-    "verify:release": "npm run desktop:check && npm run desktop:build && npm run verify:desktop && npm run verify:bundle",
+    "verify:release": "npm run desktop:check && npm run desktop:build && npm run verify:signing && npm run verify:desktop && npm run verify:bundle",
     "verify:signing": "node scripts/verify-signing.mjs",
     "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
