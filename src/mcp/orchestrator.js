@@ -70,6 +70,16 @@ Clearly distinguish known results, heuristic reasoning, and unresolved questions
     ],
     seedPrompt: 'Analyze the 3D incompressible Navier-Stokes regularity problem as an adversarial research meeting. Work in three bounded phases: (1) independently state one known theorem with hypotheses, (2) state one precise unresolved gap, (3) state one falsification or sanity test. Only after phase 1 may you make at most one peer-check call; do not recursively delegate or send repeated prompts. End with confidence labels for each claim. Do not claim to solve the Millennium problem. Distinguish theorem, heuristic, and open step.',
   },
+  'navier-stokes-proof-builder-4': {
+    name: 'Navier-Stokes Proof Builder Lab',
+    members: [
+      { name: 'A — Lemma Architect', developerPrompt: 'You are a constructive proof architect. Propose a precise candidate lemma toward global regularity, with all hypotheses and a proof outline. Treat the problem as potentially solvable, but mark every unproved step.' },
+      { name: 'B — Energy Method', developerPrompt: 'You are an energy-estimate specialist. Try to close the candidate lemma using localized energy, dissipation, and interpolation inequalities. Track constants and scaling; expose any missing bound.' },
+      { name: 'C — Critical Spaces', developerPrompt: 'You are a critical-spaces analyst. Translate the candidate into scale-invariant norms and test endpoint behavior, concentration, and vortex stretching. Identify the exact obstruction if closure fails.' },
+      { name: 'D — Proof Verifier', developerPrompt: 'You are a formal verifier. Attempt to check every inference in the proposed proof, search for counterexamples or hidden assumptions, and return a verdict: VALID, GAP, or REFUTED. Never promote a gap to a theorem.' },
+    ],
+    seedPrompt: 'Run a constructive proof-building experiment for 3D incompressible Navier-Stokes regularity. In bounded phases, propose one candidate lemma, attempt to prove it, stress-test scaling and vortex stretching, and issue a formal verdict. Preserve all hypotheses and label every unresolved step. Do not claim the Millennium problem is solved without a complete verified proof.',
+  },
 };
 
 export function registerOrchestratorTools(server, app, store) {
@@ -102,7 +112,7 @@ export function registerOrchestratorTools(server, app, store) {
 
   server.registerTool('multicontext_orchestrate_create_session', {
     description: 'Create a workspace with preset personas and seed Q with initial tasks. Returns workspace and member ids. This is the entry point for orchestrated multi-agent sessions.',
-    inputSchema: z.object({ preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4']).optional(), name: z.string().optional(), globalPrompt: z.string().optional() }),
+    inputSchema: z.object({ preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4', 'navier-stokes-proof-builder-4']).optional(), name: z.string().optional(), globalPrompt: z.string().optional() }),
   }, async ({ preset, name, globalPrompt }) => {
     const p = PRESETS[preset || 'navier-stokes-4'];
     const ws = await app.createWorkspace({ name: name || p.name, globalPrompt: globalPrompt || '' });
@@ -184,7 +194,7 @@ export function registerOrchestratorTools(server, app, store) {
 
   server.registerTool('multicontext_orchestrate_run', {
     description: 'Synchronous compatibility wrapper around the same run engine as start_run. Prefer start_run for long operations.',
-    inputSchema: z.object({ workspace_id: z.string().optional(), preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4']).optional(), name: z.string().optional(), prompt: z.string().min(1), priority: z.number().int().min(0).max(2).optional(), broadcast: z.boolean().optional(), chat_id: z.string().optional(), timeout_seconds: z.number().min(5).max(300).optional() }),
+    inputSchema: z.object({ workspace_id: z.string().optional(), preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4', 'navier-stokes-proof-builder-4']).optional(), name: z.string().optional(), prompt: z.string().min(1), priority: z.number().int().min(0).max(2).optional(), broadcast: z.boolean().optional(), chat_id: z.string().optional(), timeout_seconds: z.number().min(5).max(300).optional() }),
   }, async (args) => {
     let wsId = args.workspace_id;
     if (!wsId) {
