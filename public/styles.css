@@ -318,6 +318,7 @@ aside h3 {
 .workspace-more { display: block; width: calc(100% - 20px); margin: 6px 10px 8px; padding: 6px; color: var(--accent); font-size: 11px; background: transparent; border-style: dashed; }
 .workspace-more:hover { background: var(--idle-bg); }
 .field-hint { display: block; margin-top: 4px; color: var(--text-muted); font-size: 11px; text-align: right; }
+.chat-count-hint { margin: 6px 0 14px; text-align: left; line-height: 1.4; }
 .help-list { display: grid; gap: 8px; margin-top: 12px; }
 .help-list div { display: flex; align-items: center; gap: 12px; }
 .help-list kbd { min-width: 42px; text-align: center; }
