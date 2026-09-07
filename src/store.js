@@ -3,7 +3,11 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 const now = () => new Date().toISOString();
-const problem = (message, status = 400) => Object.assign(new Error(message), { status });
+const problem = (message, status = 400, code = null) => {
+  const error = Object.assign(new Error(message), { status });
+  if (code) error.code = code;
+  return error;
+};
 
 export class StateStore {
   constructor(filePath) {
@@ -127,12 +131,12 @@ export class StateStore {
 
   listWorkspaces({ includeArchived = false } = {}) { return Object.values(this.state.workspaces).filter((w) => includeArchived || !w.archived).map((w) => this.publicWorkspace(w, false)); }
   getWorkspace(id) { return this.state.workspaces[id] ?? null; }
-  requireWorkspace(id) { const w = this.getWorkspace(id); if (!w) throw problem('Workspace not found', 404); return w; }
+  requireWorkspace(id) { const w = this.getWorkspace(id); if (!w) throw problem('Workspace not found', 404, 'WORKSPACE_NOT_FOUND'); return w; }
   getMember(workspaceId, memberId) { return this.getWorkspace(workspaceId)?.members?.[memberId] ?? null; }
   requireMember(workspaceId, memberId) {
     const workspace = this.requireWorkspace(workspaceId);
     const member = workspace.members[memberId];
-    if (!member) throw problem('Member not found', 404);
+    if (!member) throw problem('Member not found', 404, 'CHAT_NOT_FOUND');
     return { workspace, member };
   }
 

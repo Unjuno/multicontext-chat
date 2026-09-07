@@ -98,6 +98,7 @@
 - ワークスペース更新（`PATCH`）でも`null`や配列のJSON本体をフィールド変換前に拒否し、HTTP 400／`INVALID_REQUEST_BODY`を返すようにした。作成・更新形状エラーの実レスポンスを確認し、正常系ワークスペースは確認名付きDELETE 204で後片付けした。
 - 一斉送信の入力エラーに誤った「一時停止指定」ラベルが入っていた回帰を修正し、チャット個別送信にもJSON本体検証を追加した。構文検査、差分検査、`main`への反映を確認した。
 - 最新`main`で実Agentを指定したNativeスモークを再実行した。LibreChatのAgent 2体検出、通常生成、同一conversation IDでの会話継続が成功した。
+- Store層の404エラーに`WORKSPACE_NOT_FOUND`／`CHAT_NOT_FOUND`コードを付与し、存在しないワークスペースへの停止でHTTP 404と`WORKSPACE_NOT_FOUND`を実確認した。RESTエラー応答のコード欠落を修正した。
 
 ## 未確認
 
