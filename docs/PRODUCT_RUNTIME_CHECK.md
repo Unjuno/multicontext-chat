@@ -140,6 +140,7 @@
 
 - Started workspace `ea7cc572-303e-4062-96fc-36edbec04a64` with the geometric preset and a single target: verify scale-critical norm behavior in an epsilon-regularity route.
 - Run `3352d39e-83ab-4e4f-99c9-c506ced147f3` remained `RUNNING` after eight five-second polls. A later state check showed all four members active, `toolEnqueues: 9`, `inspections: 2`, and no member errors. This is a live, expanding research run; Compile is intentionally deferred until `SETTLED`.
+- Follow-up: the run reached `SETTLED` with 13 executions and zero member queues. Compile exceeded the MCP SDK's 60-second client wait, but `multicontext_get_compile_result` later returned a 5,220-character synthesis. The workspace was then deleted successfully. This confirms asynchronous server-side Compile recovery for another long-running research run.
 
 # Product UX evidence — compile history
 
