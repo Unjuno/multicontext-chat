@@ -3,9 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { config } from '../src/config.js';
-import { createApp } from '../src/server.js';
+const serverModule = process.argv[3] ? pathToFileURL(path.resolve(process.argv[3])).href : new URL('../src/server.js', import.meta.url).href;
+const { createApp } = await import(serverModule);
 
 if (!process.argv[2]) throw new Error('Specify a recorded experiment state.json');
 const source = path.resolve(process.argv[2]);
@@ -35,7 +37,7 @@ try {
   }
   assert.deepEqual(fs.readFileSync(dataFile), before);
   assert.deepEqual(fs.readFileSync(source), original);
-  console.log(JSON.stringify({ result: 'PASS', originalState: 'UNCHANGED', modelRequests: 0, directory }));
+  console.log(JSON.stringify({ result: 'PASS', serverModule, originalState: 'UNCHANGED', modelRequests: 0, directory }));
 } finally {
   await client.close();
   await new Promise(resolve => runtime.server.close(resolve));

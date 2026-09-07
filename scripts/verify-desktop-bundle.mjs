@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { verifyResourceTree } from './verify-resource-tree.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const app = process.argv[2] || path.join(root, 'src-tauri/target/release/bundle/macos/MultiContext.app');
@@ -31,14 +32,7 @@ for (const [file, marker] of markers) {
   }
 }
 
-for (const file of ['index.html', 'app.js', 'desktop-startup.html', 'activity-feed.js']) {
-  const source = path.join(root, 'public', file);
-  const packaged = path.join(resourceRoot, file);
-  if (digest(source) !== digest(packaged)) {
-    console.error(`desktop bundle is stale: ${file}`);
-    process.exit(1);
-  }
-}
+const resourceCount = verifyResourceTree(path.join(root, 'public'), resourceRoot);
 
 const serverSource = path.join(root, 'dist/server.bundle.mjs');
 const serverPackaged = path.join(app, 'Contents/Resources/multicontext/dist/server.bundle.mjs');
@@ -47,4 +41,4 @@ if (!fs.existsSync(serverPackaged) || digest(serverSource) !== digest(serverPack
   process.exit(1);
 }
 
-console.log(`desktop bundle verified: ${app}`);
+console.log(`desktop bundle verified: ${app} (${resourceCount} public files matched)`);

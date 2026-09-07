@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { signatureDetails } from './signature-details.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -15,9 +16,10 @@ if (!fs.existsSync(app)) {
 }
 let details = '';
 try {
-  details = execFileSync('codesign', ['-dv', '--verbose=4', app], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  details = signatureDetails(spawnSync('codesign', ['-dv', '--verbose=4', app], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
 } catch (error) {
-  details = `${error.stdout || ''}${error.stderr || ''}`;
+  console.error(`release signing failed: ${error.message}`);
+  process.exit(1);
 }
 if (/Signature=adhoc|TeamIdentifier=not set/.test(details)) {
   console.error('release signing failed: app is adhoc-signed or has no TeamIdentifier');
