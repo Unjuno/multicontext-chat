@@ -2,12 +2,18 @@
 // Exposed as `window.DesktopUI` in the browser and `module.exports` under Node so
 // the same logic can be unit-tested without a browser (see test/desktop.test.js).
 (function (root, factory) {
+  const api = factory();
   if (typeof module === "object" && module.exports) {
-    module.exports = factory();
-  } else {
-    root.DesktopUI = factory();
+    module.exports = api;
+  } else if (root) {
+    root.DesktopUI = api;
+  } else if (typeof globalThis !== "undefined") {
+    // The project is ESM-configured, so `module.exports` is unavailable when
+    // this file is imported by Node. Keep the same API reachable for focused
+    // runtime checks without changing the browser script format.
+    globalThis.DesktopUI = api;
   }
-})(typeof self !== "undefined" ? self : this, function () {
+})(typeof self !== "undefined" ? self : (typeof window !== "undefined" ? window : null), function () {
   // Internal service key -> user-facing label.
   const SERVICE_LABELS = {
     "モデル": "GPT-OSS",
