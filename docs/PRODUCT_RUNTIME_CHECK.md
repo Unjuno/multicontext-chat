@@ -63,6 +63,7 @@
 - 最新macOSバンドルで `DesktopApp E2E` を検索・選択し、Compile済み画面を実表示とAXツリーで確認した。`作成済み`、作成日時、`直近回答 2件を使用`、`結果をコピー`、`Markdownで保存` が表示され、メンバー履歴と統合レポートが分離されていた。検索後も既存ワークスペース件数30件を維持した。
 - Tauri稼働サーバーで `PRODUCT_UX_BROADCAST_SMOKE` を作成し、2チャットへ同一プロンプトをBroadcastした。HTTP 202、両チャットが1秒で `SETTLED`／`idle`、各メッセージ2件、両回答が `PRODUCT_BROADCAST_OK` で一致することを確認した。確認名付き削除204で後片付けした。
 - Tauri稼働サーバーで `PRODUCT_UX_COMPILE_SMOKE` を作成し、2チャットのBroadcast完了後にCompileを実行した。Broadcast後の各履歴2件がCompile前後で変わらず、CompileはHTTP 200・`lastCompile`生成で完了した。確認名付き削除204で後片付けした。
+- Compile結果の長文履歴はスクリーンリーダーが更新のたびに全文を再読上げしないよう、結果領域の `aria-live` を外した。作成完了の通知は既存のトーストライブ領域で行う方針とし、画面の静的閲覧性を優先した。
 
 ## 未確認
 
