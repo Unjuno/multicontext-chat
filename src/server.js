@@ -292,7 +292,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       }
       if (parts[5] === 'trim-history' && req.method === 'POST') {
         try {
-          const body = await readBody(req);
+          const body = requireJsonObject(await readBody(req), '履歴整理');
           const result = app.trimChatHistory(workspaceId, memberId, body.max ?? body.keep ?? 12);
           return json(res, 200, { removed: result.removed, remaining: result.remaining, workspace: enrichView(result.workspace, req) });
         } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
