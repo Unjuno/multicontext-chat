@@ -318,3 +318,24 @@ Read-only MultiContext workspace listings at ports 4317 and 4897 showed only
 SETTLED or BLOCKED workspaces, not RUNNING; this does not establish whether an
 independent LibreChat client is using that service. Restart coordination is
 required before claiming the new host code has been exercised by the model.
+
+## Authorized restart and post-upgrade run
+
+User authorized restart (`sakidou`). Sent TERM to old PID 82907. Initial
+startup failed because 127.0.0.1:27017 was unavailable; OrbStack was not running
+and existing container `mcc-mongo` was stopped. Started OrbStack and that
+existing container with its existing volumes (no data deletion/recreation),
+then started LibreChat with the rebuilt source. PID 18506 listens on
+127.0.0.1:3080; authenticated native health reports two agents. Startup logs:
+`/tmp/librechat-mcc-restart.log` and `/tmp/librechat-mcc-restart-2.log`.
+
+Post-upgrade flywheel run `research-flywheel-1788814497156`, workspace
+`ba09594c-a766-4d38-8e8d-b52dc7d02e37`, passes the runtime assertions:
+two completed members, one peer delivery, no inspections, both idle. Durable
+local evidence is under `data/experiments/research-flywheel-1788814497156/`.
+
+Research correctness still fails: auditor treated a bibliographic search for
+the DOI as a failed exact DOI resolution and claimed direct resolver activity
+not established by this tool interface. Therefore runtime completion is not
+proof of accurate source verification. Exact DOI lookup and evidence-grounded
+auditor reporting need further work; no scientific conclusion is accepted.
