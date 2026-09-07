@@ -131,11 +131,13 @@ run creation) keeps waiting rather than clearing. Pure helpers live in
 `public/follow-run.js` with node unit tests (`test/follow-run.test.js`).
 
 **Research presets:** `multicontext_orchestrate_create_session` accepts
-`navier-stokes-4` and `navier-stokes-adversarial-4`. The latter uses harmonic
-analysis, numerical skepticism, blow-up search, and proof auditing as separate
-persona lanes. For reliable knowledge accumulation, use bounded prompts with
-`THEOREM`, `GAP`, `CHECK`, and `CONFIDENCE` labels; run Compile only after the
-workspace is confirmed `SETTLED`.
+`navier-stokes-4`, `navier-stokes-adversarial-4`,
+`navier-stokes-proof-builder-4`, and `navier-stokes-geometric-4`. The geometric
+variant combines singular-set geometry, critical-space analysis,
+computer-assisted sanity checks, and adversarial auditing. For reliable
+knowledge accumulation, use bounded prompts with `THEOREM`, `GAP`, `CHECK`, and
+`CONFIDENCE` labels; run Compile only after the workspace is confirmed
+`SETTLED`.
 
 **Manual minimal:**
 

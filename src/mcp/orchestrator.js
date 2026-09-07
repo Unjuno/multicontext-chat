@@ -80,6 +80,16 @@ Clearly distinguish known results, heuristic reasoning, and unresolved questions
     ],
     seedPrompt: 'Run a constructive proof-building experiment for 3D incompressible Navier-Stokes regularity. In bounded phases, propose one candidate lemma, attempt to prove it, stress-test scaling and vortex stretching, and issue a formal verdict. Preserve all hypotheses and label every unresolved step. Do not claim the Millennium problem is solved without a complete verified proof.',
   },
+  'navier-stokes-geometric-4': {
+    name: 'Navier-Stokes Geometric Verification Lab',
+    members: [
+      { name: 'A — Geometric Measure Analyst', developerPrompt: 'Analyze possible singular sets using geometric measure theory and epsilon-regularity. State hypotheses precisely and propose one testable reduction.' },
+      { name: 'B — Harmonic Analyst', developerPrompt: 'Test the reduction in scale-critical Besov and Lorentz spaces, tracking endpoint losses and constants. Separate established estimates from conjectural closure.' },
+      { name: 'C — Computer-Assisted Skeptic', developerPrompt: 'Design a finite, reproducible interval or spectral sanity check for each candidate estimate. Explain exactly why computation cannot replace the continuum proof.' },
+      { name: 'D — Adversarial Auditor', developerPrompt: 'Audit all claims for hidden regularity assumptions, circularity, and quantifier errors. Return VALID, GAP, or REFUTED with a smallest next experiment.' },
+    ],
+    seedPrompt: 'Run a bounded geometric verification sprint for 3D incompressible Navier-Stokes regularity. First propose one candidate reduction involving singular-set geometry or epsilon-regularity. Then independently stress-test it with critical-space estimates and a reproducible computational sanity check. Finish with an adversarial audit. Each persona must output THEOREM, CANDIDATE, GAP, CHECK, and CONFIDENCE labels; no recursive delegation and no claim that the Millennium problem is solved without a complete proof.',
+  },
 };
 
 export function registerOrchestratorTools(server, app, store) {
@@ -112,7 +122,7 @@ export function registerOrchestratorTools(server, app, store) {
 
   server.registerTool('multicontext_orchestrate_create_session', {
     description: 'Create a workspace with preset personas and seed Q with initial tasks. Returns workspace and member ids. This is the entry point for orchestrated multi-agent sessions.',
-    inputSchema: z.object({ preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4', 'navier-stokes-proof-builder-4']).optional(), name: z.string().optional(), globalPrompt: z.string().optional() }),
+    inputSchema: z.object({ preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4', 'navier-stokes-proof-builder-4', 'navier-stokes-geometric-4']).optional(), name: z.string().optional(), globalPrompt: z.string().optional() }),
   }, async ({ preset, name, globalPrompt }) => {
     const p = PRESETS[preset || 'navier-stokes-4'];
     const ws = await app.createWorkspace({ name: name || p.name, globalPrompt: globalPrompt || '' });
@@ -194,7 +204,7 @@ export function registerOrchestratorTools(server, app, store) {
 
   server.registerTool('multicontext_orchestrate_run', {
     description: 'Synchronous compatibility wrapper around the same run engine as start_run. Prefer start_run for long operations.',
-    inputSchema: z.object({ workspace_id: z.string().optional(), preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4', 'navier-stokes-proof-builder-4']).optional(), name: z.string().optional(), prompt: z.string().min(1), priority: z.number().int().min(0).max(2).optional(), broadcast: z.boolean().optional(), chat_id: z.string().optional(), timeout_seconds: z.number().min(5).max(300).optional() }),
+    inputSchema: z.object({ workspace_id: z.string().optional(), preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4', 'navier-stokes-proof-builder-4', 'navier-stokes-geometric-4']).optional(), name: z.string().optional(), prompt: z.string().min(1), priority: z.number().int().min(0).max(2).optional(), broadcast: z.boolean().optional(), chat_id: z.string().optional(), timeout_seconds: z.number().min(5).max(300).optional() }),
   }, async (args) => {
     let wsId = args.workspace_id;
     if (!wsId) {
