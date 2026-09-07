@@ -73,6 +73,7 @@ npm run desktop:dev   # Tauri dev
 npm run desktop:build # production MultiContext.app
 npm run verify:bundle # bundled server + MCP smoke verification
 npm run verify:desktop # packaged UI/resource freshness verification
+npm run verify:release  # complete macOS release-candidate verification
 open src-tauri/target/release/bundle/macos/MultiContext.app
 ```
 
