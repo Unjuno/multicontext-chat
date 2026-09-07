@@ -1216,6 +1216,7 @@ function renderOrchestratorBar(data) {
   const canPause = Boolean(data.paused || qPending.length || (cur && ['running', 'queued'].includes(cur.status)));
   const pauseLabel = data.paused ? '再開' : '一時停止';
   const pauseTitle = data.paused ? 'オーケストレーターの実行キューを再開' : canPause ? 'オーケストレーターの実行中処理とキューを一時停止' : memberQueued ? 'オーケストレーターの処理はありません。チャットの待機キューは「全て停止」で停止できます' : '実行中または待機中の処理はありません';
+  const hasMemberWork = runningMembers > 0 || memberQueued > 0;
   bar.innerHTML = `
     <span class="ob-dot ${esc(dotCls)}"></span>
     <strong>実行管理</strong> <span class="ob-sep">·</span> ${esc(barStateLabels[barState] || '状態確認中')}${followTag}
@@ -1223,9 +1224,11 @@ function renderOrchestratorBar(data) {
     <span class="ob-sep">·</span> ${curText}${elapsedLabel}${longRunningLabel}
     <span class="ob-progress" title="回答済み ${answeredMembers} / ${liveMembers.length} チャット"><span class="ob-progress-track"><span style="width:${progress}%"></span></span><span>${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
     <span style="flex:1"></span>
+    ${hasMemberWork ? '<button class="sm danger" id="orchStopBtn" title="実行中または待機中のチャットを全て停止">全て停止</button>' : ''}
     <button class="sm" id="orchPauseBtn" ${canPause ? '' : 'disabled'} title="${esc(pauseTitle)}">${pauseLabel}</button>
     <button class="sm" id="orchQueueBtn">キューを見る</button>
   `;
+  bar.querySelector('#orchStopBtn')?.addEventListener('click', () => $('#stop')?.click());
   bar.querySelector('#orchPauseBtn')?.addEventListener('click', async () => {
     await request(`/api/workspaces/${currentId}/orchestrator/pause`, { method:'POST', body: JSON.stringify({ paused: !data.paused }) });
     refreshOrchestrator();
