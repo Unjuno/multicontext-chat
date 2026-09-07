@@ -19,6 +19,12 @@ const readBody = async (req) => {
   if (!chunks.length) return {};
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw Object.assign(new Error('Invalid JSON'), { status: 400 }); }
 };
+const requireJsonObject = (body, label) => {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw Object.assign(new Error(`${label}の入力はJSONオブジェクトで指定してください`), { status: 400, code: 'INVALID_REQUEST_BODY' });
+  }
+  return body;
+};
 
 export function createApp({ config = defaultConfig, store, client, scheduler, publicDir = defaultPublicDir } = {}) {
   store ??= new StateStore(config.dataFile);
@@ -232,7 +238,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (parts[3] === 'focus' && parts.length === 4 && req.method === 'POST') {
       try {
         store.requireWorkspace(workspaceId);
-        const body = await readBody(req);
+        const body = requireJsonObject(await readBody(req), 'フォーカス指定');
         pendingFocus = {
           workspace_id: workspaceId,
           run_id: body.run_id ?? body.runId ?? null,
@@ -244,7 +250,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     }
     if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') {
       try {
-        const body = await readBody(req);
+        const body = requireJsonObject(await readBody(req), '待機指定');
         if (!body || typeof body !== 'object' || Array.isArray(body)) {
           throw Object.assign(new Error('チャット追加の入力はJSONオブジェクトで指定してください'), { status: 400, code: 'INVALID_REQUEST_BODY' });
         }
@@ -301,7 +307,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     }
     if (parts[3] === 'broadcast' && req.method === 'POST') {
       try {
-        const body = await readBody(req);
+        const body = requireJsonObject(await readBody(req), '一時停止指定');
         const rawKey = body.idempotency_key ?? body.idempotencyKey ?? null;
         const key = rawKey == null || String(rawKey) === '' ? null : String(rawKey);
         if (key && !/^[A-Za-z0-9_-]{1,64}$/.test(key)) {
