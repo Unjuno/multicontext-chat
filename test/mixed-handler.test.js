@@ -84,3 +84,20 @@ test('cancellation during provider execution prevents external deferral', async 
   assert.equal(rejection.message, 'cancelled');
   assert.equal(aggregator.toolOutputs.size, 0);
 });
+
+for (const ids of [['p', 'p', 'c'], ['p', 'q', 'p'], ['', 'q', 'c'], ['p', 'q', undefined]]) {
+  test(`invalid mixed call identities fail before provider execution: ${JSON.stringify(ids)}`, async () => {
+    let rejection;
+    let executions = 0;
+    const aggregator = { toolOutputs: new Map() };
+    const handler = mixed.createMixedOwnershipHandler({ handle() { executions++; } }, new Set(['send_to_chat']), aggregator);
+    await handler.handle('execute', {
+      toolCalls: ids.map((id, index) => ({ id, name: index === 2 ? 'send_to_chat' : 'web_search' })),
+      reject(error) { rejection = error; },
+    });
+    assert.match(rejection.message, /mixed tool call identity/);
+    assert.equal(executions, 0);
+    assert.equal(aggregator.toolOutputs.size, 0);
+    assert.notEqual(rejection.code, 'EXTERNAL_TOOL_DEFERRED');
+  });
+}

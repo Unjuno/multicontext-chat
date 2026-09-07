@@ -11,6 +11,15 @@ function createMixedOwnershipHandler(handler, crossNames, aggregator, signal, se
       const provider = data.toolCalls.filter(call => !crossNames.has(call.name));
       try {
         signal?.throwIfAborted();
+        // Validate the entire ownership boundary before any provider side effect.
+        // A Set of expected provider IDs alone would hide duplicate requests.
+        const callIds = new Set();
+        for (const call of data.toolCalls) {
+          if (typeof call.id !== 'string' || !call.id.trim() || callIds.has(call.id)) {
+            throw new Error('Invalid or duplicate mixed tool call identity');
+          }
+          callIds.add(call.id);
+        }
         if (provider.length) {
           const results = await new Promise((resolve, reject) => {
             // Partial results must not resolve the original graph batch. It is
