@@ -50,8 +50,16 @@ Node server with the model URL. Desktop local state is `local-state.json`, separ
 from legacy `state.json`. Reuse of a server reporting another backend is refused.
 Rust suite: 48 passed. Packaged GUI verification remains pending.
 
-The old backup button copied only `state.json`; in local mode it now reports an
-explicit unsupported-operation error rather than falsely backing up legacy data.
-Until a complete snapshot is implemented, close the application and copy the data
-folder including `local-state.json.local-conversations/`. Do not treat this
-checkpoint as completed desktop release readiness.
+The local backup button now requests authenticated `POST /api/backup` from the
+running Node server. With no active Scheduler requests, the server synchronously
+saves state and copies state plus conversation files into a private staging folder.
+It finalizes the directory only after writing a manifest. Busy execution returns
+409; malformed entries or non-regular files fail without finalizing. Incomplete
+copies remain named `.partial`, never reported as completed snapshots.
+
+Restore with the server stopped: copy backup `state.json` to the configured state
+file and `conversations/` to `STATE_FILE.local-conversations/`. The manifest records
+this mapping. This backs up conversation data, not model binaries, OS Keychain,
+desktop settings, or proof of mathematical correctness. Restore UI and packaged
+GUI click verification remain pending. Only one server may own a state directory;
+the synchronous snapshot does not coordinate independent processes writing it.

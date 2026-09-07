@@ -432,9 +432,20 @@ fn open_data_dir(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn backup_data(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<String, String> {
-    if state.config.lock().unwrap().backend == "local" {
-        return Err("ローカル会話の一括バックアップは準備中です。アプリ終了後にデータフォルダー全体をコピーしてください。".into());
+async fn backup_data(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let cfg = state.config.lock().unwrap().clone();
+    if cfg.backend == "local" {
+        let mut request = health::client().post(format!("http://127.0.0.1:{}/api/backup", cfg.multicontext_port));
+        if let Ok(token) = std::env::var("MULTICONTEXT_APP_TOKEN") {
+            if !token.is_empty() { request = request.bearer_auth(token); }
+        }
+        let response = request.send().await.map_err(|_| "バックアップにはローカルサーバーの起動が必要です")?;
+        let status = response.status();
+        let body: serde_json::Value = response.json().await.map_err(|_| "バックアップ応答が無効です")?;
+        if !status.is_success() {
+            return Err(body.get("error").and_then(|value| value.as_str()).unwrap_or("バックアップに失敗しました").to_string());
+        }
+        return body.get("path").and_then(|value| value.as_str()).map(str::to_string).ok_or("バックアップ保存先がありません".into());
     }
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let source = dir.join("state.json");

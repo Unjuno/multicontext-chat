@@ -6,6 +6,7 @@ import { config as defaultConfig } from './config.js';
 import { StateStore, searchMemberMessages, publicMember } from './store.js';
 import { LibreChatClient } from './librechat.js';
 import { LocalModelClient } from './local-model.js';
+import { createLocalBackup } from './backup.js';
 import { Scheduler } from './scheduler.js';
 import { buildActionSpec } from './openapi.js';
 import { createApplication } from './application.js';
@@ -163,6 +164,11 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (req.method === 'OPTIONS') return json(res, 204, null);
     if (!authorized(req)) return json(res, 401, { error: 'Unauthorized' });
     const parts = url.pathname.split('/').filter(Boolean);
+    if (url.pathname === '/api/backup' && req.method === 'POST') {
+      if (config.backend !== 'local') return json(res, 400, { error: 'This endpoint backs up local model workspaces only' });
+      try { return json(res, 200, createLocalBackup({ dataFile: config.dataFile, scheduler, store })); }
+      catch (error) { return json(res, error.status || 500, { error: error.message }); }
+    }
     if (url.pathname === '/api/health' && req.method === 'GET') { const librechat = await client.health(); return json(res, librechat.ok ? 200 : 503, { ok: librechat.ok, version: APP_VERSION, backend: config.backend || 'librechat', librechat, publicUrl: config.publicUrl || null }); }
     if (url.pathname === '/api/agents' && req.method === 'GET') {
       try {
