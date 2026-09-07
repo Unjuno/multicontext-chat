@@ -117,3 +117,4 @@
 - Compile履歴追加後にmacOS本番バンドルを再生成してアプリを再起動した。`/api/health` が `ok:true`、LibreChat接続済み・Agent 2件、ワークスペース30件を返し、RESTのワークスペース応答に `compileHistory` フィールドが含まれることを確認した。古い稼働バンドルとの差異による反映漏れを解消した。
 - 稼働中APIの全30ワークスペースを確認し、Compile履歴を持つワークスペース2件（`RealE2E`、`DesktopApp E2E`）で `compileHistory.length === 1` と `lastCompile` の存在が一致した。履歴のないワークスペースも壊れずに取得できた。
 - APIのfocus導線で実機を`DesktopApp E2E`へ移動し、AXツリーで2チャット・処理完了・回答25件・統合レポート利用可能、スナップショット表示、結果コピー、Markdown保存を確認した。履歴は1件のため過去履歴選択欄が表示されないことも仕様どおり確認した。
+- 最新macOSバンドル更新後の出荷確認を実施した。`verify:desktop`、`verify:bundle`（MCP initialize/list_workspaces）、稼働中APIの`/api/health`（`ok:true`, Native, Agent 2件）がすべて成功し、リポジトリはcleanだった。
