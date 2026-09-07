@@ -318,6 +318,10 @@
         card._msg.textContent = status.message || "";
         card._msg.title = status.message || "";
         card._own.textContent = UI.ownershipText(status.ownership);
+        if (!navigated) {
+          const readyCount = SERVICES.filter((service) => state.statuses[service]?.state === "ready").length;
+          document.getElementById("subtitle").textContent = `サービスを確認しています（${readyCount}/${SERVICES.length}）`;
+        }
       }
 
       function hideError() {
