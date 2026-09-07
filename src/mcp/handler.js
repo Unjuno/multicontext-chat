@@ -12,6 +12,15 @@ export function createMcpHandlerFactory({ config, store, client, scheduler, app 
     // If MCP disabled, we can still return server but tools will error
 
     // Register tools
+    server.registerTool('multicontext_add_review_note', {
+      description: 'Append an attributable assessment of a source message without modifying it or dispatching work. Reviewer label is self-reported; supported does NOT certify a proof.',
+      inputSchema: z.object({ workspace_id: z.string().min(1), memberId: z.string().min(1), messageId: z.string().min(1),
+        verdict: z.enum(['supported', 'rejected', 'needs_check']), rationale: z.string().min(1).max(2000), reviewer: z.string().min(1).max(120) }),
+    }, async ({ workspace_id, ...input }) => {
+      if (!config.mcpEnabled) throw new Error('MCP disabled');
+      const result = await app.addReviewNote(workspace_id, input);
+      return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
+    });
     server.registerTool('multicontext_list_workspaces', {
       description: 'List all MultiContext workspaces with runtime state and chat counts',
       inputSchema: z.object({ include_archived: z.boolean().optional() }),

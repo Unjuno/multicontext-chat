@@ -164,6 +164,10 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (req.method === 'OPTIONS') return json(res, 204, null);
     if (!authorized(req)) return json(res, 401, { error: 'Unauthorized' });
     const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length === 4 && parts[1] === 'workspaces' && parts[3] === 'reviews' && req.method === 'POST') {
+      try { return json(res, 201, await app.addReviewNote(parts[2], await readBody(req))); }
+      catch (error) { return json(res, error.status || 500, { error: error.message, code: error.code }); }
+    }
     if (url.pathname === '/api/backup' && req.method === 'POST') {
       if (config.backend !== 'local') return json(res, 400, { error: 'This endpoint backs up local model workspaces only' });
       try { return json(res, 200, createLocalBackup({ dataFile: config.dataFile, scheduler, store })); }

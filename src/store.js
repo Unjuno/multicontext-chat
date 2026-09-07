@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 
 const now = () => new Date().toISOString();
 const problem = (message, status = 400, code = null) => {
@@ -630,6 +630,27 @@ export class StateStore {
     w.compileHistory = [compile, ...previous].slice(0, 5);
     w.updatedAt = now();
     this.save();
+  }
+
+  addReviewNote(workspaceId, input) {
+    const w = this.requireWorkspace(workspaceId);
+    if (!input || typeof input !== 'object' || typeof input.memberId !== 'string' || typeof input.messageId !== 'string' ||
+      !['supported', 'rejected', 'needs_check'].includes(input.verdict) ||
+      typeof input.rationale !== 'string' || !input.rationale.trim() || input.rationale.length > 2000 ||
+      typeof input.reviewer !== 'string' || !input.reviewer.trim() || input.reviewer.length > 120) {
+      throw problem('Review requires a verdict, rationale (1–2000 chars), and self-reported reviewer label (1–120 chars)', 400, 'INVALID_REVIEW');
+    }
+    const member = Object.hasOwn(w.members, input.memberId) ? w.members[input.memberId] : null;
+    const message = member?.messages.find(item => item.id === input.messageId && !item.pending);
+    if (!message) throw problem('Review source message not found', 404, 'REVIEW_SOURCE_NOT_FOUND');
+    if ((w.reviewNotes || []).length >= 100) throw problem('Review limit reached', 409, 'REVIEW_LIMIT');
+    const source = String(message.content ?? '');
+    const record = { id: randomUUID(), at: now(), memberId: input.memberId, messageId: input.messageId,
+      verdict: input.verdict, rationale: input.rationale.trim(), reviewer: input.reviewer.trim(),
+      reviewerIdentity: 'SELF_REPORTED', assessmentNotProof: true,
+      sourceHash: createHash('sha256').update(source).digest('hex'), sourceExcerpt: source.slice(0, 1000), sourceTruncated: source.length > 1000 };
+    w.reviewNotes = [...(w.reviewNotes || []), record];
+    w.updatedAt = now(); this.save(); return record;
   }
 
   runtimeState(workspaceId, runningMemberIds = new Set()) {

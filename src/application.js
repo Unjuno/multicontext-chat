@@ -43,6 +43,7 @@ function sanitizeWorkspace(workspace, runtimeState, runningMemberIds, includeMes
     defaultAgentId: workspace.defaultAgentId || '',
     archived: Boolean(workspace.archived),
     settings: workspace.settings,
+    reviewNotes: workspace.reviewNotes || [],
     members,
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
@@ -864,6 +865,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   return {
+    addReviewNote: (workspaceId, input) => store.addReviewNote(workspaceId, input),
     listWorkspaces,
     getWorkspace,
     createWorkspace,

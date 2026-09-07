@@ -1524,6 +1524,26 @@ async function refresh(expectedId = currentId) {
     workspaceRetryAttempt = 0;
     const gp = $('#globalPrompt'); if (gp) autoResize(gp);
     const compileOutput = $('#compileOutput');
+    if (compileOutput && workspace.reviewNotes?.length && !$('#sourceReviewNotes')) {
+      const records = document.createElement('details');
+      records.id = 'sourceReviewNotes';
+      records.open = true;
+      const title = document.createElement('summary');
+      title.textContent = `検証メモ原文（${workspace.reviewNotes.length}件・投稿者名は自己申告）`;
+      records.append(title);
+      for (const note of workspace.reviewNotes.slice(-8)) {
+        const paragraph = document.createElement('p');
+        paragraph.style.whiteSpace = 'pre-wrap';
+        paragraph.textContent = `[${note.verdict}] ${note.reviewer} / ${note.at}\n発言: ${note.messageId}\n${note.rationale}`;
+        records.append(paragraph);
+      }
+      if (workspace.reviewNotes.length > 8) {
+        const omitted = document.createElement('p');
+        omitted.textContent = '最新8件を表示しています。全記録はワークスペースデータに保存されています。';
+        records.append(omitted);
+      }
+      compileOutput.before(records);
+    }
     if (compileOutput && !$('#compileVerificationNotice')) {
       const notice = document.createElement('p');
       notice.id = 'compileVerificationNotice';
