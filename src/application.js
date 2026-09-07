@@ -46,6 +46,7 @@ function sanitizeWorkspace(workspace, runtimeState, runningMemberIds, includeMes
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
     lastCompile: workspace.lastCompile,
+    compileHistory: workspace.compileHistory || (workspace.lastCompile ? [workspace.lastCompile] : []),
     stats: workspace.stats,
     runtimeState,
     settled: runtimeState === 'SETTLED',

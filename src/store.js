@@ -53,6 +53,10 @@ export class StateStore {
       workspace.settings.allowCrossChatInspect ??= true;
       workspace.settings.allowCrossChatSend ??= true;
       workspace.settings.agentSelectionMode ??= 'require_selection';
+      if (!Array.isArray(workspace.compileHistory)) {
+        workspace.compileHistory = workspace.lastCompile ? [workspace.lastCompile] : [];
+        dirty = true;
+      }
       if (!workspace.broadcastReceipts) {
         workspace.broadcastReceipts = {};
         dirty = true;
@@ -147,7 +151,7 @@ export class StateStore {
       compileAgentId: String(input.compileAgentId || ''), compilePrompt: String(input.compilePrompt || defaultCompilePrompt()),
       defaultAgentId: String(input.defaultAgentId || ''),
       settings: { allowCrossChatInspect: input.settings?.allowCrossChatInspect !== false, allowCrossChatSend: input.settings?.allowCrossChatSend !== false, agentSelectionMode: input.settings?.agentSelectionMode === 'auto_first' ? 'auto_first' : 'require_selection' },
-      crossChatReceipts: {}, broadcastReceipts: {}, members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null,
+      crossChatReceipts: {}, broadcastReceipts: {}, members: {}, createdAt: timestamp, updatedAt: timestamp, lastCompile: null, compileHistory: [],
       stats: { broadcasts: 0, executions: 0, toolEnqueues: 0, inspections: 0 },
       archived: false,
       orchestratorQueue: [], orchestratorRuns: {}, orchestratorEvents: [], orchestratorPaused: false,
@@ -589,7 +593,15 @@ export class StateStore {
     this.save();
     return { removed, remaining: member.messages.length };
   }
-  setCompile(workspaceId, result) { const w = this.requireWorkspace(workspaceId); w.lastCompile = { ...result, at: now() }; w.updatedAt = now(); this.save(); }
+  setCompile(workspaceId, result) {
+    const w = this.requireWorkspace(workspaceId);
+    const previous = Array.isArray(w.compileHistory) ? w.compileHistory : (w.lastCompile ? [w.lastCompile] : []);
+    const compile = { ...result, at: now() };
+    w.lastCompile = compile;
+    w.compileHistory = [compile, ...previous].slice(0, 5);
+    w.updatedAt = now();
+    this.save();
+  }
 
   runtimeState(workspaceId, runningMemberIds = new Set()) {
     const workspace = this.requireWorkspace(workspaceId); const active = Object.values(workspace.members).filter((m) => m.active);
