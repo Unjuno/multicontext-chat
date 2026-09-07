@@ -1,4 +1,4 @@
-import { CrossChatToolExecutor, extractToolCalls, extractProviderToolResults, isCrossChatToolCall } from './cross-chat-executor.js';
+import { CrossChatToolExecutor, extractToolCalls, extractProviderToolResults, isCrossChatToolCall, buildOrderedContinuation, assertProviderResultsComplete } from './cross-chat-executor.js';
 export class Scheduler {
   constructor({ store, client, app, maxHistoryMessages = 120, maxNativeToolIterations = 10, maxConcurrentRequests = Number.POSITIVE_INFINITY }) {
     this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.maxNativeToolIterations = maxNativeToolIterations; this.maxConcurrentRequests = Math.max(1, Number(maxConcurrentRequests) || 4); this.activeRequests = 0; this.requestWaiters = []; this.running = new Map(); this.executor = null;
@@ -207,6 +207,7 @@ export class Scheduler {
               }
               const liveCurrent = this.store.getMember(workspaceId, memberId)?.current?.item;
               if (controller.signal.aborted || !liveCurrent || liveCurrent.id !== item.id) break;
+              assertProviderResultsComplete(currentResult.raw);
               const toolResults = await this.executor.execute({
                 workspaceId,
                 sourceMemberId: memberId,
@@ -257,28 +258,7 @@ export class Scheduler {
               const functionCallOutput = [...providerToolResults, ...toolResults]
                 .filter((result, index, all) => all.findIndex((candidate) => candidate.call_id === result.call_id) === index)
                 .map(r => ({ type: 'function_call_output', call_id: r.call_id, output: r.output }));
-              const resultByCallId = new Map(functionCallOutput.map((result) => [result.call_id, result]));
-              const orderedItems = [];
-              for (const outputItem of (currentResult.raw?.output || [])) {
-                if (outputItem?.type === 'function_call' || outputItem?.type === 'tool_call') {
-                  const callId = outputItem.call_id || outputItem.callId;
-                  orderedItems.push({
-                    type: 'function_call',
-                    call_id: callId,
-                    name: outputItem.name || outputItem.function?.name || '',
-                    arguments: typeof (outputItem.arguments || outputItem.function?.arguments) === 'string'
-                      ? (outputItem.arguments || outputItem.function.arguments)
-                      : JSON.stringify(outputItem.arguments || outputItem.args || {}),
-                  });
-                  const result = resultByCallId.get(callId);
-                  if (result) orderedItems.push(result);
-                } else if (outputItem?.type === 'function_call_output' && outputItem.call_id) {
-                  orderedItems.push({ type: 'function_call_output', call_id: outputItem.call_id, output: String(outputItem.output ?? '') });
-                }
-              }
-              for (const result of functionCallOutput) {
-                if (!orderedItems.some((item) => item.type === 'function_call_output' && item.call_id === result.call_id)) orderedItems.push(result);
-              }
+              const orderedItems = buildOrderedContinuation(currentResult.raw, toolResults);
               if (this.client.mode === 'native' && typeof this.client.continueAgent === 'function') {
                 currentResult = await this.client.continueAgent({ agentId: effectiveAgentId, conversationId: currentConversationId, toolCalls, toolResults: functionCallOutput, orderedItems, signal: controller.signal, metadata: { workspace_id: workspaceId, member_id: memberId, queue_item_id: item.id } });
               } else {

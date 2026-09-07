@@ -49,6 +49,12 @@ function save(rel, text, didChange) {
     text = out.text;
     dirty ||= out.changed;
   }
+  const outputPresence = replaceRequired(text,
+    '    if (toolOutput) {',
+    '    if (aggregator.toolOutputs.has(callId)) {',
+    `${rel}: preserve empty tool outputs`);
+  text = outputPresence.text;
+  dirty ||= outputPresence.changed;
   save(rel, text, dirty);
 }
 
@@ -57,6 +63,15 @@ function save(rel, text, didChange) {
   const rel = 'api/server/controllers/agents/responses.js';
   let text = fs.readFileSync(filePath(rel), 'utf8');
   let dirty = false;
+
+  const modelParameters = '      model_parameters: agent.model_parameters ?? {},';
+  const requestModelParameters = `      model_parameters: {
+        ...(agent.model_parameters ?? {}),
+        ...(request.parallel_tool_calls === false ? { parallel_tool_calls: false } : {}),
+      },`;
+  const modelOverride = replaceRequired(text, modelParameters, requestModelParameters, `${rel}: request tool serialization`);
+  text = modelOverride.text;
+  dirty ||= modelOverride.changed;
 
   // Support stock LibreChat as well as older MultiContext patches that imported only ChatMessage.
   if (!text.includes("const { AIMessage, ChatMessage, ToolMessage } = require('@langchain/core/messages');")) {

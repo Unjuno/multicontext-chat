@@ -15,6 +15,37 @@ import { createApp } from '../src/server.js';
 const makeStore = () => new StateStore(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mcc-reg-')), 'state.json'));
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+test('scheduler preserves search transcript and stops after provider-only final response', async () => {
+  const store = makeStore();
+  const ws = store.createWorkspace({ name: 'mixed regression' });
+  const member = store.addMember(ws.id, { name: 'A', agentId: 'a' });
+  const provider = { type: 'function_call', call_id: 'p', name: 'web_search', arguments: '{}' };
+  const providerResult = { type: 'function_call_output', call_id: 'p', output: 'actual search' };
+  const cross = { type: 'function_call', call_id: 'c', name: 'list_chats', arguments: '{}' };
+  let continuations = 0;
+  let transcript;
+  const client = {
+    mode: 'native', listAgents: async () => [{ id: 'a' }],
+    runAgent: async () => ({ conversationId: 'conv', text: '', raw: { output: [provider, providerResult, cross] } }),
+    continueAgent: async args => {
+      continuations++;
+      transcript = args.orderedItems;
+      return { conversationId: 'conv', text: 'final research', raw: { output: [provider, providerResult] } };
+    },
+  };
+  const scheduler = new Scheduler({ store, client });
+  scheduler.setApp({ listPeerChats: async () => [] });
+  store.enqueue(ws.id, member.id, 'research');
+  scheduler.kickMember(ws.id, member.id);
+  for (let i = 0; i < 100 && scheduler.running.size; i++) await sleep(10);
+  assert.equal(scheduler.running.size, 0);
+  assert.equal(continuations, 1);
+  assert.deepEqual(transcript.slice(0, 3), [provider, providerResult, cross]);
+  assert.equal(transcript.length, 4);
+  assert.equal(transcript[3].call_id, 'c');
+  assert.ok(store.getMember(ws.id, member.id).messages.some(m => m.content === 'final research'));
+});
+
 // Phase 2: Scheduler -> Executor contract
 test('Phase2 scheduler invokes executor with object contract', async () => {
   const store = makeStore();

@@ -23,12 +23,14 @@ function fixture() {
     "      let role: InternalMessage['role'];",
     "      if (messageItem.role === 'developer') {",
     "        role = 'system';",
+    "    if (toolOutput) {",
   ].join('\n'));
   fs.writeFileSync(controller, [
     "const { v4: uuidv4 } = require('uuid');",
     "const db = require('~/models');",
     "  const request = envelope.payload;",
     "  const { principal } = envelope;",
+    "      model_parameters: agent.model_parameters ?? {},",
     "    const conversationId = request.previous_response_id ?? uuidv4();",
     "    const parentMessageId = null;",
     "    // Merge previous messages with new input",
@@ -88,6 +90,7 @@ test('LibreChat patch is idempotent and preserves developer + conversation conti
   const controllerText = fs.readFileSync(controller, 'utf8');
   assert.match(serviceText, /'developer'/);
   assert.match(serviceText, /role = 'developer'/);
+  assert.match(serviceText, /aggregator\.toolOutputs\.has\(callId\)/);
   assert.match(controllerText, /ChatMessage/);
   assert.match(controllerText, /X-LibreChat-Conversation-Id/);
   assert.match(controllerText, /role: 'developer'/);
@@ -96,6 +99,14 @@ test('LibreChat patch is idempotent and preserves developer + conversation conti
   assert.match(controllerText, /primaryConfig\.toolDefinitions/);
   assert.match(controllerText, /class ExternalCrossChatToolCall/);
   assert.match(controllerText, /EXTERNAL_TOOL_DEFERRED/);
+  assert.match(controllerText, /request\.parallel_tool_calls === false/);
+  const parameterExpression = controllerText.match(/model_parameters: (\{[\s\S]*?\n      \}),/)[1];
+  const resolveParameters = new Function('agent', 'request', `return (${parameterExpression});`);
+  const agent = { model_parameters: { temperature: 0.4, parallel_tool_calls: true } };
+  assert.deepEqual(resolveParameters(agent, { parallel_tool_calls: false }),
+    { temperature: 0.4, parallel_tool_calls: false });
+  assert.equal(agent.model_parameters.parallel_tool_calls, true);
+  assert.deepEqual(resolveParameters(agent, {}), agent.model_parameters);
   assert.match(controllerText, /toolNames\.some\(\(name\) => cross\.has\(name\)\)/);
   assert.doesNotMatch(controllerText, /toolNames\.every\(\(name\) => cross\.has\(name\)\)/);
   assert.match(controllerText, /AIMessage/);

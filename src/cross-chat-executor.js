@@ -10,6 +10,38 @@ export function isCrossChatToolCall(call) {
   return CROSS_CHAT_TOOLS.some((tool) => tool?.function?.name === name);
 }
 
+// Preserve existing result positions; fill only externally executed calls.
+export function assertProviderResultsComplete(raw) {
+  const completed = new Set((raw?.output || []).filter(x => x.type === 'function_call_output').map(x => x.call_id));
+  for (const call of extractToolCalls(raw)) {
+    if (!isCrossChatToolCall(call) && !completed.has(call.call_id ?? call.callId)) {
+      throw new StructuredToolError('PROVIDER_TOOL_RESULT_MISSING',
+        'LibreChat returned an unresolved provider tool call; cross-chat dispatch withheld. Mixed-tool execution requires LibreChat ownership handling.');
+    }
+  }
+}
+
+export function buildOrderedContinuation(raw, results) {
+  const items = raw?.output || [];
+  const existing = new Set(items.filter(x => x.type === 'function_call_output').map(x => x.call_id));
+  const additions = new Map(results.map(x => [x.call_id, x]));
+  const ordered = [];
+  for (const item of items) {
+    if (item.type === 'function_call_output') {
+      ordered.push({ ...item });
+    } else if (item.type === 'function_call' || item.type === 'tool_call') {
+      const args = item.arguments ?? item.args ?? item.function?.arguments ?? {};
+      const call_id = item.call_id ?? item.callId;
+      ordered.push({ type: 'function_call', call_id, name: item.name ?? item.function?.name,
+        arguments: typeof args === 'string' ? args : JSON.stringify(args) });
+      if (!existing.has(call_id) && additions.has(call_id)) {
+        ordered.push({ type: 'function_call_output', call_id, output: additions.get(call_id).output });
+      }
+    }
+  }
+  return ordered;
+}
+
 export function extractProviderToolResults(raw) {
   if (!raw || !Array.isArray(raw.output)) return [];
   return raw.output
