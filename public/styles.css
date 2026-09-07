@@ -1099,6 +1099,8 @@ dialog menu { display: flex; gap: 6px; justify-content: flex-end; }
 .orchestrator-bar .ob-dot.idle { background: var(--settled); }
 .orchestrator-bar .ob-sep { color: var(--border-strong); }
 .orchestrator-bar .ob-follow { color: var(--running); font-weight: 700; white-space: nowrap; }
+.orchestrator-bar .ob-elapsed { color: var(--text-muted); white-space: nowrap; }
+.orchestrator-bar .ob-long-running { color: var(--danger); font-weight: 700; white-space: nowrap; }
 .orchestrator-bar button { padding: 3px 8px; font-size: 11px; }
 .ob-progress { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); white-space: nowrap; font-size: 10px; }
 .ob-progress-track { width: 72px; height: 5px; overflow: hidden; border-radius: 99px; background: var(--border); }

@@ -1206,6 +1206,9 @@ function renderOrchestratorBar(data) {
     ? Math.max(0, Math.floor((Date.now() - new Date(oldestRunningAt).getTime()) / 1000))
     : 0;
   const elapsedLabel = runningElapsed ? ` <span class="ob-elapsed" title="実行中チャットのうち最も長い経過時間">経過 ${runningElapsed}秒</span>` : '';
+  const longRunningLabel = runningElapsed >= 30
+    ? ' <span class="ob-long-running" title="30秒以上実行中です。必要なら全て停止で中断できます">長時間実行中</span>'
+    : '';
   const memberQueued = liveMembers.reduce((sum, member) => sum + (member.queue?.length || 0), 0);
   const answeredMembers = liveMembers.filter(member => (member.messages || []).some(message => message.role === 'assistant')).length;
   const progress = liveMembers.length ? Math.round((answeredMembers / liveMembers.length) * 100) : 0;
@@ -1217,7 +1220,7 @@ function renderOrchestratorBar(data) {
     <span class="ob-dot ${esc(dotCls)}"></span>
     <strong>実行管理</strong> <span class="ob-sep">·</span> ${esc(barStateLabels[barState] || '状態確認中')}${followTag}
     <span class="ob-sep">·</span> 優先度 高 ${q0} <span class="ob-sep">|</span> 標準 ${q1} <span class="ob-sep">|</span> 低 ${q2}${memberQueued ? ` <span class="ob-sep">·</span> チャット待機 ${memberQueued}` : ''}
-    <span class="ob-sep">·</span> ${curText}${elapsedLabel}
+    <span class="ob-sep">·</span> ${curText}${elapsedLabel}${longRunningLabel}
     <span class="ob-progress" title="回答済み ${answeredMembers} / ${liveMembers.length} チャット"><span class="ob-progress-track"><span style="width:${progress}%"></span></span><span>${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
     <span style="flex:1"></span>
     <button class="sm" id="orchPauseBtn" ${canPause ? '' : 'disabled'} title="${esc(pauseTitle)}">${pauseLabel}</button>
