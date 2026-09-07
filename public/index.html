@@ -58,6 +58,13 @@
     </div>
     <p class="small help-note">各チャットの入力欄では、そのチャットだけに送信できます。</p>
   </dialog>
+  <dialog id="unsavedDialog" aria-labelledby="unsavedDialogTitle" aria-describedby="unsavedDialogDescription">
+    <form method="dialog">
+      <h3 id="unsavedDialogTitle">未保存の変更があります</h3>
+      <p id="unsavedDialogDescription">移動すると、現在の入力内容は破棄されます。</p>
+      <menu><button value="cancel">戻る</button><button value="discard" class="danger">破棄して移動</button></menu>
+    </form>
+  </dialog>
 
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
   <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
