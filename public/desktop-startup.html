@@ -534,6 +534,14 @@
         const cfg = readSettings();
         const rawKey = document.getElementById("apiKey").value;
         document.getElementById("settingsErr").textContent = "";
+        const portInput = document.getElementById("port");
+        const rawPort = portInput?.value.trim() || "";
+        const portNumber = Number(rawPort);
+        if (!/^\d+$/.test(rawPort) || !Number.isSafeInteger(portNumber) || portNumber < 1 || portNumber > 65535) {
+          document.getElementById("settingsErr").textContent = "MultiContextポートは1〜65535の整数で指定してください。";
+          portInput?.focus();
+          return;
+        }
         if (!validateSettings(cfg)) return;
         const actionButtons = [document.getElementById("saveBtn"), document.getElementById("startBtn")].filter(Boolean);
         if (actionButtons.some((button) => button.disabled)) return;
