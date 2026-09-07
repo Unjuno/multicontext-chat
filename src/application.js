@@ -772,7 +772,10 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     compilingWorkspaces.add(workspaceId);
     try { store.appendEvent(workspaceId, { type: 'compile.started', origin: 'human', detail: { agentId } }); } catch {}
     try {
-      const snapshots = Object.values(workspace.members).filter(m => m.active).map(m => ({ member: { id: m.id, name: m.name }, messages: m.messages.filter(x => !x.pending).slice(-12).map(({ role, content, at }) => ({ role, content, at })) }));
+      // Keep the compile request bounded by both message count and content size.
+      // Long cross-chat tool loops can otherwise exceed the model context window
+      // even when each member has only a modest number of messages.
+      const snapshots = Object.values(workspace.members).filter(m => m.active).map(m => ({ member: { id: m.id, name: m.name }, messages: m.messages.filter(x => !x.pending).slice(-4).map(({ role, content, at }) => ({ role, content: String(content).slice(0, 500), at })) }));
       const snapshotAt = new Date().toISOString();
       const snapshotMessageCount = snapshots.reduce((sum, snapshot) => sum + snapshot.messages.length, 0);
       const result = await client.runAgent({ agentId, globalPrompt: workspace.compilePrompt, developerPrompt: '', history: [], prompt: `Synthesize these independent research records without claiming an unresolved problem is solved. Preserve and separate four sections: THEOREM (known result with hypotheses), GAP (exact unproved step), CHECK (falsification or sanity test), and CONFIDENCE (High/Medium/Low with justification). List disagreements and label heuristics explicitly. Do not add a proof step that is absent from the records.\n\n${JSON.stringify(snapshots, null, 2)}`, metadata: { workspace_id: workspaceId, purpose: 'compile' } });
