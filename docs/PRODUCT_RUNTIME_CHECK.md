@@ -122,6 +122,7 @@
 - Started run `a87a7aef-dffb-47f4-84a5-e05fd4d605aa` with a bounded construct→attack→sanity-check→audit prompt. After 18 five-second polls, three members were `idle` with two messages each; Critical Spaces remained `running` with one message. The run remained `running`, runtime was `RUNNING`, and Q length was 1.
 - No Compile was attempted because the shared SETTLED precondition was not met. MCP deletion was also not attempted beyond the initial validation response; the tool requires the exact `confirm_name`, and the running workspace must not be force-stopped through MCP. This is retained as a user-GUI stop/cleanup follow-up, not classified as an application defect.
 - Result: persona assignment, bounded parallel dispatch, runtime polling, and Compile gating behaved as designed. The experiment produced partial research output but no mathematical solution claim.
+- Follow-up: the first Compile client timed out while the server-side Compile continued; a duplicate Compile request was correctly rejected by `compilingWorkspaces`. After 15 seconds, `multicontext_get_compile_result` returned a completed Proof Auditor synthesis. It retained `Gap` and `Low/Medium` confidence labels rather than claiming a proof. The workspace was then deleted through MCP with the exact confirmation name.
 
 # Product UX evidence — compile history
 
