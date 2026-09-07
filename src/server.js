@@ -281,7 +281,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       }
       if (parts[5] === 'enqueue' && req.method === 'POST') {
         try {
-          const body = await readBody(req);
+          const body = requireJsonObject(await readBody(req), 'チャット送信');
           const result = await app.send(workspaceId, memberId, body.prompt);
           return json(res, 202, { item: result.item });
         } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
@@ -307,7 +307,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     }
     if (parts[3] === 'broadcast' && req.method === 'POST') {
       try {
-        const body = requireJsonObject(await readBody(req), '一時停止指定');
+        const body = requireJsonObject(await readBody(req), '一斉送信');
         const rawKey = body.idempotency_key ?? body.idempotencyKey ?? null;
         const key = rawKey == null || String(rawKey) === '' ? null : String(rawKey);
         if (key && !/^[A-Za-z0-9_-]{1,64}$/.test(key)) {
