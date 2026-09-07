@@ -276,7 +276,16 @@ async function request(url, options = {}) {
   if (token()) headers.Authorization = `Bearer ${token()}`;
   const apiBase = localStorage.getItem('mcc_api_base') || '';
   const requestUrl = /^https?:\/\//i.test(url) ? url : `${apiBase}${url}`;
-  const response = await fetch(requestUrl, { ...options, headers });
+  let response;
+  try {
+    response = await fetch(requestUrl, { ...options, headers });
+  } catch (error) {
+    recordClientDiagnostic(error, `request:${url}`);
+    const err = new Error('MultiContextに接続できません。アプリの状態を確認して、もう一度再試行してください。');
+    err.code = 'NETWORK_UNAVAILABLE';
+    err.cause = error;
+    throw err;
+  }
   if (response.status === 401) {
     $('#tokenDialog').showModal();
     throw new Error('Unauthorized');
