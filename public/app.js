@@ -1222,7 +1222,7 @@ function renderOrchestratorBar(data) {
     <strong>実行管理</strong> <span class="ob-sep">·</span> ${esc(barStateLabels[barState] || '状態確認中')}${followTag}
     <span class="ob-sep">·</span> 優先度 高 ${q0} <span class="ob-sep">|</span> 標準 ${q1} <span class="ob-sep">|</span> 低 ${q2}${memberQueued ? ` <span class="ob-sep">·</span> チャット待機 ${memberQueued}` : ''}
     <span class="ob-sep">·</span> ${curText}${elapsedLabel}${longRunningLabel}
-    <span class="ob-progress" title="回答済み ${answeredMembers} / ${liveMembers.length} チャット"><span class="ob-progress-track"><span style="width:${progress}%"></span></span><span>${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
+    <span class="ob-progress" title="現在のワークスペースで回答を保持しているチャット ${answeredMembers} / ${liveMembers.length}。過去の回答を含みます。" aria-label="回答あり ${answeredMembers} / ${liveMembers.length}${runningMembers ? `、実行中 ${runningMembers}` : ''}"><span class="ob-progress-track" aria-hidden="true"><span style="width:${progress}%"></span></span><span>回答あり ${answeredMembers}/${liveMembers.length}${runningMembers ? ` 実行中${runningMembers}` : ''}</span></span>
     <span style="flex:1"></span>
     ${hasMemberWork ? '<button class="sm danger" id="orchStopBtn" title="実行中または待機中のチャットを全て停止">全て停止</button>' : ''}
     <button class="sm" id="orchPauseBtn" ${canPause ? '' : 'disabled'} title="${esc(pauseTitle)}">${pauseLabel}</button>
