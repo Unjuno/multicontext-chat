@@ -230,6 +230,7 @@
         <div class="actions">
           <button class="primary" id="startBtn">保存して開始</button>
           <button id="saveBtn">保存</button>
+          <button id="backupDataBtn">バックアップを作成</button>
           <button id="dataDirBtn">データ保存場所を開く</button>
           <button id="closeBtn">閉じる</button>
         </div>
@@ -595,6 +596,19 @@
       document.getElementById("closeBtn").onclick = closeSettings;
       document.getElementById("saveBtn").onclick = () => saveAndMaybeStart(false);
       document.getElementById("startBtn").onclick = () => saveAndMaybeStart(true);
+      document.getElementById("backupDataBtn").onclick = async () => {
+        const button = document.getElementById("backupDataBtn");
+        button.disabled = true;
+        try {
+          const path = await invoke("backup_data");
+          document.getElementById("settingsErr").textContent = "バックアップを作成しました。設定変更前の復旧用スナップショットです。";
+          button.title = path;
+        } catch (err) {
+          document.getElementById("settingsErr").textContent = "バックアップを作成できませんでした: " + errorMessage(err);
+        } finally {
+          button.disabled = false;
+        }
+      };
       document.getElementById("dataDirBtn").onclick = async () => {
         try {
           await invoke("open_data_dir");

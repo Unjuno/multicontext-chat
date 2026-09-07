@@ -421,6 +421,20 @@ fn open_data_dir(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn backup_data(app: tauri::AppHandle) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let source = dir.join("state.json");
+    if !source.exists() {
+        return Err("保存済みの状態ファイルがまだありません".into());
+    }
+    let backup_dir = dir.join("backups");
+    std::fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
+    let destination = backup_dir.join(format!("state-{}.json", now_secs()));
+    std::fs::copy(&source, &destination).map_err(|e| e.to_string())?;
+    Ok(destination.to_string_lossy().into_owned())
+}
+
 fn resolve_node(state: &tauri::State<AppState>) -> Option<String> {
     let cfg = state.config.lock().unwrap().clone();
     cfg.node_path.or_else(runtime::find_node)
@@ -1377,6 +1391,7 @@ fn main() {
             get_logs,
             open_logs_dir,
             open_data_dir,
+            backup_data,
             validate_executable,
             pick_path,
             frontend_ready,
