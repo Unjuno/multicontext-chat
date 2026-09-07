@@ -297,6 +297,13 @@ export function createApplication({ config, store, client, scheduler } = {}) {
         throw problem(`Compile Agentが利用不可です: ${suppliedCompile}`, 400, AGENT_NOT_AVAILABLE);
       }
     }
+    // Normalize the public snake_case aliases before persistence. Validation
+    // alone is not enough: REST/MCP-created workspaces must retain the Agent
+    // choices shown immediately after creation in the GUI.
+    input = { ...input };
+    if (suppliedDefault) input.defaultAgentId = suppliedDefault;
+    if (suppliedCompile) input.compileAgentId = suppliedCompile;
+    if (input.system_prompt !== undefined && input.globalPrompt === undefined) input.globalPrompt = input.system_prompt;
     const workspace = store.createWorkspace(input);
     // Auto-resolve default only if exactly one agent
     if (!workspace.defaultAgentId) {
