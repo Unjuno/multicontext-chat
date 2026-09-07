@@ -141,3 +141,11 @@
 - 2チャットのBroadcastを実Agentへ送信したところ、30秒の観測時間を超えて一方のチャットが実行継続（途中で両方に回答8件、一方が`inFlight=true`）となった。自動停止は発生せず、処理側の後続完了後に一時ワークスペースは削除され、件数30件へ復帰した。収束しないコンテキスト抽出をユーザー停止まで許容する仕様と整合する。
 - 設定画面の詳細設定でポート`70000`を入力し保存を試行した。Tauriへ渡す前に画面側で`MultiContextポートは1〜65535の整数で指定してください。`を表示し、設定保存を拒否した。`invalid args`型エラーは発生しなかった。
 - 最新macOSバンドルで確認済みの状態バックアップに加え、起動設定も同じ`backups/`へ退避する実装へ更新した。新実装のGUI確認（状態・起動設定の両方が作成されること）はMacロック解除後に実施する。Keychain秘密情報はバックアップ対象外。
+# 2026-09-07 — Navier–Stokes knowledge-flywheel MCP experiment
+
+- Production MCP endpoint was exercised through the packaged macOS application.
+- Preset: `navier-stokes-4`; roles: PDE Analyst, Fluid Dynamics, Scaling Analyst, Reviewer.
+- Run `785216f6-b87d-4925-87dc-d501559a99ea` reached terminal state after short polling.
+- All 4 members reached `idle`, each produced 2 messages including an assistant answer, and every queue was empty.
+- The experiment does not constitute a solution of the Millennium Navier–Stokes problem; it validates independent persona analysis, parallel dispatch, and convergence reporting.
+- Temporary workspace `bc63ce00-d260-4a5d-a3a7-2e56b38b557f` was deleted through MCP with name confirmation (`CLEANUP=ok`).
