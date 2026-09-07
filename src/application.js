@@ -747,8 +747,10 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     try { store.appendEvent(workspaceId, { type: 'compile.started', origin: 'human', detail: { agentId } }); } catch {}
     try {
       const snapshots = Object.values(workspace.members).filter(m => m.active).map(m => ({ member: { id: m.id, name: m.name }, messages: m.messages.filter(x => !x.pending).slice(-12).map(({ role, content, at }) => ({ role, content, at })) }));
+      const snapshotAt = new Date().toISOString();
+      const snapshotMessageCount = snapshots.reduce((sum, snapshot) => sum + snapshot.messages.length, 0);
       const result = await client.runAgent({ agentId, globalPrompt: workspace.compilePrompt, developerPrompt: '', history: [], prompt: `Compress these independent chat records into a response for the user.\n\n${JSON.stringify(snapshots, null, 2)}`, metadata: { workspace_id: workspaceId, purpose: 'compile' } });
-      store.setCompile(workspaceId, { text: result.text, responseId: result.id, usage: result.usage });
+      store.setCompile(workspaceId, { text: result.text, responseId: result.id, usage: result.usage, snapshotAt, sourceMemberCount: snapshots.length, sourceMessageCount: snapshotMessageCount });
       try { store.appendEvent(workspaceId, { type: 'compile.completed', origin: 'system', detail: { agentId } }); } catch {}
       return getWorkspace(workspaceId);
     } catch (e) {
