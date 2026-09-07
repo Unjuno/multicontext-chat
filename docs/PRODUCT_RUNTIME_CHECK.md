@@ -155,3 +155,10 @@
 - A second production MCP run reached active inference, but the client timed out at its fixed 60-second request limit while calling the mechanical wait tool configured for 120 seconds.
 - This is an observation/API-client timeout, not evidence of a model or scheduler failure; the temporary `Navier-Stokes Compile Experiment` workspace was subsequently removed through MCP (`CLEANUP=ok`).
 - Compile-after-settlement remains covered by deterministic integration tests; a real-MCP Compile pass requires short polling rather than one long wait request.
+
+# 2026-09-07 — Long-running flywheel observation
+
+- A fresh production MCP run used the four Navier–Stokes personas with an adversarial prompt requesting known estimates, gaps, and falsification tests.
+- Short `get_state` polling observed member completion events, but after 18 polls (180 seconds) one queue item remained and no `run.settled` event was observed.
+- Compile was correctly not invoked because the workspace was not confirmed `SETTLED`; the temporary workspace was deleted through MCP (`CLEANUP=ok`).
+- This is an accepted long-running behavior under the current user-only Stop policy, and demonstrates why the UI must continue to expose progress and user Stop without MCP forcibly terminating inference.
