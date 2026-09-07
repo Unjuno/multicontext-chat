@@ -1217,7 +1217,7 @@ function renderOrchestratorBar(data) {
     : 0;
   const elapsedLabel = runningElapsed ? ` <span class="ob-elapsed" title="実行中チャットのうち最も長い経過時間">経過 ${runningElapsed}秒</span>` : '';
   const longRunningLabel = runningElapsed >= 30
-    ? ' <span class="ob-long-running" title="30秒以上実行中です。必要なら全て停止で中断できます">長時間実行中</span>'
+    ? ' <span class="ob-long-running" title="外部ツールの継続処理を含むため、30秒以上かかっています。自動停止はせず、必要な場合だけ全て停止で中断できます">長時間実行中</span>'
     : '';
   const memberQueued = liveMembers.reduce((sum, member) => sum + (member.queue?.length || 0), 0);
   const answeredMembers = liveMembers.filter(member => (member.messages || []).some(message => message.role === 'assistant')).length;
