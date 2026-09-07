@@ -11,6 +11,9 @@
 - [ ] Apple notarization and stapler validation.
 - [ ] Final GUI pass on the signed artifact.
 
+`npm run verify:signing` is the hard gate for the signed artifact. It rejects
+adhoc signatures and missing Team ID / Developer ID authority.
+
 ## Signed distribution procedure
 
 Run in the release environment after installing the Developer ID certificate and configuring notarization credentials. Do not commit credentials or tokens.
