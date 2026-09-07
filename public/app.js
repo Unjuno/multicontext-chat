@@ -1335,8 +1335,9 @@ async function refresh(expectedId = currentId) {
     app?.querySelectorAll('.warning-banner, .error-banner').forEach((banner) => banner.remove());
     lastWorkspace = workspace;
     document.title = `${workspace.name || 'ワークスペース'} — MultiContext`;
-    const members = Object.values(workspace.members);
-    const activeMembers = members.filter((m) => m.active !== false);
+  const members = Object.values(workspace.members);
+  const activeMembers = members.filter((m) => m.active !== false);
+    const setupMembers = activeMembers.filter((member) => !memberHasResolvedAgent(workspace, member));
     const blockedMembers = members.filter((m) => m.status === 'error');
     const firstBlockedMember = blockedMembers[0];
     const queuedMessages = members.reduce((sum, member) => sum + (member.queue?.length || 0), 0);
@@ -1413,6 +1414,7 @@ async function refresh(expectedId = currentId) {
 
       <div id="orchestratorBar" class="orchestrator-bar" style="display:none"></div>
       <dialog id="orchestratorDrawer" aria-labelledby="orchestratorDrawerTitle"><div class="orchestrator-drawer-head"><strong id="orchestratorDrawerTitle">実行管理の詳細</strong><button id="orchestratorClose" class="sm">閉じる</button></div><div id="orchestratorDrawerBody" class="orchestrator-drawer-body"><div class="small">実行状況を読み込んでいます…</div></div></dialog>
+      ${setupMembers.length ? `<aside class="setup-callout" role="status"><strong>送信前にセットアップ</strong><span>${setupMembers.length}件のチャットにAgentが設定されていません。設定を開いて選択すると、送信できるようになります。</span><button type="button" class="sm primary" data-action="open-first-setup">設定を始める</button></aside>` : ''}
       <div class="section-label">一斉送信 <span class="small" style="font-weight:400; text-transform:none; letter-spacing:0">${canBroadcast ? `全${activeMembers.length}件へ` : activeMembers.length ? 'Agent選択が必要です' : 'アクティブなチャットがありません'}</span></div>
       <div class="composer ${canBroadcast ? '' : 'disabled'}">
         <div style="flex:1; display:flex; flex-direction:column">
@@ -1811,6 +1813,17 @@ function wire(workspace) {
     else ids.forEach((id) => collapsedMembers.add(id));
     localStorage.setItem('mcc_collapsed_members', JSON.stringify([...collapsedMembers]));
     refreshPreservingDrafts(workspace.id).catch((err) => toast(err.message, 'error'));
+  });
+
+  $('[data-action=open-first-setup]')?.addEventListener('click', () => {
+    const target = Object.values(workspace.members || {}).find((member) => member.active !== false && !memberHasResolvedAgent(workspace, member));
+    if (!target) return;
+    openEditors.add(String(target.id));
+    refreshPreservingDrafts(workspace.id).then(() => {
+      const editor = document.querySelector(`.member[data-mid="${CSS.escape(String(target.id))}"] .member-editor`);
+      editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      editor?.querySelector('select[name="agentId"]')?.focus();
+    }).catch((err) => toast(err.message, 'error'));
   });
 
   $$('.member').forEach((card) => {
