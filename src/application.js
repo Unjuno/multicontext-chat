@@ -316,7 +316,10 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       if (single) store.updateWorkspace(workspace.id, { defaultAgentId: single });
     }
     // Create initial chats if requested
-    const count = Math.max(0, Math.min(Number(input.initial_chat_count || 0), 10));
+    // Accept the canonical snake_case field plus common REST/UI aliases so a
+    // successful create request cannot silently produce an empty workspace.
+    const requestedChatCount = input.initial_chat_count ?? input.initialChatCount ?? input.member_count ?? input.memberCount ?? 0;
+    const count = Math.max(0, Math.min(Number(requestedChatCount) || 0, 10));
     for (let i = 0; i < count; i++) {
       store.addMember(workspace.id, { name: `チャット ${i + 1}` });
     }
