@@ -77,6 +77,18 @@ export function registerOrchestratorTools(server, app, store) {
   const startRun = (args) => (useApp('startRun') || ((a) => engine.startRun(a)))(args);
   const cancelRun = (workspaceId, runId) => (useApp('cancelRun') || ((w, r) => engine.cancelRun(w, r)))(workspaceId, runId);
   const setPaused = (workspaceId, paused) => (useApp('setOrchestratorPaused') || ((w, p) => engine.setPaused(w, p)))(workspaceId, paused);
+  async function addPresetMembers(workspaceId, preset) {
+    let available = [];
+    try { available = await app.listAgents(); } catch {}
+    const agents = Array.isArray(available) ? available : [];
+    const members = [];
+    for (const [index, member] of preset.members.entries()) {
+      const agentId = agents.length ? String(agents[index % agents.length].id || '') : '';
+      const result = await app.addChat(workspaceId, { name: member.name, developerPrompt: member.developerPrompt, agentId });
+      members.push(result.member);
+    }
+    return members;
+  }
 
   server.registerTool('multicontext_orchestrate_create_session', {
     description: 'Create a workspace with preset personas and seed Q with initial tasks. Returns workspace and member ids. This is the entry point for orchestrated multi-agent sessions.',
@@ -85,10 +97,7 @@ export function registerOrchestratorTools(server, app, store) {
     const p = PRESETS[preset || 'navier-stokes-4'];
     const ws = await app.createWorkspace({ name: name || p.name, globalPrompt: globalPrompt || '' });
     const members = [];
-    for (const m of p.members) {
-      const r = await app.addChat(ws.id, { name: m.name, developerPrompt: m.developerPrompt });
-      members.push(r.member);
-    }
+    members.push(...await addPresetMembers(ws.id, p));
     if (hasStore) {
       store.enqueueOrchestrator(ws.id, p.seedPrompt, { priority: 0, origin: 'mcp', actor: 'orchestrator', target: { type: 'broadcast' } });
       store.appendEvent(ws.id, { type: 'mcp.session.created', origin: 'mcp', detail: { preset } });
@@ -171,7 +180,7 @@ export function registerOrchestratorTools(server, app, store) {
     if (!wsId) {
       const p = PRESETS[args.preset || 'navier-stokes-4'];
       const ws = await app.createWorkspace({ name: args.name || p.name });
-      for (const m of p.members) await app.addChat(ws.id, { name: m.name, developerPrompt: m.developerPrompt });
+      await addPresetMembers(ws.id, p);
       wsId = ws.id;
     }
     if (!hasStore) {
