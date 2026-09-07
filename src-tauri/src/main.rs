@@ -74,6 +74,13 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+fn now_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
 /// Ownership rule: a service we started stays ours even if a later health
 /// probe succeeds; an already-running service we did not start is External.
 pub fn ownership_from(started: bool, healthy: bool) -> Option<Ownership> {
@@ -430,7 +437,7 @@ fn backup_data(app: tauri::AppHandle) -> Result<String, String> {
     }
     let backup_dir = dir.join("backups");
     std::fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
-    let timestamp = now_secs();
+    let timestamp = now_millis();
     let destination = backup_dir.join(format!("state-{}.json", timestamp));
     std::fs::copy(&source, &destination).map_err(|e| e.to_string())?;
     let config_source = config_path(&app);
