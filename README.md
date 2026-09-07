@@ -72,6 +72,7 @@ LibreChat and your model backend for you.
 npm run desktop:dev   # Tauri dev
 npm run desktop:build # production MultiContext.app
 npm run verify:bundle # bundled server + MCP smoke verification
+npm run verify:desktop # packaged UI/resource freshness verification
 open src-tauri/target/release/bundle/macos/MultiContext.app
 ```
 

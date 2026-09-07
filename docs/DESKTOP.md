@@ -141,6 +141,7 @@ Polling: `runtime_status` Tauri command every ~10s (non-overlapping, abort stale
 npm run desktop:check  # cargo check
 npm run verify:bundle  # bundled server and MCP smoke verification
 npm run desktop:build  # tauri build
+npm run verify:desktop # packaged UI/resource freshness verification
 ```
 
 Artifact:
