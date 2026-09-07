@@ -14,6 +14,8 @@ export function isLoopback(host) {
 }
 
 export const config = {
+  backend: process.env.MULTICONTEXT_BACKEND || 'librechat',
+  localModelUrl: process.env.MULTICONTEXT_LOCAL_MODEL_URL || 'http://127.0.0.1:8080',
   host: process.env.MULTICONTEXT_HOST || '127.0.0.1',
   port: int(process.env.MULTICONTEXT_PORT, 4317),
   dataFile: path.resolve(process.env.MULTICONTEXT_DATA_FILE || './data/state.json'),
@@ -31,6 +33,7 @@ export const config = {
   mcpEnabled: process.env.MULTICONTEXT_MCP_ENABLED !== 'false',
   mcpHost: process.env.MULTICONTEXT_MCP_HOST || process.env.MULTICONTEXT_HOST || '127.0.0.1',
 };
+if (!['local', 'librechat'].includes(config.backend)) throw new Error('MULTICONTEXT_BACKEND must be local or librechat');
 
 export function validateMcpConfig(cfg = config) {
   if (!cfg.mcpEnabled) return;

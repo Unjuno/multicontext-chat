@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { config as defaultConfig } from './config.js';
 import { StateStore, searchMemberMessages, publicMember } from './store.js';
 import { LibreChatClient } from './librechat.js';
+import { LocalModelClient } from './local-model.js';
 import { Scheduler } from './scheduler.js';
 import { buildActionSpec } from './openapi.js';
 import { createApplication } from './application.js';
@@ -28,7 +29,9 @@ const requireJsonObject = (body, label) => {
 
 export function createApp({ config = defaultConfig, store, client, scheduler, publicDir = defaultPublicDir } = {}) {
   store ??= new StateStore(config.dataFile);
-  client ??= new LibreChatClient({ baseUrl: config.librechatBaseUrl, apiKey: config.librechatApiKey, mode: config.librechatMode, timeoutMs: config.agentTimeoutMs });
+  client ??= config.backend === 'local'
+    ? new LocalModelClient({ baseUrl: config.localModelUrl, directory: `${config.dataFile}.local-conversations`, timeoutMs: config.agentTimeoutMs })
+    : new LibreChatClient({ baseUrl: config.librechatBaseUrl, apiKey: config.librechatApiKey, mode: config.librechatMode, timeoutMs: config.agentTimeoutMs });
   scheduler ??= new Scheduler({ store, client, maxHistoryMessages: config.maxHistoryMessages, maxConcurrentRequests: config.maxConcurrentRequests });
 
   const app = createApplication({ config, store, client, scheduler });

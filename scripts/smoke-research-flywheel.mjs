@@ -8,6 +8,7 @@ import { StateStore } from '../src/store.js';
 import { Scheduler } from '../src/scheduler.js';
 import { createApplication } from '../src/application.js';
 import { LibreChatClient } from '../src/librechat.js';
+import { LocalModelClient } from '../src/local-model.js';
 
 const agentId = process.argv[2];
 if (!agentId) throw new Error('Specify a configured native LibreChat Agent ID');
@@ -15,7 +16,10 @@ const calculatorProbe = process.argv.includes('--calculator');
 const directory = path.resolve('data/experiments', `research-flywheel-${Date.now()}`);
 fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 const store = new StateStore(path.join(directory, 'state.json'));
-const client = new LibreChatClient({ baseUrl: config.librechatBaseUrl, apiKey: config.librechatApiKey, mode: 'native' });
+const client = config.backend === 'local'
+  ? new LocalModelClient({ baseUrl: config.localModelUrl, directory: path.join(directory, 'conversations') })
+  : new LibreChatClient({ baseUrl: config.librechatBaseUrl, apiKey: config.librechatApiKey, mode: 'native' });
+if (calculatorProbe && config.backend === 'local') throw new Error('--calculator tests LibreChat provider ownership, not the local backend');
 const trace = [];
 for (const method of ['runAgent', 'continueAgent']) {
   const original = client[method].bind(client);
