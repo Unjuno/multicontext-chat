@@ -6,7 +6,7 @@ import path from 'node:path';
 import { StateStore } from '../src/store.js';
 import { Scheduler } from '../src/scheduler.js';
 import { LibreChatClient } from '../src/librechat.js';
-import { CROSS_CHAT_TOOLS } from '../src/cross-chat-tools.js';
+import { CROSS_CHAT_TOOLS, EXTERNAL_TOOLS } from '../src/cross-chat-tools.js';
 import { CrossChatToolExecutor } from '../src/cross-chat-executor.js';
 import { createApplication } from '../src/application.js';
 import { buildActionSpec } from '../src/openapi.js';
@@ -236,7 +236,7 @@ test('Phase6 native initial contains system/developer/user/tools, continuation r
   assert.ok(b0.input.some(i => i.role === 'system' && i.content === 'SYS'));
   assert.ok(b0.input.some(i => i.role === 'developer' && i.content === 'DEV'));
   assert.ok(b0.input.some(i => i.role === 'user' && i.content === 'new'));
-  assert.deepEqual(b0.tools, CROSS_CHAT_TOOLS);
+  assert.deepEqual(b0.tools, EXTERNAL_TOOLS);
   assert.equal(b0.parallel_tool_calls, false);
   assert.equal(b0.previous_response_id, 'conv0');
   bodies.length = 0;
@@ -254,7 +254,7 @@ test('Phase6 native initial contains system/developer/user/tools, continuation r
   assert.ok(!b1.input.some(i => i.role === 'user'));
   // Tools are bound on every native turn so the provider can ground tool
   // outputs; history itself is never replayed.
-  assert.deepEqual(b1.tools, CROSS_CHAT_TOOLS);
+  assert.deepEqual(b1.tools, EXTERNAL_TOOLS);
   assert.equal(b1.tool_choice, 'auto');
   assert.equal(b1.parallel_tool_calls, false);
 });

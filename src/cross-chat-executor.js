@@ -1,4 +1,5 @@
-import { CROSS_CHAT_TOOLS } from './cross-chat-tools.js';
+import { CROSS_CHAT_TOOLS, EXTERNAL_TOOLS } from './cross-chat-tools.js';
+import { researchSearch } from './research-search.js';
 
 export function extractToolCalls(raw) {
   if (!raw || !raw.output) return [];
@@ -7,7 +8,7 @@ export function extractToolCalls(raw) {
 
 export function isCrossChatToolCall(call) {
   const name = call?.name || call?.function?.name || '';
-  return CROSS_CHAT_TOOLS.some((tool) => tool?.function?.name === name);
+  return EXTERNAL_TOOLS.some((tool) => tool?.function?.name === name);
 }
 
 // Preserve existing result positions; fill only externally executed calls.
@@ -60,7 +61,7 @@ export class StructuredToolError extends Error {
 }
 
 export class CrossChatToolExecutor {
-  constructor({ app }) { this.app = app; }
+  constructor({ app, search = researchSearch }) { this.app = app; this.search = search; }
 
   async execute({ workspaceId, sourceMemberId, sourceQueueItemId, sourceOrchestratorRunId = null, sourceOrchestratorQId = null, toolCalls, signal } = {}) {
     if (signal?.aborted) throw new StructuredToolError('ABORTED', 'Aborted before tool execution');
@@ -82,7 +83,10 @@ export class CrossChatToolExecutor {
         throw e;
       }
       try {
-        if (name === 'list_chats') {
+        if (name === 'search_sources') {
+          const result = await this.search.search(parsed, { signal });
+          results.push({ call_id: callId, output: JSON.stringify(result) });
+        } else if (name === 'list_chats') {
           const chats = await this.app.listPeerChats(workspaceId, sourceMemberId);
           results.push({ call_id: callId, output: JSON.stringify({ chats }) });
         } else if (name === 'inspect_chat') {

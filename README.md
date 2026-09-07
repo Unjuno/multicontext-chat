@@ -31,6 +31,9 @@ Designed for gpt-oss when exact role separation and LibreChat-owned conversation
 node scripts/patch-librechat.mjs /path/to/LibreChat
 ```
 
+Native mode also includes keyless Web and scholarly source search. See
+[built-in search](docs/BUILTIN_SEARCH.md) for privacy, availability and validation.
+
 Rebuild LibreChat, then set:
 
 ```env

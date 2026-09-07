@@ -1,10 +1,11 @@
-import { CROSS_CHAT_TOOLS } from './cross-chat-tools.js';
+import { CROSS_CHAT_TOOLS, EXTERNAL_TOOLS } from './cross-chat-tools.js';
 
 export const REMOTE_AGENTS_MODELS_PATH = "/api/agents/v1/responses/models";
 
 export class LibreChatClient {
-  constructor({ baseUrl, apiKey, mode = 'compat', timeoutMs = 900000, fetchImpl = fetch }) {
+  constructor({ baseUrl, apiKey, mode = 'compat', timeoutMs = 900000, fetchImpl = fetch, searchEnabled = process.env.MULTICONTEXT_SEARCH_ENABLED !== 'false' }) {
     this.baseUrl = baseUrl.replace(/\/$/, ''); this.apiKey = apiKey; this.mode = mode; this.timeoutMs = timeoutMs; this.fetchImpl = fetchImpl;
+    this.tools = searchEnabled ? EXTERNAL_TOOLS : CROSS_CHAT_TOOLS;
   }
   headers() { return { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' }; }
   assertConfigured() { if (!this.apiKey) throw new Error('LIBRECHAT_API_KEY is not configured'); }
@@ -44,7 +45,7 @@ export class LibreChatClient {
       const body = { model: agentId, input, stream: false, store: this.mode === 'native', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       if (this.mode === 'native' && conversationId) body.previous_response_id = conversationId;
       if (this.mode === 'native') {
-        body.tools = CROSS_CHAT_TOOLS;
+        body.tools = this.tools;
         body.tool_choice = 'auto';
         // Serialize tool turns so provider-owned and MultiContext-owned tools
         // cannot form a mixed batch with dangling outputs.
@@ -89,7 +90,7 @@ export class LibreChatClient {
       // without bound definitions the provider cannot ground prior tool
       // outputs and gpt-oss re-calls or goes empty. History is still never
       // replayed (previous_response_id owns it).
-      const body = { model: agentId, input, stream: false, store: this.mode === 'native', previous_response_id: conversationId, tools: CROSS_CHAT_TOOLS, tool_choice: 'auto', parallel_tool_calls: false, metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
+      const body = { model: agentId, input, stream: false, store: this.mode === 'native', previous_response_id: conversationId, tools: this.tools, tool_choice: 'auto', parallel_tool_calls: false, metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);

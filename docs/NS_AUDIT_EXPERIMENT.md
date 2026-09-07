@@ -238,3 +238,40 @@ opening it. `npm run verify:desktop` also passed after extending its checksum
 checks to activity-feed.js and dist/server.bundle.mjs, covering the observer
 and scheduler artifacts changed in this audit. Signing/notarization and a
 direct GUI pass are not established by these build results.
+
+## Built-in keyless source discovery (2026-09-08)
+
+At the user's request, search is now a standard MultiContext-owned native
+tool (`search_sources`), without additional packages, API keys or a separate
+service. General web discovery uses DuckDuckGo HTML; scholarly discovery uses
+Crossref's public API. This removes the dependency on configuring a provider
+search tool on each LibreChat Agent. Query egress, limits, disable switch and
+failure semantics are documented in BUILTIN_SEARCH.md and GUI help.
+
+Direct real-network checks returned Navier–Stokes results from both sources.
+Two real ChatA native model probes each emitted one search_sources call,
+received actual Crossref output and completed. The second also asserts that
+the final answer contains a DOI from the retrieved results:
+
+- Conversation `e46a20f1-d1cc-4cdd-a6e8-5e4acb5cc692`, evidence directory
+  `/var/folders/pz/8_nc5kp109z8f36jl0172xzw0000gn/T/multicontext-search-smoke-Ig6WFn`.
+- Conversation `7967bf16-a544-4874-aeeb-3c9a63b7bdd9`, evidence directory
+  `/var/folders/pz/8_nc5kp109z8f36jl0172xzw0000gn/T/multicontext-search-smoke-zaSCEG`.
+
+Both retrieved DOI `10.1142/9789814623414_0006`, title
+"Local Regularity Theory for Non-Stationary Navier-Stokes Equations".
+Evidence JSON records requests/responses and actual tool results, not just
+model assertions. The first model response invented an author not present in
+the returned metadata. Author fields were then added to search results; the
+second response avoided a specific author name but still asserted review/
+peer-review properties unsupported by the retrieved metadata. Thus actual
+retrieval/DOI citation passes; research correctness does not. No theorem has
+been established and no full text was fetched. Temporary raw evidence should
+be archived before OS cleanup; these observations are retained in git.
+
+`npm run check`: 298 total, 295 passed, 0 failed, 3 skipped.
+`npm run verify:bundle`: passed. Tests cover disabled mode, validation,
+fixed-host requests, caching, CAPTCHA/format failure, size limits, provenance
+and external executor call IDs. The live probes use the existing LibreChat
+with request-owned search; they do not establish provider-owned mixed-batch
+correctness, the new desktop GUI path, or deployment of the pending host patch.
