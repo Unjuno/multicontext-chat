@@ -238,6 +238,9 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') {
       try {
         const body = await readBody(req);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+          throw Object.assign(new Error('チャット追加の入力はJSONオブジェクトで指定してください'), { status: 400, code: 'INVALID_REQUEST_BODY' });
+        }
         const result = await app.addChat(workspaceId, body);
         result.workspace = enrichView(result.workspace, req);
         if (result.member) {
