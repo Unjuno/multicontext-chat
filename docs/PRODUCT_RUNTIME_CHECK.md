@@ -115,3 +115,4 @@
 - Compile結果を最大5件保持し、最新結果と過去結果をUIで選択できるようにした。選択した結果は同じ画面からコピー／Markdown保存できる。既存の `lastCompile` を維持し、履歴未保持の旧データは起動時に自動移行する。`node --check public/app.js`、サーバーバンドル生成、`git diff --check` を確認済み。
 - 最新バンドルのMultiContext実機画面で、AIスタック準備完了、ワークスペース検索・状態フィルタ・並び順、Agent選択ルール、ワークスペース概要、Compileの手動実行導線、待機時の停止ボタン無効をAXツリーから確認した。実行中でない既存データに対する破壊的変更は発生していない。
 - Compile履歴追加後にmacOS本番バンドルを再生成してアプリを再起動した。`/api/health` が `ok:true`、LibreChat接続済み・Agent 2件、ワークスペース30件を返し、RESTのワークスペース応答に `compileHistory` フィールドが含まれることを確認した。古い稼働バンドルとの差異による反映漏れを解消した。
+- 稼働中APIの全30ワークスペースを確認し、Compile履歴を持つワークスペース2件（`RealE2E`、`DesktopApp E2E`）で `compileHistory.length === 1` と `lastCompile` の存在が一致した。履歴のないワークスペースも壊れずに取得できた。
