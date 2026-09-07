@@ -149,3 +149,9 @@
 - All 4 members reached `idle`, each produced 2 messages including an assistant answer, and every queue was empty.
 - The experiment does not constitute a solution of the Millennium Navier–Stokes problem; it validates independent persona analysis, parallel dispatch, and convergence reporting.
 - Temporary workspace `bc63ce00-d260-4a5d-a3a7-2e56b38b557f` was deleted through MCP with name confirmation (`CLEANUP=ok`).
+
+# 2026-09-07 — Compile follow-up observation
+
+- A second production MCP run reached active inference, but the client timed out at its fixed 60-second request limit while calling the mechanical wait tool configured for 120 seconds.
+- This is an observation/API-client timeout, not evidence of a model or scheduler failure; the temporary `Navier-Stokes Compile Experiment` workspace was subsequently removed through MCP (`CLEANUP=ok`).
+- Compile-after-settlement remains covered by deterministic integration tests; a real-MCP Compile pass requires short polling rather than one long wait request.
