@@ -9,6 +9,13 @@ tool execution. Compat mode does not provide this native tool.
 - `source: "papers"`: Crossref scholarly metadata with DOI, title, authors,
   publication and year where supplied. This is not full text.
 
+With `source: "papers"`, a bare DOI, `DOI: ...`, or `https://doi.org/...`
+query automatically uses Crossref's exact `/works/{doi}` lookup. The response
+reports `queryMode: "exact_doi"`, `requestedDoi`, and `lookupStatus` (`found`
+or `not_found_in_crossref`). A 404 means absence from this registry only,
+not nonexistence of the work. A server/network failure is a tool error, not
+a negative bibliographic finding. No DOI resolver or publisher page is visited.
+
 Example: `{"query":"Navier Stokes regularity","source":"papers","limit":3}`.
 Ask one member to discover sources and another to check whether each claim is
 supported by the returned evidence. Send exact URLs/DOIs and uncertainty with

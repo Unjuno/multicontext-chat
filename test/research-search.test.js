@@ -1,6 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ResearchSearch, parseWebResults } from '../src/research-search.js';
+import { ResearchSearch, parseWebResults, exactDoi } from '../src/research-search.js';
+
+test('DOI inputs use exact fixed-host lookup rather than bibliographic search', async () => {
+  assert.equal(exactDoi('DOI: 10.1234/ABC'), '10.1234/abc');
+  assert.equal(exactDoi('https://doi.org/10.1234%2FABC'), '10.1234/abc');
+  assert.equal(exactDoi('Navier Stokes regularity'), null);
+  const search = new ResearchSearch({ intervalMs: 0, fetchImpl: async url => {
+    assert.equal(url.href, 'https://api.crossref.org/works/10.1234%2Fabc');
+    return Response.json({ message: { DOI: '10.1234/ABC', title: ['Actual record'] } });
+  } });
+  const result = await search.search({ source: 'papers', query: 'https://doi.org/10.1234/ABC' });
+  assert.equal(result.queryMode, 'exact_doi');
+  assert.equal(result.lookupStatus, 'found');
+  assert.equal(result.results[0].title, 'Actual record');
+  assert.equal(result.fullTextFetched, false);
+});
+
+test('exact DOI absence is scoped to Crossref, while mismatches and server failures are errors', async () => {
+  const query = { source: 'papers', query: '10.1234/missing' };
+  const missing = await new ResearchSearch({ intervalMs: 0, fetchImpl: async () => new Response('', { status: 404 }) }).search(query);
+  assert.equal(missing.lookupStatus, 'not_found_in_crossref');
+  assert.deepEqual(missing.results, []);
+  assert.match(missing.warning, /not proof/);
+  for (const [response, code] of [
+    [new Response('', { status: 500 }), 'SEARCH_UNAVAILABLE'],
+    [Response.json({ message: { DOI: '10.1234/unrelated' } }), 'SEARCH_INVALID_RESPONSE'],
+  ]) {
+    await assert.rejects(new ResearchSearch({ intervalMs: 0, fetchImpl: async () => response }).search(query), { code });
+  }
+});
 import { CrossChatToolExecutor, isCrossChatToolCall } from '../src/cross-chat-executor.js';
 import { LibreChatClient } from '../src/librechat.js';
 

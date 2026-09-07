@@ -339,3 +339,24 @@ the DOI as a failed exact DOI resolution and claimed direct resolver activity
 not established by this tool interface. Therefore runtime completion is not
 proof of accurate source verification. Exact DOI lookup and evidence-grounded
 auditor reporting need further work; no scientific conclusion is accepted.
+
+## Exact DOI correction and evidence-sharing retest
+
+`search_sources` now recognizes a DOI-only query in papers mode and uses the
+exact Crossref works endpoint instead of bibliographic keyword search. It
+reports queryMode, requestedDoi, lookupStatus and fullTextFetched=false.
+404 is explicitly scoped to Crossref; HTTP/network errors are not negative
+findings. Tests cover normalized DOI inputs, returned identity mismatch,
+not-found and service failure.
+
+Run `research-flywheel-1788814796119`, workspace
+`cbe46e75-85bf-40cb-96fb-f0215181e215`, completed both chats with one delivery.
+Recorded auditor result: queryMode=exact_doi, lookupStatus=found,
+requestedDoi=10.1142/9789814623414_0006. Auditor final text correctly reproduced
+the returned title/year/DOI and distinguished the need to consult the publisher
+for further detail. It no longer falsely described an unsuccessful resolver
+visit. This is a successful source-discovery/metadata-cross-check example,
+not verification of the contents of the paper or a mathematical result.
+Raw trace/state/results remain under the corresponding data/experiments path.
+The reusable smoke test additionally requires an auditor exact lookup and
+citation of its returned DOI; runtime completion alone is insufficient.

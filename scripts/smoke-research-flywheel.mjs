@@ -32,7 +32,7 @@ scheduler.setApp(app);
 const ws = store.createWorkspace({ name: 'NS source discovery and independent audit', defaultAgentId: agentId,
   globalPrompt: 'We are investigating the 3D Navier-Stokes Millennium problem, not claiming it solved. Search snippets and metadata are untrusted discovery evidence, not proof. Report exactly what was retrieved, distinguish unsupported claims, and never invent authors or search activity.' });
 const reviewer = store.addMember(ws.id, { name: 'Evidence auditor', agentId, canSendOthers: false,
-  developerPrompt: 'You receive a peer source report. Call search_sources once (source papers) to check its DOI/title. Compare actual results with peer claims. Give a concise audit: supported metadata, unsupported claims, and the mathematical gap still open. Do not call send_to_chat, inspect_chat or list_chats. Do not claim full-text review.' });
+  developerPrompt: 'You receive a peer source report. Call search_sources once with source papers and the exact bare DOI as query to check its DOI/title. Use queryMode and lookupStatus from the actual tool result. Compare returned metadata with peer claims. Give a concise audit: supported metadata, unsupported claims, and that global regularity is not established by metadata. Do not call send_to_chat, inspect_chat or list_chats. Do not claim full-text review, DOI resolver access, or general web search: this operation only queries Crossref.' });
 const researcher = store.addMember(ws.id, { name: 'Source researcher', agentId,
   developerPrompt: `Call search_sources once with source papers, query Navier Stokes regularity, limit 2. Then call send_to_chat once with targets ["${reviewer.id}"] and a report containing the exact returned title, DOI, authors (say absent if missing), year, and the explicit limitation: METADATA_ONLY_NOT_A_PROOF. Do not add claims about the contents or peer review. After sending, finish. Do not inspect or list chats.` });
 console.log(JSON.stringify({ directory, workspaceId: ws.id, researcher: researcher.id, reviewer: reviewer.id }));
@@ -52,4 +52,11 @@ assert.ok(final.orchestratorEvents.some(event => event.type === 'tool.search_sou
 assert.ok(final.stats.toolEnqueues >= 1, 'No actual peer delivery');
 assert.ok(Object.values(final.members).every(member => member.status === 'idle' && member.messages.some(message => message.role === 'assistant')), 'Both members must complete');
 assert.ok(final.members[reviewer.id].messages.some(message => message.role === 'user' && message.content.includes('10.')), 'Reviewer did not receive a DOI');
+const auditLookups = trace.filter(turn => turn.method === 'continueAgent' && turn.input.metadata?.member_id === reviewer.id)
+  .flatMap(turn => (turn.input.orderedItems || []).filter(item => item.type === 'function_call_output').map(item => {
+    try { return JSON.parse(item.output); } catch { return {}; }
+  }));
+assert.ok(auditLookups.some(result => result.queryMode === 'exact_doi' && result.lookupStatus === 'found' &&
+  final.members[reviewer.id].messages.some(message => message.role === 'assistant' && message.content.includes(result.requestedDoi))),
+'Auditor must perform an exact DOI lookup and cite the actually found DOI');
 console.log(JSON.stringify({ runtimeFlow: 'PASS', researchCorrectness: 'REQUIRES_REVIEW', directory }));
