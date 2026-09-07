@@ -2131,7 +2131,7 @@ $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
     return;
   }
   try {
-    const initialChatCount = Math.max(1, Math.min(4, Number($('#newWorkspaceChatCount')?.value || 2)));
+    const initialChatCount = Math.max(1, Math.min(8, Number($('#newWorkspaceChatCount')?.value || 2)));
     await createWorkspaceFromDialog(name.value, button, initialChatCount);
     const dialog = $('#newWorkspaceDialog');
     if (dialog?.close) dialog.close(); else dialog?.removeAttribute('open');
