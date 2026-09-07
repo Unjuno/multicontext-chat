@@ -76,6 +76,7 @@ surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op)
 | pause dispatch | `POST …/orchestrator/pause` | `multicontext_orchestrate_set_paused` | `app.setOrchestratorPaused` → engine | = | = | = | VERIFIED | opposite-surface resume tested |
 | resume dispatch | `POST …/orchestrator/pause` (`paused:false`) | `multicontext_orchestrate_set_paused` (`paused:false`) | engine `resumeQueuedRun` (oldest queued) | = | = | = | VERIFIED | |
 | cancel run | — | `multicontext_orchestrate_cancel_run` | `app.cancelRun` → engine | = | = | = | VERIFIED | works on running, queued, **blocked**, **failed**; run-scoped; unrelated human work preserved |
+
 | read workspace | `GET /api/workspaces/:id` | `multicontext_get_workspace` | `app.getWorkspace` | = | n/a | = | VERIFIED | mid-flight provenance item identical on both reads |
 | read run / orchestrator state | `GET …/orchestrator` | `multicontext_orchestrate_get_run`, `…_get_state` | `store.getOrchestratorRun / getOrchestratorState` | = | n/a | = | PARTIAL | direct store reads; envelopes differ |
 | inspect chat | `POST /tools/:ws/:member/inspect-chat` | `multicontext_inspect_peer_chat` | `app.inspectPeerChat` | = | = | n/a | VERIFIED | incl. former ReferenceError regression |
@@ -135,3 +136,12 @@ Implementation notes:
 - `store.js` transition table: `blocked: ['cancelled']`, `failed: ['cancelled']` (were `[]`); terminal immutability exception for `cancelled` from blocked/failed
 - `orchestrator-engine.js`: `cancelRun` guard changed from `!(running||queued)` to `!['running','queued','blocked','failed'].includes(status)`; TOCTOU fixed via store atomic transition validation; `dispatchRun` race fixed by re-checking status before dispatching
 - Total: **268** Node tests (+4), 46 Rust tests, bundle verified
+
+### Stop capability boundary
+
+Stop uses the same canonical application operation and state-transition
+semantics, but its surface availability is intentionally different: only the
+user-facing GUI may invoke it. MCP is an orchestration/context-extraction
+surface and cannot cancel user work. This is a product safety invariant, not
+an unimplemented parity operation; the skipped Stop parity test documents this
+capability boundary explicitly.

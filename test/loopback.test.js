@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isLoopback, validateMcpConfig } from '../src/config.js';
+import { isLoopback, validateMcpConfig, validateHttpAuthConfig } from '../src/config.js';
 
 test('isLoopback detects loopback', () => {
   assert.equal(isLoopback('127.0.0.1'), true);
@@ -52,4 +52,10 @@ test('mcpHost separate loopback check', () => {
   assert.throws(() => validateMcpConfig({ host: '127.0.0.1', mcpHost: '0.0.0.0', mcpEnabled: true, mcpToken: '' }), (e) => e.message.includes('MULTICONTEXT_MCP_TOKEN'));
   // host non-loopback but mcpHost loopback with no token? Should still fail because host is non-loopback
   assert.throws(() => validateMcpConfig({ host: '0.0.0.0', mcpHost: '127.0.0.1', mcpEnabled: true, mcpToken: '' }), (e) => e.message.includes('MULTICONTEXT_MCP_TOKEN'));
+});
+
+test('non-loopback HTTP bind requires an app token', () => {
+  assert.throws(() => validateHttpAuthConfig({ host: '0.0.0.0', mcpHost: '0.0.0.0', appToken: '' }), /MULTICONTEXT_APP_TOKEN/);
+  assert.doesNotThrow(() => validateHttpAuthConfig({ host: '0.0.0.0', mcpHost: '0.0.0.0', appToken: 'app-token' }));
+  assert.doesNotThrow(() => validateHttpAuthConfig({ host: '127.0.0.1', mcpHost: '127.0.0.1', appToken: '' }));
 });

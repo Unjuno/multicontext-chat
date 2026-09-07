@@ -38,7 +38,13 @@ export function validateMcpConfig(cfg = config) {
     throw new Error('MCP enabled with non-loopback bind requires MULTICONTEXT_MCP_TOKEN (unsafe to expose unauthenticated MCP). Set a token or bind to 127.0.0.1/localhost/::1 or set MULTICONTEXT_MCP_ENABLED=false');
   }
 }
+
+export function validateHttpAuthConfig(cfg = config) {
+  if ((isLoopback(cfg.host) && isLoopback(cfg.mcpHost)) || cfg.appToken) return;
+  throw new Error('Non-loopback bind requires MULTICONTEXT_APP_TOKEN (unsafe to expose REST without authentication). Set a token or bind to 127.0.0.1/localhost/::1');
+}
 validateMcpConfig();
+validateHttpAuthConfig();
 
 if (!config.publicUrl) {
   console.warn('[multicontext] MULTICONTEXT_PUBLIC_URL not set — Action/OpenAPI origins will be derived from request headers (safe for local dev, not for public deployment)');

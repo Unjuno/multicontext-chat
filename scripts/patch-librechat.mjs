@@ -80,7 +80,13 @@ function save(rel, text, didChange) {
 
   const externalHelpers = `const db = require('~/models');\n\n/**\n * MultiContext extension: request-level cross-chat tools use deferred/external\n * execution. They are exposed to the provider so the model can emit\n * function_call items, but they must never run inside LibreChat: the caller\n * (MultiContext) executes them and continues via function_call_output +\n * previous_response_id. Applies ONLY to request-level cross-chat tools; normal\n * LibreChat-owned tools keep their stock execution path.\n */\nclass ExternalCrossChatToolCall extends Error {\n  constructor(toolNames) {\n    super(\`External cross-chat tool call deferred to caller: \${(toolNames || []).join(',')}\`);\n    this.name = 'ExternalCrossChatToolCall';\n    this.code = 'EXTERNAL_TOOL_DEFERRED';\n    this.toolNames = Array.isArray(toolNames) ? toolNames : [];\n  }\n}\n\nfunction crossChatToolNames(req) {\n  const tools = req?._crossChatTools;\n  if (!Array.isArray(tools)) return new Set();\n  return new Set(tools.map((t) => t?.function?.name).filter(Boolean));\n}\n\nfunction throwIfExternalCrossChatTools(req, toolNames) {\n  const cross = crossChatToolNames(req);\n  if (cross.size === 0 || !Array.isArray(toolNames) || toolNames.length === 0) return;\n  if (toolNames.every((name) => cross.has(name))) throw new ExternalCrossChatToolCall(toolNames);\n}`;
   if (!text.includes('class ExternalCrossChatToolCall extends Error')) {
-    const out = replaceRequired(text, "const db = require('~/models');", externalHelpers, `${rel}: external tool helpers`);
+    // Defer mixed batches too: a provider-owned tool may be paired with a
+    // MultiContext-owned call, which must never run inside LibreChat.
+    const patchedExternalHelpers = externalHelpers.replace(
+      'toolNames.every((name) => cross.has(name))',
+      'toolNames.some((name) => cross.has(name))',
+    );
+    const out = replaceRequired(text, "const db = require('~/models');", patchedExternalHelpers, `${rel}: external tool helpers`);
     text = out.text;
     dirty ||= out.changed;
   }

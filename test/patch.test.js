@@ -96,6 +96,8 @@ test('LibreChat patch is idempotent and preserves developer + conversation conti
   assert.match(controllerText, /primaryConfig\.toolDefinitions/);
   assert.match(controllerText, /class ExternalCrossChatToolCall/);
   assert.match(controllerText, /EXTERNAL_TOOL_DEFERRED/);
+  assert.match(controllerText, /toolNames\.some\(\(name\) => cross\.has\(name\)\)/);
+  assert.doesNotMatch(controllerText, /toolNames\.every\(\(name\) => cross\.has\(name\)\)/);
   assert.match(controllerText, /AIMessage/);
   assert.match(controllerText, /isToolRoundTripMessage/);
 

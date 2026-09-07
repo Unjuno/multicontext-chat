@@ -241,6 +241,7 @@ Resources via `multicontext://workspaces` etc are not required; tools are primar
 
 - Loopback by default, `Host`/`Origin` validation via `@modelcontextprotocol/node` guards.
 - **Non-loopback invariant:** MCP shares the main Node listener (`http://127.0.0.1:<port>/mcp`, `mcpHost` does not create a separate listener). Startup enforces: if MCP is enabled and either `MULTICONTEXT_HOST` or `MULTICONTEXT_MCP_HOST` is non-loopback (`0.0.0.0`, `::`, `192.168.x.x` ...), a non-empty `MULTICONTEXT_MCP_TOKEN` is required — otherwise `validateMcpConfig()` fails fast with an actionable error (`MCP enabled with non-loopback bind requires MULTICONTEXT_MCP_TOKEN`). Loopback binds (`127.0.0.1`, `localhost`, `::1`, `::ffff:127.0.0.1`) with no token remain allowed for local development. MCP disabled bypasses the check.
+- **REST auth invariant:** any non-loopback bind also requires a non-empty `MULTICONTEXT_APP_TOKEN`; otherwise startup fails fast instead of leaving `/api/*` unauthenticated. Loopback-only desktop development may omit it.
 - MCP token is distinct, stored in Keychain, never returned from `runtime_status`, `/api/mcp/status`, or logs. `GET /api/mcp/token` would be 404; `get_opencode_config` returns token only for explicit clipboard copy.
 - LibreChat key, provider credentials, `conversationId`/`current`/`lastRun` are never serialized to MCP or REST public views.
 - Tool `send-to-chat` still validates `allowCrossChatSend` etc.; private `inspect_chat` respects `allowCrossChatInspect`.
