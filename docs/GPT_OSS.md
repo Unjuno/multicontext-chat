@@ -26,10 +26,37 @@ The patch is intentionally small and idempotent. It:
 3. returns `X-LibreChat-Conversation-Id` so MultiContext can continue one real LibreChat conversation per member,
 4. sets `req.userId` from the authenticated user before persistence, fixing an upstream bug where Remote Agents API-key requests (which only set `req.user`) always failed to store `store:true` turns, silently breaking native conversation continuation, and
 5. forwards request-level `tools` (MultiContext `CROSS_CHAT_TOOLS`) into `primaryConfig.tools`/`toolDefinitions` so the model can emit `function_call` items,
-6. gives request-level cross-chat tools deferred/external execution: when any tool in an execution batch is a cross-chat tool, including a mixed batch with provider-owned tools, the run turn unwinds with `EXTERNAL_TOOL_DEFERRED` instead of entering the internal execute-and-retry loop (`Tool "list_chats" not found` until the harmony parser breaks). The already-recorded `function_call` steps stay in the aggregator, so the Responses API returns them to MultiContext, which executes the tools and continues via `function_call_output` + `previous_response_id`. This applies ONLY to request-level cross-chat tools; DB/agent-owned tools (Web Search, MCP, code execution, Actions) still execute inside LibreChat,
+6. partitions non-streaming mixed execution events before tool loading. Provider-owned calls run through LibreChat's stock executor and their real, SDK-bounded results enter the Responses aggregator. Cross-chat calls never enter that executor; the original batch then unwinds with `EXTERNAL_TOOL_DEFERRED` for MultiContext to execute and continue via `function_call_output` + `previous_response_id`. Provider-only events retain their original handler. This implementation still requires a real-model mixed E2E before release verification,
 7. preserves the native tool round trip (`assistant` `function_call` + `function_call_output`) as first-class LangChain messages. The shared formatter maps every non-user/non-assistant role to `system` and drops `tool_calls`, which used to orphan continuations (the provider saw a stray system JSON blob and gpt-oss re-called or went empty instead of grounding the result).
 
-Native continuation protocol (implemented in `src/librechat.js`): the initial request carries `system` + `developer` + `user` + `CROSS_CHAT_TOOLS` + `store:true`; each continuation carries the answered `function_call` items + `function_call_output` items + `previous_response_id` + the same `tools` (re-bound every turn so the provider can ground tool outputs). Native requests set `parallel_tool_calls:false`, and the controller patch copies this restriction into the Agent model parameters. This is a mitigation, not proof that every provider honors serialization. Existing provider outputs retain their original positions in continuation; missing provider outputs cause PROVIDER_TOOL_RESULT_MISSING before external dispatch. Real provider wire capture and mixed execution E2E remain required. `system`/`developer`/`user`/history are never replayed — `previous_response_id` owns history. Only the non-streaming branch unwinds for external tools; streaming keeps stock behavior.
+Native continuation protocol (implemented in `src/librechat.js`): the initial request carries `system` + `developer` + `user` + `CROSS_CHAT_TOOLS` + `store:true`; each continuation carries the answered `function_call` items + `function_call_output` items + `previous_response_id` + the same `tools` (re-bound every turn so the provider can ground tool outputs). Native requests set `parallel_tool_calls:false`, and the controller patch copies this restriction into the Agent model parameters. This is a mitigation, not proof that every provider honors serialization. Existing provider outputs retain their original positions in continuation; missing provider outputs cause PROVIDER_TOOL_RESULT_MISSING before external dispatch. Real provider wire capture and mixed execution E2E remain required. `system`/`developer`/`user`/history are not sent again by the client — `previous_response_id` owns history. External continuation is supported only in the non-streaming path used by MultiContext; do not use streaming requests for this protocol.
+
+Completed tool pairs are persisted in LibreChat's assistant content format.
+Pending calls are excluded to prevent the standard formatter from inventing
+empty outputs. Matching persisted pairs are removed from continuation replay;
+conflicting results for the same call ID are rejected. Persistence and replay
+have been tested with synthetic inputs against the installed database methods
+and formatter, not yet through a complete live model run.
+
+### Native patch validation
+
+Run the patch from this repository; it imports adjacent helper files and must
+not be copied as a standalone script. Rebuild/restart the intended LibreChat
+checkout after applying it. The mixed-result serializer currently depends on
+the installed Agents SDK CommonJS `utils/toolContent.cjs` layout. An SDK upgrade
+requires rerunning the contract checks; do not infer compatibility from unit
+tests alone.
+
+```bash
+node scripts/verify-librechat-mixed-handler.mjs /path/to/LibreChat
+node scripts/verify-librechat-tool-persistence.mjs /path/to/patched/LibreChat /path/to/installed/LibreChat
+```
+
+The database verifier additionally requires `MONGO_URI` in its environment and
+writes synthetic records to a new `multicontext_audit_*` database, retained as
+evidence. It does not alter existing conversations. These checks do not enable
+Web Search: configure a real search tool on the selected LibreChat Agent and
+verify actual tool execution before accepting model-generated search claims.
 
 `native` mode fails fast if that conversation-id header is missing. `compat` mode does not modify LibreChat; it keeps independent history in MultiContext and replays it on each request.
 
