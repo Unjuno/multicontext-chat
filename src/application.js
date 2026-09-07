@@ -668,6 +668,10 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   async function stopWorkspace(workspaceId, { origin = 'human' } = {}) {
     await scheduler.stopWorkspace(workspaceId);
     try { store.appendEvent(workspaceId, { type: 'human.stop', origin, detail: { workspaceId } }); } catch {}
+    // The scheduler aborts the provider request asynchronously. Wait briefly
+    // for the store/runtime snapshot to settle so REST/GUI callers do not see
+    // a stale RUNNING state immediately after a successful user stop.
+    try { await waitUntilSettled(workspaceId, 3, 100); } catch {}
     return getWorkspace(workspaceId);
   }
 
