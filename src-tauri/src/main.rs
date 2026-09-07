@@ -430,9 +430,15 @@ fn backup_data(app: tauri::AppHandle) -> Result<String, String> {
     }
     let backup_dir = dir.join("backups");
     std::fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
-    let destination = backup_dir.join(format!("state-{}.json", now_secs()));
+    let timestamp = now_secs();
+    let destination = backup_dir.join(format!("state-{}.json", timestamp));
     std::fs::copy(&source, &destination).map_err(|e| e.to_string())?;
-    Ok(destination.to_string_lossy().into_owned())
+    let config_source = config_path(&app);
+    if config_source.exists() {
+        let config_destination = backup_dir.join(format!("config-{}.json", timestamp));
+        std::fs::copy(&config_source, config_destination).map_err(|e| e.to_string())?;
+    }
+    Ok(backup_dir.join(format!("backup-{}", timestamp)).to_string_lossy().into_owned())
 }
 
 fn resolve_node(state: &tauri::State<AppState>) -> Option<String> {

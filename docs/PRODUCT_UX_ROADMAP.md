@@ -60,6 +60,6 @@ For each UX change, run a focused manual flow on the macOS bundle: launch, creat
 
 ## Shipped product safeguards
 
-- Desktop settings can create a timestamped `state.json` backup before configuration changes.
+- Desktop settings can create a timestamped state and startup-config backup before configuration changes; Keychain secrets are excluded.
 - A settled workspace can be duplicated as a separate working copy. Conversation history, roles, Agent choices, and Compile results are preserved; active queues, run state, and provider conversation IDs are reset.
 - Running or queued workspaces cannot be duplicated, preventing a copy from being mistaken for an active continuation.

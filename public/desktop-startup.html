@@ -601,7 +601,7 @@
         button.disabled = true;
         try {
           const path = await invoke("backup_data");
-          document.getElementById("settingsErr").textContent = "バックアップを作成しました。設定変更前の復旧用スナップショットです。";
+          document.getElementById("settingsErr").textContent = "バックアップを作成しました（状態と起動設定）。Keychainの秘密情報は含まれません。";
           button.title = path;
         } catch (err) {
           document.getElementById("settingsErr").textContent = "バックアップを作成できませんでした: " + errorMessage(err);
