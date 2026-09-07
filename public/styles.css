@@ -1040,6 +1040,15 @@ dialog p { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
 dialog input { width: 100%; margin-bottom: 14px; }
 dialog menu { display: flex; gap: 6px; justify-content: flex-end; }
 
+#reviewNoteDialog { max-width: 560px; width: calc(100vw - 32px); margin: auto; }
+#reviewNoteDialog label { display: block; margin-bottom: 12px; }
+#reviewNoteDialog select, #reviewNoteDialog textarea { display: block; width: 100%; margin-top: 4px; }
+#reviewNoteSource, .review-rationale { white-space: pre-wrap; overflow-wrap: anywhere; }
+#reviewNoteError { color: var(--danger); }
+.message-reviews { margin: 10px 0; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); }
+.message-reviews summary { cursor: pointer; }
+.message-reviews p { margin-top: 8px; font-size: 12px; }
+
 /* ── Action URL ──────────────────────────────────────────────── */
 .action-url {
   font-size: 9px;

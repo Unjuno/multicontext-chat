@@ -10,8 +10,13 @@ Records append without changing source messages, member queues, or dispatching
 work. Each retains timestamp, source ID/hash and bounded excerpt. Maximum 100 per
 workspace; rationale capped at 2000 characters. Latest eight are included in Compile,
 with omitted counts. GUI shows recent original review text beside the summary,
-using textContent rather than model paraphrase/HTML. The GUI write workflow remains
-pending; current write access is REST/MCP.
+using textContent rather than model paraphrase/HTML. Each non-pending source message
+also offers a GUI review dialog and displays its latest three original reviews,
+even before Compile. The dialog submits through the same REST/canonical operation
+as MCP, captures the original workspace/member/message IDs, and does not dispatch work.
+Drafts live outside the periodically replaced workspace DOM; expanded reviews remain
+open across updates. Error messages preserve inputs; failed saves are not auto-retried.
+Reviewer labels remain self-reported and no verdict certifies a proof.
 The REST/MCP integration regression test calls both real HTTP transports, compares
 stored record fields (excluding generated ID/time), checks REST authentication,
 and confirms invalid sources/verdicts leave state unchanged. It also verifies that
@@ -30,6 +35,34 @@ and retains copiedFrom workspace/review/member provenance without rewriting evid
 Regression tests verify copied notes enter synthesis and new reviews can target copied
 messages, while the source workspace remains unchanged. Existing previously broken
 copies are not migrated by this change. Historical message contents remain unchanged.
-Source-message trimming, note correction/supersession, and UI write workflow still
+Source-message trimming and note correction/supersession still
 need lifecycle treatment. Existing notes retain source excerpts/hashes if originals
 are later trimmed. Never silently rewrite earlier reviews to make a report look correct.
+
+## Browser/MCP differential check (2026-09-08 JST)
+
+Used an isolated copy of `research-flywheel-1788822598252/state.json`, served by
+the current Node app on loopback with the real HTTP MCP transport. No provider
+generation was requested and the original experiment data was not changed.
+
+- Discovered 33 MCP tools; listed and read the expected SETTLED workspace.
+- MCP added note `ae4d339b-354e-400f-a58a-e28ddee9c765`; browser displayed its
+  original text under the corresponding assistant message before any Compile.
+- Browser form accepted multiline input and Enter-key submission. MCP read back
+  note `cd0cfc5d-92be-4b7f-a2f8-8f395fd13f79` with the exact target, rationale,
+  and self-reported reviewer. Messages, queues, and execution stats were unchanged.
+- Literal `<b>` markup remained text; it was not rendered as HTML.
+- Manual workspace refresh preserved the expanded review disclosure.
+- Escape closed an empty review dialog without saving; Enter in the reviewer
+  input submitted through the form. Draft contents survived periodic page updates.
+- Search counts remained visible separately from model prose. The dialog was
+  inspected visually and its layout adjusted to center it within the viewport.
+
+This is a current browser UI + real MCP/REST transport check, not a newly rebuilt
+Tauri app/signing/notarization test. Browser automation used the available Computer
+API because the agent-browser CLI was unavailable. For repeated state/operation
+checks, prefer MCP; keep direct GUI checks for rendering and input behavior.
+The reviewed copy is retained in `data/experiments/gui-review.F9HJ4M/state.json`
+(ignored local evidence). Automated check: 327 total / 324 passed / 0 failed /
+3 skipped. UI unit tests cover exact target mapping, invalid input boundaries,
+HTML escaping, bounded disclosure content, and preserved expansion markup.

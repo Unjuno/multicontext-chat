@@ -2,6 +2,7 @@ import { workspaceStatusLabel as sharedWorkspaceLabel, memberStatusLabel as shar
 import { pickDisplayedRun, followedRunState } from './follow-run.js';
 import { selectActivityEvents } from './activity-feed.js';
 import { searchEvidenceLabel } from './search-evidence.js';
+import { reviewNotesHtml, openReviewDialog } from './review-notes.js';
 
 let currentId = null;
 let timer = null;
@@ -14,6 +15,7 @@ let workspaceSearchTimer = null;
 let selectedCompileIndex = 0;
 const openEditors = new Set();
 const openDeveloperPrompts = new Set();
+const openReviewMessages = new Set();
 const collapsedMembers = (() => {
   try {
     const value = JSON.parse(localStorage.getItem('mcc_collapsed_members') || '[]');
@@ -894,6 +896,7 @@ async function select(id) {
   currentId = id;
   localStorage.setItem('mcc_last_workspace', String(id));
   openEditors.clear();
+  openReviewMessages.clear();
   await Promise.all([refreshList(id), refreshAgents(id)]);
   if (currentId !== id) return;
   await refresh(id);
@@ -1356,6 +1359,7 @@ function memberCard(workspace, member) {
               <div class="msg-head">${esc(messageRoleLabel(message.role))}${message.at ? ` · ${esc(displayTimestamp(message.at))}` : ''}${message.pending ? ' · 処理中' : ''}</div>
               ${message.role === 'assistant' ? `<div class="small">${esc(searchEvidenceLabel(message.searchEvidence))}</div>` : ''}
               ${renderCompileText(message.content)}
+              ${message.id && !message.pending ? `${reviewNotesHtml((workspace.reviewNotes || []).filter(note => note.memberId === member.id && note.messageId === message.id), esc, { key: `${member.id}:${message.id}`, open: openReviewMessages.has(`${member.id}:${message.id}`) })}<button type="button" class="sm" data-review-message="${esc(message.id)}">検証メモを追加</button>` : ''}
             </div>
           `).join('')}
         </div>
@@ -1939,6 +1943,23 @@ function wire(workspace) {
   $$('.member').forEach((card) => {
     const memberId = card.dataset.mid;
     const member = workspace.members[memberId];
+    $$('[data-review-key]', card).forEach(details => {
+      details.addEventListener('toggle', () => {
+        if (!details.isConnected) return;
+        if (details.open) openReviewMessages.add(details.dataset.reviewKey);
+        else openReviewMessages.delete(details.dataset.reviewKey);
+      });
+    });
+    $$('[data-review-message]', card).forEach(button => {
+      button.onclick = () => {
+        const message = member.messages.find(m => m.id === button.dataset.reviewMessage && !m.pending);
+        if (!message) return;
+        openReviewDialog({ workspaceId: workspace.id, member, message, request, onSaved: () => {
+          toast('検証メモを保存しました（原文・キューは変更していません）', 'success');
+          if (currentId === workspace.id) refreshPreservingDrafts(workspace.id).catch(err => toast(`保存済みですが表示を更新できません: ${err.message}`, 'error'));
+        } });
+      };
+    });
     const editor = $('.member-editor', card);
     const promptDetails = $('[data-action=prompt-details]', card);
     $('[data-action=latest]', card)?.addEventListener('click', () => {
@@ -2093,6 +2114,7 @@ overlay?.addEventListener('click', closeSidebar);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
 document.addEventListener('keydown', (e) => {
   const target = e.target;
+  if (target instanceof Element && target.closest('dialog[open]')) return;
   const typing = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
   if (e.key === '?' && !typing && !helpDialog?.open) {
     e.preventDefault();
