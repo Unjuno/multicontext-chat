@@ -283,6 +283,9 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   }
 
   async function createWorkspace(input = {}) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw problem('ワークスペース作成の入力はJSONオブジェクトで指定してください', 400, 'INVALID_REQUEST_BODY');
+    }
     if (Object.prototype.hasOwnProperty.call(input, 'name')) {
       const name = String(input.name ?? '').trim();
       if (!name) throw problem('ワークスペース名を入力してください', 400);
