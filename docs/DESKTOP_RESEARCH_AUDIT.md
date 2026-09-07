@@ -48,3 +48,22 @@ separately in REVIEW_NOTES.md. Direct native QA on the final signed artifact,
 Developer ID signing, notarization/stapling, and legacy LibreChat mixed-provider
 real-model verification remain distinct gates. Do not interpret this audit as
 CORE FINAL VERIFIED, public distribution readiness, or mathematical proof.
+
+## Live LibreChat recheck
+
+The configured Remote Responses discovery endpoint returned ChatA and ChatB;
+it did not expose their tool configuration. The actual controller in
+`/Users/taka/projects/LibreChat` contains the `parallel_tool_calls: false`
+forwarding, and its serializer matches the repository helper, but its
+`createMixedOwnershipHandler` does **not** match the current helper.
+This is on-disk evidence, not proof of the running process version or provider wire.
+
+The old `verify-librechat-mixed-handler.mjs` still passed against that checkout:
+it tested the installed executor with the repository's adapter, so it could not
+detect an outdated deployed adapter. The verifier now rejects missing/stale
+controller helpers before executing its contract probe. A regression test covers
+both missing helpers and a removed duplicate-call guard. The current actual
+checkout correctly fails this new gate; no LibreChat restart or saved Agent
+mutation was performed during this check. Reapply the patch and rebuild/restart
+before attempting the remaining real mixed-model acceptance test. A passing
+source gate alone would still not establish running-process or model E2E parity.

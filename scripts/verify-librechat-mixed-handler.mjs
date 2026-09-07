@@ -2,11 +2,15 @@
 // Contract integration, not a model/search E2E. Uses the installed LibreChat
 // executor with deterministic tools; never touches credentials or live agents.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import mixed from './librechat-mixed-handler.cjs';
+import { verifyInstalledMixedSource } from './verify-librechat-installed-source.mjs';
 
 if (!process.argv[2]) throw new Error('Usage: node scripts/verify-librechat-mixed-handler.mjs /path/to/LibreChat');
+verifyInstalledMixedSource(fs.readFileSync(path.join(path.resolve(process.argv[2]),
+  'api/server/controllers/agents/responses.js'), 'utf8'));
 const requireLibreChat = createRequire(path.join(path.resolve(process.argv[2]), 'package.json'));
 const { createToolExecuteHandler } = requireLibreChat('@librechat/api');
 const sdk = requireLibreChat('@librechat/agents');
@@ -67,3 +71,4 @@ assert.deepEqual([...aggregator.toolOutputs], [
 ]);
 console.log('Installed LibreChat executor mixed contract passed: 2 provider invocations, 0 cross-chat invocations; text and empty results preserved.');
 console.log('Installed SDK serialization parity passed: empty, long text, structured, circular, and error results.');
+console.log('Controller source parity passed; running-process version and real-model mixed E2E remain separate checks.');
