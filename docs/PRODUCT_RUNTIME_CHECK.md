@@ -118,3 +118,4 @@
 - 稼働中APIの全30ワークスペースを確認し、Compile履歴を持つワークスペース2件（`RealE2E`、`DesktopApp E2E`）で `compileHistory.length === 1` と `lastCompile` の存在が一致した。履歴のないワークスペースも壊れずに取得できた。
 - APIのfocus導線で実機を`DesktopApp E2E`へ移動し、AXツリーで2チャット・処理完了・回答25件・統合レポート利用可能、スナップショット表示、結果コピー、Markdown保存を確認した。履歴は1件のため過去履歴選択欄が表示されないことも仕様どおり確認した。
 - 最新macOSバンドル更新後の出荷確認を実施した。`verify:desktop`、`verify:bundle`（MCP initialize/list_workspaces）、稼働中APIの`/api/health`（`ok:true`, Native, Agent 2件）がすべて成功し、リポジトリはcleanだった。
+- 停止直後の状態遅延対策後、稼働中APIで完了済みの専用ワークスペースへユーザー停止を送り、`HTTP 200`、`runtimeState: SETTLED`、`settled: true` を確認した。停止は冪等に扱われ、生成中・待機キュー・履歴を追加変更していない。
