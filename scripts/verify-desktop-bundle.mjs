@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const app = process.argv[2] || path.join(root, 'src-tauri/target/release/bundle/macos/MultiContext.app');
+const resourceRoot = path.join(app, 'Contents/Resources/multicontext/public');
+
+if (!fs.existsSync(resourceRoot)) {
+  console.error(`desktop bundle resources not found: ${resourceRoot}`);
+  process.exit(1);
+}
+
+const markers = [
+  ['index.html', 'id="desktopSettings"'],
+  ['index.html', 'ショートカットと使い方'],
+  ['app.js', 'compileHistory'],
+  ['desktop-startup.html', 'データ保存場所を開く'],
+];
+
+for (const [file, marker] of markers) {
+  const target = path.join(resourceRoot, file);
+  const content = fs.readFileSync(target, 'utf8');
+  if (!content.includes(marker)) {
+    console.error(`desktop bundle marker missing: ${file} -> ${marker}`);
+    process.exit(1);
+  }
+}
+
+console.log(`desktop bundle verified: ${app}`);

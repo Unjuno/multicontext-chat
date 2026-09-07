@@ -20,6 +20,7 @@
     "e2e:real": "node --env-file-if-exists=.env scripts/e2e-real.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
+    "verify:desktop": "node scripts/verify-desktop-bundle.mjs",
     "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
   "devDependencies": {
