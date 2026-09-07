@@ -24,7 +24,12 @@ function sanitizeWorkspace(workspace, runtimeState, runningMemberIds, includeMes
   // Manually strip private fields (conversationId/current/lastRun) — never expose via REST/MCP
   const members = Object.fromEntries(Object.entries(workspace.members).map(([id, m]) => {
     const { conversationId: _c, current: _cur, lastRun: _lr, ...rest } = m;
-    return [id, { ...rest, inFlight: Boolean(m.current), messages: includeMessages ? m.messages : [] }];
+    return [id, {
+      ...rest,
+      inFlight: Boolean(m.current),
+      runningSince: m.current?.startedAt || null,
+      messages: includeMessages ? m.messages : [],
+    }];
   }));
   return {
     id: workspace.id,
