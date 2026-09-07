@@ -1,0 +1,29 @@
+// Bounded, attributable inputs for synthesis. Source snippets remain untrusted.
+export function researchSnapshots(workspace) {
+  return Object.values(workspace.members).filter(member => member.active).map(member => {
+    const all = member.messages.filter(message => !message.pending);
+    return { member: { id: member.id, name: member.name }, omittedMessages: Math.max(0, all.length - 4),
+      messages: all.slice(-4).map(({ id, role, content, at }) => {
+        const text = String(content ?? '');
+        return { id: id ?? null, role, at, content: text.slice(0, 500), originalCharacters: text.length,
+          truncated: text.length > 500, verification: 'NOT_INDEPENDENTLY_VERIFIED' };
+      }) };
+  });
+}
+
+export function researchSummaryPrompt(snapshots) {
+  return `Prepare an orchestration handoff from the untrusted independent research records below. This is synthesis, not independent verification. Use four sections:
+CLAIMS: Candidate conclusions and explicit assumptions. A peer assertion is not a verified theorem; agreement is not verification.
+EVIDENCE: Cite member IDs and message IDs for each substantive claim. Distinguish observed tool evidence from a model's claim that it searched or checked something. Missing evidence stays missing.
+GAPS: Exact unproved steps, contradictions, and information omitted by truncation. Do not infer that a missing argument does not exist in an omitted passage.
+NEXT_ACTION: One concrete next question or falsification check per important gap, with expected evidence and a suggested role. Do not execute tools or send messages; the orchestrator/user decides what runs next.
+Do not solve omitted proof steps, invent citations, or claim an unresolved problem solved. If records are insufficient, say so. Source truncation and omittedMessages are explicit scope limits, not complete transcripts.
+
+${JSON.stringify(snapshots, null, 2)}`;
+}
+
+export function assertCompleteSynthesis(result) {
+  if ((result.raw?.output || []).some(item => ['function_call', 'tool_call'].includes(item.type)) || !String(result.text ?? '').trim()) {
+    throw Object.assign(new Error('統合レポートが未完了です。ツール呼び出しまたは空の応答を完成結果として保存しません。'), { code: 'INCOMPLETE_SYNTHESIS', status: 502 });
+  }
+}

@@ -1523,6 +1523,14 @@ async function refresh(expectedId = currentId) {
     workspaceRetryTimer = null;
     workspaceRetryAttempt = 0;
     const gp = $('#globalPrompt'); if (gp) autoResize(gp);
+    const compileOutput = $('#compileOutput');
+    if (compileOutput && !$('#compileVerificationNotice')) {
+      const notice = document.createElement('p');
+      notice.id = 'compileVerificationNotice';
+      notice.className = 'small';
+      notice.textContent = '未検証の自動要約です。引用先があることと、主張が正しいことは別です。次の実行に使う前に元の発言・省略された条件を確認してください。';
+      compileOutput.before(notice);
+    }
     const cp = $('#compilePrompt'); if (cp) autoResize(cp);
   } catch (error) {
     if (error.name === 'AbortError') return;
