@@ -238,6 +238,7 @@ function withBusy(btn, fn) {
   btn.disabled = true;
   btn.setAttribute('aria-busy', 'true');
   btn.setAttribute('aria-label', `${prev} — 処理中`);
+  btn.textContent = '処理中…';
   const done = () => {
     btn.classList.remove('is-busy');
     btn.disabled = false;
