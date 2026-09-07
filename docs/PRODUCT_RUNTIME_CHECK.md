@@ -169,3 +169,10 @@
 - Confirmed personas: Harmonic Analyst, Numerical Skeptic, Blow-up Hunter, and Proof Auditor.
 - The run emitted peer-tool and member-completion events, but after 18 short polls (180 seconds) one orchestrator queue item remained; no settlement was claimed.
 - Compile was not invoked because SETTLED was not proven. The temporary workspace was deleted through MCP (`CLEANUP=ok`).
+
+# 2026-09-07 — Known-theorem control run
+
+- A control run used the adversarial personas with a global prompt explicitly targeting the known 2D incompressible Navier–Stokes global-regularity result and contrasting it with 3D.
+- The four personas were assigned successfully and emitted member-completion events during six short polls (60 seconds); the orchestrator queue was still non-empty at the observation boundary.
+- No Compile was attempted because settlement was not proven. The temporary workspace was deleted through MCP (`CLEANUP=ok`).
+- This control separates protocol/runtime behavior from mathematical correctness; a model response is not accepted as a theorem without independently checking hypotheses.
