@@ -309,6 +309,19 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (suppliedDefault) input.defaultAgentId = suppliedDefault;
     if (suppliedCompile) input.compileAgentId = suppliedCompile;
     if (input.system_prompt !== undefined && input.globalPrompt === undefined) input.globalPrompt = input.system_prompt;
+    // Validate the requested initial chat count before persisting anything.
+    const chatCountFields = ['initial_chat_count', 'initialChatCount', 'member_count', 'memberCount']
+      .filter((field) => input[field] !== undefined && input[field] !== null);
+    const isChatCountValue = (value) => (typeof value === 'number' && Number.isInteger(value))
+      || (typeof value === 'string' && /^\d+$/.test(value.trim()));
+    const chatCountValues = chatCountFields.map((field) => isChatCountValue(input[field]) ? Number(input[field]) : NaN);
+    if (new Set(chatCountValues).size > 1) throw problem('初期チャット数の指定が一致していません', 400);
+    const requestedChatCount = chatCountFields.length ? input[chatCountFields[0]] : 0;
+    const parsedChatCount = Number(requestedChatCount);
+    if (!isChatCountValue(requestedChatCount) || parsedChatCount < 0 || parsedChatCount > 10) {
+      throw problem('初期チャット数は0〜10の整数で指定してください', 400);
+    }
+
     const workspace = store.createWorkspace(input);
     // Auto-resolve default only if exactly one agent
     if (!workspace.defaultAgentId) {
@@ -318,17 +331,6 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     // Create initial chats if requested
     // Accept the canonical snake_case field plus common REST/UI aliases so a
     // successful create request cannot silently produce an empty workspace.
-    const chatCountFields = ['initial_chat_count', 'initialChatCount', 'member_count', 'memberCount']
-      .filter((field) => input[field] !== undefined && input[field] !== null);
-    const chatCountValues = chatCountFields.map((field) => Number(input[field]));
-    if (new Set(chatCountValues).size > 1) {
-      throw problem('初期チャット数の指定が一致していません', 400);
-    }
-    const requestedChatCount = chatCountFields.length ? input[chatCountFields[0]] : 0;
-    const parsedChatCount = Number(requestedChatCount);
-    if (!Number.isInteger(parsedChatCount) || parsedChatCount < 0 || parsedChatCount > 10) {
-      throw problem('初期チャット数は0〜10の整数で指定してください', 400);
-    }
     const count = parsedChatCount;
     for (let i = 0; i < count; i++) {
       store.addMember(workspace.id, { name: `チャット ${i + 1}` });
