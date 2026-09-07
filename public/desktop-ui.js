@@ -133,7 +133,10 @@
     const states = list.map((s) => normalizeState(s.state));
     const coreNames = new Set(["モデル", "LibreChat", "MultiContext"]);
     const core = list.filter((s) => coreNames.has(s.name));
-    if (core.length === 3 && core.every((s) => normalizeState(s.state) === "ready") && !states.includes("error")) {
+    // Optional rows must never make the stack look ready while a required
+    // service is missing. This matters during startup and partial API replies.
+    if (core.length < 3) return { label: "確認中", cls: "checking", text: "AIスタック ● 確認中" };
+    if (core.every((s) => normalizeState(s.state) === "ready") && !states.includes("error")) {
       return { label: "準備完了", cls: "ready", text: "AIスタック ● 準備完了" };
     }
     if (states.every((s) => s === "ready")) return { label: "準備完了", cls: "ready", text: "AIスタック ● 準備完了" };
