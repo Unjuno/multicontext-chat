@@ -43,7 +43,13 @@ export class LibreChatClient {
     try {
       const body = { model: agentId, input, stream: false, store: this.mode === 'native', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       if (this.mode === 'native' && conversationId) body.previous_response_id = conversationId;
-      if (this.mode === 'native') { body.tools = CROSS_CHAT_TOOLS; body.tool_choice = 'auto'; }
+      if (this.mode === 'native') {
+        body.tools = CROSS_CHAT_TOOLS;
+        body.tool_choice = 'auto';
+        // Serialize tool turns so provider-owned and MultiContext-owned tools
+        // cannot form a mixed batch with dangling outputs.
+        body.parallel_tool_calls = false;
+      }
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);
@@ -78,7 +84,7 @@ export class LibreChatClient {
       // without bound definitions the provider cannot ground prior tool
       // outputs and gpt-oss re-calls or goes empty. History is still never
       // replayed (previous_response_id owns it).
-      const body = { model: agentId, input, stream: false, store: this.mode === 'native', previous_response_id: conversationId, tools: CROSS_CHAT_TOOLS, tool_choice: 'auto', metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
+      const body = { model: agentId, input, stream: false, store: this.mode === 'native', previous_response_id: conversationId, tools: CROSS_CHAT_TOOLS, tool_choice: 'auto', parallel_tool_calls: false, metadata: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
       const response = await this.fetchImpl(`${this.baseUrl}/api/agents/v1/responses`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal });
       const text = await response.text(); let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       if (!response.ok) throw new Error(data?.error?.message || data?.message || text || `LibreChat HTTP ${response.status}`);

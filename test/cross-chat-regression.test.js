@@ -206,6 +206,7 @@ test('Phase6 native initial contains system/developer/user/tools, continuation r
   assert.ok(b0.input.some(i => i.role === 'developer' && i.content === 'DEV'));
   assert.ok(b0.input.some(i => i.role === 'user' && i.content === 'new'));
   assert.deepEqual(b0.tools, CROSS_CHAT_TOOLS);
+  assert.equal(b0.parallel_tool_calls, false);
   assert.equal(b0.previous_response_id, 'conv0');
   bodies.length = 0;
   await client.continueAgent({ agentId: 'a', conversationId: 'conv1', toolCalls: [{ type: 'function_call', call_id: 'c1', name: 'list_chats', arguments: '{}' }], toolResults: [{ call_id: 'c1', output: '{"ok":true}' }], metadata: {} });
@@ -224,6 +225,7 @@ test('Phase6 native initial contains system/developer/user/tools, continuation r
   // outputs; history itself is never replayed.
   assert.deepEqual(b1.tools, CROSS_CHAT_TOOLS);
   assert.equal(b1.tool_choice, 'auto');
+  assert.equal(b1.parallel_tool_calls, false);
 });
 
 test('Phase6 native continuation without original calls stays outputs-only (backward compatible)', async () => {
