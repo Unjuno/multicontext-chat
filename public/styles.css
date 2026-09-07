@@ -985,6 +985,14 @@ aside h3 {
 .md-table td { background: var(--surface); }
 .compile-result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .compile-result-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.compile-history { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.compile-history summary { cursor: pointer; color: var(--text-secondary); font-size: 11px; }
+.compile-history > .small { margin: 6px 0; }
+.compile-history-item { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 4px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-secondary); text-align: left; font-size: 11px; }
+button.compile-history-item { cursor: pointer; }
+button.compile-history-item:hover { border-color: var(--accent); }
+.compile-history-item.selected { border-color: var(--accent); background: var(--accent-light); color: var(--text); }
+.compile-history-item span { color: var(--text-muted); }
 .compile hr {
   border: none;
   border-top: 1px solid var(--border);
