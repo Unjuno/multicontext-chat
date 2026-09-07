@@ -157,6 +157,14 @@ function save(rel, text, didChange) {
   }
 
   // Install the external-execution guard in both loadTools branches.
+  // Migrate already-patched checkouts as well as fresh installations. The
+  // helper class is deliberately retained by old patches, so this cannot be
+  // gated on the helper's absence.
+  const legacyBatchGuard = 'toolNames.every((name) => cross.has(name))';
+  if (text.includes(legacyBatchGuard)) {
+    text = text.replaceAll(legacyBatchGuard, 'toolNames.some((name) => cross.has(name))');
+    dirty = true;
+  }
   const guard = '          throwIfExternalCrossChatTools(req, toolNames);';
   const loadAnchor = "        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {\n          const ctx =";
   while ((text.match(/throwIfExternalCrossChatTools\(req, toolNames\);/g) || []).length < 2) {

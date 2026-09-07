@@ -141,3 +141,16 @@ test('LibreChat patch upgrades the legacy positional ToolMessage form without a 
   assert.equal(again.status, 0, again.stderr || again.stdout);
   assert.match(again.stdout, /already patched/);
 });
+
+test('LibreChat patch migrates the legacy every guard in an already-patched checkout', () => {
+  const { root, controller } = fixture();
+  const first = runPatch(root);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  let text = fs.readFileSync(controller, 'utf8');
+  text = text.replaceAll('toolNames.some((name) => cross.has(name))', 'toolNames.every((name) => cross.has(name))');
+  fs.writeFileSync(controller, text);
+  const second = runPatch(root);
+  assert.equal(second.status, 0, second.stderr || second.stdout);
+  assert.doesNotMatch(fs.readFileSync(controller, 'utf8'), /toolNames\.every\(\(name\) => cross\.has\(name\)\)/);
+  assert.match(fs.readFileSync(controller, 'utf8'), /toolNames\.some\(\(name\) => cross\.has\(name\)\)/);
+});

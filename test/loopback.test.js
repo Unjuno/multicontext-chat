@@ -56,6 +56,7 @@ test('mcpHost separate loopback check', () => {
 
 test('non-loopback HTTP bind requires an app token', () => {
   assert.throws(() => validateHttpAuthConfig({ host: '0.0.0.0', mcpHost: '0.0.0.0', appToken: '' }), /MULTICONTEXT_APP_TOKEN/);
-  assert.doesNotThrow(() => validateHttpAuthConfig({ host: '0.0.0.0', mcpHost: '0.0.0.0', appToken: 'app-token' }));
+  assert.throws(() => validateHttpAuthConfig({ host: '0.0.0.0', mcpHost: '0.0.0.0', appToken: 'app-token', toolSecret: '' }), /MULTICONTEXT_TOOL_SECRET/);
+  assert.doesNotThrow(() => validateHttpAuthConfig({ host: '0.0.0.0', mcpHost: '0.0.0.0', appToken: 'app-token', toolSecret: 'tool-secret' }));
   assert.doesNotThrow(() => validateHttpAuthConfig({ host: '127.0.0.1', mcpHost: '127.0.0.1', appToken: '' }));
 });

@@ -40,8 +40,13 @@ export function validateMcpConfig(cfg = config) {
 }
 
 export function validateHttpAuthConfig(cfg = config) {
-  if ((isLoopback(cfg.host) && isLoopback(cfg.mcpHost)) || cfg.appToken) return;
-  throw new Error('Non-loopback bind requires MULTICONTEXT_APP_TOKEN (unsafe to expose REST without authentication). Set a token or bind to 127.0.0.1/localhost/::1');
+  if (isLoopback(cfg.host) && isLoopback(cfg.mcpHost)) return;
+  if (!cfg.appToken) {
+    throw new Error('Non-loopback bind requires MULTICONTEXT_APP_TOKEN (unsafe to expose REST without authentication). Set a token or bind to 127.0.0.1/localhost/::1');
+  }
+  if (!cfg.toolSecret) {
+    throw new Error('Non-loopback bind requires MULTICONTEXT_TOOL_SECRET (unsafe to expose /tools without authentication). Set a secret or bind to 127.0.0.1/localhost/::1');
+  }
 }
 validateMcpConfig();
 validateHttpAuthConfig();
