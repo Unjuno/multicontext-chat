@@ -1271,7 +1271,7 @@ function memberCard(workspace, member) {
         ${queueInfo(member)}
         ${member.active === false ? '<span class="sep">·</span><span style="color:var(--text-muted)">無効</span>' : ''}
       </div>
-      ${displayError ? `<div class="member-error" role="alert"><strong>処理を続行できませんでした</strong><span>${esc(displayError)}</span><small>会話の履歴とキューは保持されています。</small></div>` : ''}
+      ${displayError ? `<div class="member-error" role="alert"><strong>処理を続行できませんでした</strong><span><b>原因:</b> ${esc(displayError)}</span><small>会話の履歴とキューは保持されています。再試行または停止を選べます。</small></div>` : ''}
       <div class="member-body">
         <details class="dev-prompt" data-action="prompt-details"${promptOpen}>
           <summary><span class="dev-prompt-label">役割と指示</span><span class="scope-note">Agentへのチャット固有指示</span></summary>
