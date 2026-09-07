@@ -53,7 +53,7 @@ Discuss:
 5. scaling and critical quantities,
 6. what kind of a priori estimate would be needed to rule out finite-time blow-up.
 
-After your independent analysis, identify at least one point that should be checked by another specialist.
+After your independent analysis, identify at most one point that should be checked by another specialist. Do not recursively delegate; finish with a confidence label for each claim.
 
 Use list_chats, inspect_chat, or send_to_chat when doing so would improve the analysis.
 
@@ -68,7 +68,7 @@ Clearly distinguish known results, heuristic reasoning, and unresolved questions
       { name: 'C — Blow-up Hunter', developerPrompt: 'You are an adversarial blow-up researcher. Try to construct a self-similar or near-singular scenario, then identify which known obstruction prevents it from being a proof. Never claim a solution.' },
       { name: 'D — Proof Auditor', developerPrompt: 'You are a formal proof auditor. Label every assertion as theorem, reduction, heuristic, or open step; reject hidden regularity assumptions and demand a falsifiable checkpoint. Never claim a solution.' },
     ],
-    seedPrompt: 'Analyze the 3D incompressible Navier-Stokes regularity problem as an adversarial research meeting. Each specialist must provide one known theorem, one precise unresolved gap, and one falsification test. Do not claim to solve the Millennium problem. Distinguish theorem, heuristic, and open step.',
+    seedPrompt: 'Analyze the 3D incompressible Navier-Stokes regularity problem as an adversarial research meeting. Work in three bounded phases: (1) independently state one known theorem with hypotheses, (2) state one precise unresolved gap, (3) state one falsification or sanity test. Only after phase 1 may you make at most one peer-check call; do not recursively delegate or send repeated prompts. End with confidence labels for each claim. Do not claim to solve the Millennium problem. Distinguish theorem, heuristic, and open step.',
   },
 };
 
