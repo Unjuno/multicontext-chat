@@ -243,7 +243,19 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   async function listWorkspaces({ includeArchived = false } = {}) {
     const workspaces = store.listWorkspaces({ includeArchived }).map(w => {
       const runtimeState = store.runtimeState(w.id, scheduler.runningMemberIds(w.id));
-      return { ...w, runtimeState, settled: runtimeState === 'SETTLED' };
+      const summarizeCompile = (item) => item ? {
+        at: item.at,
+        snapshotAt: item.snapshotAt,
+        sourceMemberCount: item.sourceMemberCount,
+        sourceMessageCount: item.sourceMessageCount,
+      } : null;
+      return {
+        ...w,
+        lastCompile: summarizeCompile(w.lastCompile),
+        compileHistory: Array.isArray(w.compileHistory) ? w.compileHistory.map(summarizeCompile) : [],
+        runtimeState,
+        settled: runtimeState === 'SETTLED',
+      };
     });
     // Sanitize: strip private fields already via listWorkspaces->publicWorkspace
     return workspaces.map(w => {
