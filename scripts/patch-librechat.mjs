@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import mixedHandler from './librechat-mixed-handler.cjs';
+import toolHistory from './librechat-tool-history.cjs';
 
 const root = path.resolve(process.argv[2] || '');
 if (!process.argv[2]) {
@@ -202,6 +204,70 @@ function save(rel, text, didChange) {
     const out = replaceRequired(text, processStream, wrapped, `${rel}: non-streaming external deferral`, 'last');
     text = out.text;
     dirty ||= out.changed;
+  }
+
+  // Partition at the event boundary, before the loadTools guard. The stock
+  // executor receives provider-owned calls only; its real results survive the
+  // external unwind in the non-streaming Responses aggregator.
+  if (!text.includes('function createMixedOwnershipHandler(')) {
+    text = text.replace("const db = require('~/models');",
+      "const db = require('~/models');\n\n" + mixedHandler.createMixedOwnershipHandler.toString());
+    dirty = true;
+  }
+  // Upgrade development versions of the adapter too, not just fresh patches.
+  const adapterStart = text.indexOf('function createMixedOwnershipHandler(');
+  const adapterEnd = text.indexOf('\n}', adapterStart) + 2;
+  if (adapterStart < 0 || adapterEnd < adapterStart) throw new Error('Mixed adapter anchor missing');
+  const adapterSource = mixedHandler.createMixedOwnershipHandler.toString();
+  if (text.slice(adapterStart, adapterEnd) !== adapterSource) {
+    text = text.slice(0, adapterStart) + adapterSource + text.slice(adapterEnd);
+    dirty = true;
+  }
+  if (!text.includes('function createMixedResultSerializer(')) {
+    text = text.replace("const db = require('~/models');", "const db = require('~/models');\n\n" + mixedHandler.createMixedResultSerializer.toString());
+    dirty = true;
+  }
+  const serializerExpression = "createMixedResultSerializer({ ...require('@librechat/agents'), ...require(require('path').join(require('path').dirname(require.resolve('@librechat/agents')), 'utils/toolContent.cjs')) })";
+  const priorMixedBoundary = '        on_tool_execute: createMixedOwnershipHandler(createToolExecuteHandler(toolExecuteOptions), crossChatToolNames(req), aggregator, abortController.signal),';
+  const currentMixedBoundary = `        on_tool_execute: createMixedOwnershipHandler(createToolExecuteHandler(toolExecuteOptions), crossChatToolNames(req), aggregator, abortController.signal, ${serializerExpression}),`;
+  if (text.includes(priorMixedBoundary)) {
+    text = text.replace(priorMixedBoundary, currentMixedBoundary);
+    dirty = true;
+  }
+  const mixedBoundary = replaceRequired(text,
+    '        on_tool_execute: createToolExecuteHandler(toolExecuteOptions),',
+    currentMixedBoundary,
+    `${rel}: non-streaming mixed ownership boundary`, 'last');
+  text = mixedBoundary.text;
+  dirty ||= mixedBoundary.changed;
+
+  for (const helper of Object.values(toolHistory)) {
+    if (!text.includes(`function ${helper.name}(`)) {
+      text = text.replace("const db = require('~/models');", "const db = require('~/models');\n\n" + helper.toString());
+      dirty = true;
+    }
+  }
+  const persistOutput = replaceRequired(text,
+    '      text: responseText,',
+    "      text: responseText,\n      content: [...completedToolContent(response.output), ...(responseText ? [{ type: 'text', text: responseText }] : [])],",
+    `${rel}: tool output persistence`);
+  text = persistOutput.text;
+  dirty ||= persistOutput.changed;
+  if (!text.includes("context: 'MultiContext completed input tools'")) {
+    const start = text.indexOf('async function saveInputMessages(');
+    const end = text.indexOf('\n}', start);
+    if (start < 0 || end < start) throw new Error('saveInputMessages persistence anchor missing');
+    const persistence = `\n  const toolContent = completedToolContent(internalToolItems(inputMessages));\n  if (toolContent.length) {\n    await db.saveMessage(req, {\n      messageId: nanoid(), conversationId, parentMessageId: null,\n      isCreatedByUser: false, text: '', content: toolContent,\n      sender: 'Agent', endpoint: EModelEndpoint.agents, model: agentId,\n    }, { context: 'MultiContext completed input tools' });\n  }`;
+    text = text.slice(0, end) + persistence + text.slice(end);
+    dirty = true;
+  }
+  for (const [from, to] of [
+    ['      ...previousMessages,', '      ...deduplicateToolHistory(previousMessages),'],
+    ['const toolRoundTrips = inputMessages.filter(isToolRoundTripMessage);', 'const toolRoundTrips = excludePersistedToolReplay(inputMessages, previousMessages).filter(isToolRoundTripMessage);'],
+  ]) {
+    const replacement = replaceRequired(text, from, to, `${rel}: deduplicate persisted tools`);
+    text = replacement.text;
+    dirty ||= replacement.changed;
   }
 
   save(rel, text, dirty);

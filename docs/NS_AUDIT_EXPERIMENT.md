@@ -118,3 +118,94 @@ Copies of the actual two LibreChat files were patched in
 uses `some`, and a second patch reports already patched. Live source/process
 was left unchanged. This strengthens upgrade coverage, not mixed execution
 correctness or runtime deployment evidence.
+
+## Mixed event-boundary implementation checkpoint
+
+Added a dependency-free non-streaming execution adapter embedded by the
+LibreChat patch. It partitions the event batch before the guarded loader,
+invokes the stock handler with provider calls only, checks returned call IDs
+and completeness, saves actual results in the response aggregator, and then
+rejects the original graph batch with EXTERNAL_TOOL_DEFERRED for cross-chat.
+It does not resolve the original batch with invented cross-chat outputs.
+Provider-only events retain the original handler and callbacks. Abort during
+provider execution prevents external deferral.
+
+Seven adapter tests cover mock search/MCP/code mixed batches (2+2 calls),
+provider-only, cross-only, missing results, and cancellation. With four patch
+tests, 11 targeted tests pass. Reapplying to copied actual LibreChat source
+passes controller syntax and idempotence checks. The streaming path remains
+unchanged; MultiContext native requests use the non-streaming path.
+
+This implementation is not yet release-verified: actual SDK result truncation
+and structured-content conversion, graph unwind persistence, and real native
+mixed execution require integration coverage. No live LibreChat files were
+modified and no running service was restarted by this checkpoint.
+
+Installed-handler contract verification now passes via
+`node scripts/verify-librechat-mixed-handler.mjs /Users/taka/projects/LibreChat`.
+This loads the actual installed `@librechat/api` createToolExecuteHandler,
+supplies deterministic provider tools, and checks invocation and tool-end
+callbacks. Both provider tools execute, cross-chat never loads or executes,
+and real text/empty outputs reach the aggregator. This is stronger than the
+mock-handler unit test, but intentionally not a search or model E2E.
+
+SDK inspection confirms eager completion uses truncateToolResultContent for
+strings/errors and serializeStructuredValueBounded for structured results,
+with the agent-specific size limit. The adapter currently uses unbounded
+JSON serialization instead; correcting this difference remains required
+before committing/deploying the mixed implementation as release-ready.
+
+Subsequent correction replaces production JSON serialization with the installed
+SDK's own truncateToolResultContent and serializeStructuredValueBounded,
+using graph agent context limits where provided. The integration command now
+compares empty, long, structured, circular and error outputs with the installed
+SDK and passes all five cases. Actual-source copy upgrade, syntax and repeat
+application also pass. The structured serializer is not a public package
+export: the patch resolves its path relative to the installed CommonJS entry.
+This is an explicit SDK-version compatibility dependency; upgrade validation
+must run the integration command. It is not proof of graph persistence or
+real-model E2E, which remain open.
+
+## Persistence defect reproduced (open)
+
+`node scripts/verify-librechat-tool-persistence.mjs /Users/taka/projects/LibreChat`
+fails with `Provider tool evidence is lost by saveResponseOutput`.
+The probe reads the actual controller's saveResponseOutput function and runs
+it with an in-memory saveMessage stub: summary text is saved, while a distinct
+provider function_call_output marker is not. No MongoDB connection or live
+conversation mutation is involved. This verifies a source-level persistence
+loss, not the behavior of every native model continuation.
+
+The controller's saveInputMessages also saves only user-role input. Current
+MultiContext ordered continuation re-injects the current response's tool
+transcript, which can bridge the immediate turn, but is not evidence that
+earlier tool evidence survives subsequent turns. Before claiming durable
+knowledge extraction, tool evidence must have a persisted representation
+and replay must avoid duplicating calls already present in history. The probe
+is intentionally failing until that contract is implemented; it is a manual
+integration gate, not included in the default Node unit suite.
+
+Persistence implementation preparation: inspected LibreChat's actual
+api/app/clients/prompts/formatMessages.js. It expects a preceding text part
+with tool_call_ids and a tool_call part containing id/name/args/output. It
+creates a ToolMessage with `output || ''`, so persisting an unresolved call
+would incorrectly create an empty result. Added completedToolContent and
+deduplicateToolHistory helpers with four passing tests: retain completed
+evidence, distinguish empty from pending, deduplicate without mutation/text
+loss, and reject conflicting replay. These helpers are not yet connected to
+controller persistence; the persistence integration gate still fails.
+
+Controller integration checkpoint: the patch now saves completed response
+tools as native LibreChat content, saves completed tool round-trip inputs,
+deduplicates stored tool history, and excludes matching saved pairs from
+immediate continuation replay. Pending calls are never persisted as completed
+tools. Five history unit tests and four patch tests pass.
+
+The previously failing persistence probe now passes against the patched copy:
+`node scripts/verify-librechat-tool-persistence.mjs /tmp/mcc-patch-upgrade.FPZl2J /Users/taka/projects/LibreChat`.
+Its optional second path loads the installed LibreChat formatter; replay
+contains exactly one AI tool call, its real ToolMessage output, then summary
+text even when history includes a duplicate saved pair. Controller syntax
+and patch idempotence also pass. This tests source persistence arguments with
+an in-memory DB stub, not an actual MongoDB save/load cycle. Live deployment
+and real-model mixed E2E remain outstanding.

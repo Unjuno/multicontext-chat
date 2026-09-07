@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import mixedHandler from '../scripts/librechat-mixed-handler.cjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const patchScript = path.resolve(here, '../scripts/patch-librechat.mjs');
@@ -28,6 +29,9 @@ function fixture() {
   fs.writeFileSync(controller, [
     "const { v4: uuidv4 } = require('uuid');",
     "const db = require('~/models');",
+    "async function saveInputMessages(req, conversationId, inputMessages, agentId) {",
+    "}",
+    "      text: responseText,",
     "  const request = envelope.payload;",
     "  const { principal } = envelope;",
     "      model_parameters: agent.model_parameters ?? {},",
@@ -51,11 +55,13 @@ function fixture() {
     "      const toolExecuteOptions = {",
     "        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {",
     "          const ctx =",
+    "        on_tool_execute: createToolExecuteHandler(toolExecuteOptions),",
     "      const toolEndCallback = createToolEndCallback({ req, res, artifactPromises, streamId: null });",
     "",
     "      const toolExecuteOptions = {",
     "        loadTools: async (toolNames, agentId, _configurable, callerCapabilityProjection) => {",
     "          const ctx =",
+    "        on_tool_execute: createToolExecuteHandler(toolExecuteOptions),",
     "      await run.processStream({ messages: formattedMessages }, config, {",
     "        callbacks: {",
     "          [Callback.TOOL_ERROR]: (graph, error, toolId) => {",
@@ -82,6 +88,10 @@ test('LibreChat patch is idempotent and preserves developer + conversation conti
   const { root, service, controller } = fixture();
   const first = runPatch(root);
   assert.equal(first.status, 0, first.stderr || first.stdout);
+  const patchedController = fs.readFileSync(controller, 'utf8');
+  assert.ok(patchedController.includes(mixedHandler.createMixedOwnershipHandler.toString()));
+  assert.equal((patchedController.match(/on_tool_execute: createMixedOwnershipHandler/g) || []).length, 1);
+  assert.equal((patchedController.match(/on_tool_execute: createToolExecuteHandler/g) || []).length, 1);
   const second = runPatch(root);
   assert.equal(second.status, 0, second.stderr || second.stdout);
   assert.match(second.stdout, /already patched/);
