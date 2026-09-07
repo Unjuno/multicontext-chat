@@ -970,6 +970,9 @@ aside h3 {
   max-height: 300px;
   overflow-y: auto;
 }
+.compile-result-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.compile-result-meta strong { color: var(--text); font-size: 12px; }
+.compile-result-meta span { color: var(--text-muted); }
 .md-heading { display: inline-block; margin: 8px 0 2px; line-height: 1.35; }
 .md-heading-1 { font-size: 16px; }
 .md-heading-2 { font-size: 14px; }
