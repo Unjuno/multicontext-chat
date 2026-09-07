@@ -603,7 +603,12 @@ export class StateStore {
 
 export function publicMember(member, includeMessages = true) {
   const { conversationId: _cid, current: _cur, lastRun: _lr, ...rest } = member;
-  return { ...rest, inFlight: Boolean(member.current), messages: includeMessages ? member.messages : [] };
+  return {
+    ...rest,
+    inFlight: Boolean(member.current),
+    runningSince: member.current?.startedAt || null,
+    messages: includeMessages ? member.messages : [],
+  };
 }
 
 const stripPrivateMessageFields = (m) => ({ role: m.role, content: String(m.content || '') });

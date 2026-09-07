@@ -1199,7 +1199,7 @@ function renderOrchestratorBar(data) {
   const liveMembers = Object.values(lastWorkspace?.members || {}).filter(member => member.active !== false);
   const runningMembers = liveMembers.filter(member => member.status === 'running').length;
   const oldestRunningAt = liveMembers
-    .map(member => member.current?.startedAt)
+    .map(member => member.runningSince)
     .filter(Boolean)
     .sort()[0];
   const runningElapsed = oldestRunningAt
