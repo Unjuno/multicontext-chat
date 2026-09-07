@@ -2107,6 +2107,7 @@ $('#newWorkspace').onclick = async (e) => {
   name.value = '';
   if (chatCount) chatCount.value = '2';
   updateWorkspaceNameCount();
+  updateWorkspaceChatCountHint();
   if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
   setTimeout(() => name.focus(), 0);
 };
@@ -2123,10 +2124,22 @@ $('#newWorkspaceDialog')?.addEventListener('click', (event) => {
 });
 const newWorkspaceName = $('#newWorkspaceName');
 const newWorkspaceNameCount = $('#newWorkspaceNameCount');
+const newWorkspaceChatCount = $('#newWorkspaceChatCount');
+const newWorkspaceChatCountHint = $('#newWorkspaceChatCountHint');
 const updateWorkspaceNameCount = () => {
   if (newWorkspaceNameCount && newWorkspaceName) newWorkspaceNameCount.textContent = `${newWorkspaceName.value.length} / 120`;
 };
+const updateWorkspaceChatCountHint = () => {
+  if (!newWorkspaceChatCountHint || !newWorkspaceChatCount) return;
+  const count = Number(newWorkspaceChatCount.value || 2);
+  newWorkspaceChatCountHint.textContent = count <= 2
+    ? '少人数で問いを比較する構成です。作成後に各チャットへ役割とAgentを設定できます。'
+    : count <= 4
+      ? '複数の視点を並列に試す構成です。作成後に各チャットへ役割とAgentを設定できます。'
+      : '多視点で回答を比較する構成です。実行時間とAgent使用量はチャット数に応じて増えます。';
+};
 newWorkspaceName?.addEventListener('input', updateWorkspaceNameCount);
+newWorkspaceChatCount?.addEventListener('change', updateWorkspaceChatCountHint);
 $('#newWorkspaceDialog')?.addEventListener('close', () => $('#newWorkspace')?.focus());
 $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
   event.preventDefault();
