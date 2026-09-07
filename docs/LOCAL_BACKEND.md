@@ -75,3 +75,12 @@ inspection confirmed the built app reaches the main workspace screen with the
 existing saved LibreChat configuration (32 workspaces retained). No existing
 workspace was edited. This verifies legacy startup only; it does not certify fresh
 local onboarding, backup-button clicking, or a restored real-model GUI session.
+
+Real-model restore checkpoint: `node scripts/smoke-local-restore.mjs` completed
+successfully in `data/experiments/local-restore-1788817556409/`. Direct GPT-OSS
+issued one `search_sources` call; the pending conversation was snapshotted and
+restored to another directory. The restored instance executed the actual search,
+continued with its real output, and finished without another tool call, citing a
+returned DOI. Original transcript bytes were unchanged. `evidence.json` retains
+both model turns, tool output, and backup location. This exercises actual model
+and search behavior, but not full Scheduler crash recovery or GUI restoration.
