@@ -165,13 +165,13 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       try {
         const agents = await app.listAgents();
         return json(res, 200, { agents });
-      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (url.pathname === '/api/workspaces' && req.method === 'GET') {
       try {
         const workspaces = await app.listWorkspaces({ includeArchived: url.searchParams.get('include_archived') === 'true' });
         return json(res, 200, { workspaces });
-      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (url.pathname === '/api/workspaces' && req.method === 'POST') {
       try {
@@ -246,7 +246,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
           at: new Date().toISOString(),
         };
         return json(res, 200, { ok: true, focus: pendingFocus });
-      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (parts[3] === 'members' && parts.length === 4 && req.method === 'POST') {
       try {
@@ -277,7 +277,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       }
       if (parts.length === 5 && req.method === 'DELETE') {
         try { await app.deleteChat(workspaceId, memberId); return json(res, 204, null); }
-        catch (e) { return json(res, e.status || 500, { error: e.message }); }
+        catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
       }
       if (parts[5] === 'enqueue' && req.method === 'POST') {
         try {
@@ -288,7 +288,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       }
       if (parts[5] === 'retry' && req.method === 'POST') {
         try { const view = await app.retryChat(workspaceId, memberId); return json(res, 202, enrichView(view, req)); }
-        catch (e) { return json(res, e.status || 500, { error: e.message }); }
+        catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
       }
       if (parts[5] === 'trim-history' && req.method === 'POST') {
         try {
@@ -302,7 +302,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
           const view = await app.stopChat(workspaceId, memberId);
           return json(res, 200, enrichView(view, req));
         }
-        catch (e) { return json(res, e.status || 500, { error: e.message }); }
+        catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
       }
     }
     if (parts[3] === 'broadcast' && req.method === 'POST') {
@@ -348,7 +348,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         const view = await app.stopWorkspace(workspaceId);
         return json(res, 200, enrichView(view, req));
       }
-      catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (parts[3] === 'compile' && req.method === 'POST') {
       try {
@@ -367,7 +367,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
     }
     if (parts[3] === 'orchestrator' && req.method === 'GET') {
       try { return json(res, 200, store.getOrchestratorState(workspaceId)); }
-      catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (parts[3] === 'orchestrator' && parts[4] === 'pause' && req.method === 'POST') {
       try {
@@ -377,7 +377,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         // like the MCP pause tool. Response shape unchanged for the GUI.
         const { paused: v } = app.setOrchestratorPaused(workspaceId, paused);
         return json(res, 200, { paused: v, orchestrator: store.getOrchestratorState(workspaceId) });
-      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (parts[3] === 'messages' && req.method === 'GET') {
       const chatId = url.searchParams.get('chat_id') || parts[4];
@@ -387,7 +387,7 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
         const since = url.searchParams.get('since');
         const msgs = await app.getChatMessages(workspaceId, chatId, { limit, since });
         return json(res, 200, { messages: msgs });
-      } catch (e) { return json(res, e.status || 500, { error: e.message }); }
+      } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     return false;
   }
