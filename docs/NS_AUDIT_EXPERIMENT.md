@@ -304,3 +304,17 @@ fails its both-members-complete condition, and scientific correctness fails.
 The running LibreChat still uses the old text-only persistence path; the new
 host patch must be exercised before attributing all continuation behavior to
 the model alone. `npm run check`: 299 total, 296 pass, 0 fail, 3 skip.
+
+## Host source upgrade checkpoint
+
+Applied the repository patch to the actual `/Users/taka/projects/LibreChat`
+checkout after backing up responses.js, service.ts and packages/api/dist to
+`/tmp/librechat-before-mcc-upgrade.19H9es`. Existing source modifications were
+preserved by the migration script. Controller syntax passed and
+`npm exec -- tsdown` in packages/api completed successfully.
+
+PID 82907 still runs the old in-memory controller. No restart was performed.
+Read-only MultiContext workspace listings at ports 4317 and 4897 showed only
+SETTLED or BLOCKED workspaces, not RUNNING; this does not establish whether an
+independent LibreChat client is using that service. Restart coordination is
+required before claiming the new host code has been exercised by the model.
