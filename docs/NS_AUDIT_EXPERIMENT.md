@@ -209,3 +209,22 @@ text even when history includes a duplicate saved pair. Controller syntax
 and patch idempotence also pass. This tests source persistence arguments with
 an in-memory DB stub, not an actual MongoDB save/load cycle. Live deployment
 and real-model mixed E2E remain outstanding.
+
+## Actual database persistence verification
+
+Added and ran `scripts/verify-librechat-tool-database.mjs` with the patched
+source copy and installed LibreChat runtime, loading MONGO_URI without printing
+it. The script creates a unique audit database, uses installed createModels /
+createMethods, executes patched controller saveResponseOutput/saveInputMessages,
+reads via loadPreviousMessages, then formats deduplicated history with the
+installed formatter. Synthetic provider evidence and cross-chat receipt are
+restored once each, in call/output order. No existing conversation is changed.
+
+Clean pass: database `multicontext_audit_1788812881634_4dcde948`, conversation
+`53150a3d-8349-4e15-acf3-a9dc8f2773a7`; two stored documents, two restored calls.
+Records are retained for later inspection. Initial pass database
+`multicontext_audit_1788812859907_8aa9449e` also remains; that run completed
+assertions but reported interrupted background index creation at disconnect.
+The verifier now disables automatic index/collection initialization and the
+second run exited cleanly. This is actual MongoDB round-trip evidence with
+synthetic inputs, not an actual model/search invocation or live deployment.
