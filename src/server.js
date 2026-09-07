@@ -218,7 +218,14 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       } catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
     if (parts.length === 3 && req.method === 'DELETE') {
-      try { const body = await readBody(req); await app.deleteWorkspace(workspaceId, { confirmName: body.confirm_name ?? body.confirmName ?? '' }); return json(res, 204, null); }
+      try {
+        const body = await readBody(req);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+          throw Object.assign(new Error('ワークスペース削除の入力はJSONオブジェクトで指定してください'), { status: 400, code: 'INVALID_REQUEST_BODY' });
+        }
+        await app.deleteWorkspace(workspaceId, { confirmName: body.confirm_name ?? body.confirmName ?? '' });
+        return json(res, 204, null);
+      }
       catch (e) { return json(res, e.status || 500, { error: e.message, code: e.code }); }
     }
 
