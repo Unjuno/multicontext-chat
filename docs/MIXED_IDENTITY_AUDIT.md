@@ -34,3 +34,18 @@ Agent was modified and no direct database workaround was used. An authenticated
 Agent-management session or a dedicated calculator-enabled Agent is needed for
 this real-model fixture. This is a specific unfulfilled E2E prerequisite, not
 evidence that the executor-contract test covers the model path.
+
+Prepared real-model command (not yet executed with an eligible Agent):
+
+```sh
+node --env-file=.env scripts/smoke-research-flywheel.mjs CALCULATOR_ENABLED_AGENT_ID --calculator
+```
+
+The experiment uses a new isolated workspace and actual canonical cross-chat
+delivery. It requires a recorded calculator call/result and an external call in
+one aggregated response, then verifies conversation continuity and exactly one
+provider result in the next ordered continuation. Existing search/DOI/reviewer
+checks remain required. A model that omits calculator fails this acceptance check.
+The optional mode has only received syntax/diff checks so far, not runtime proof.
+Even a pass is sequential mixed evidence; it does not certify same-step mixed
+generation or provider-wire parameter propagation.

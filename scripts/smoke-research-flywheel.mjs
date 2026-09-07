@@ -11,6 +11,7 @@ import { LibreChatClient } from '../src/librechat.js';
 
 const agentId = process.argv[2];
 if (!agentId) throw new Error('Specify a configured native LibreChat Agent ID');
+const calculatorProbe = process.argv.includes('--calculator');
 const directory = path.resolve('data/experiments', `research-flywheel-${Date.now()}`);
 fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 const store = new StateStore(path.join(directory, 'state.json'));
@@ -34,7 +35,7 @@ const ws = store.createWorkspace({ name: 'NS source discovery and independent au
 const reviewer = store.addMember(ws.id, { name: 'Evidence auditor', agentId, canSendOthers: false,
   developerPrompt: 'You receive a peer source report. Call search_sources once with source papers and the exact bare DOI as query to check its DOI/title. Use queryMode and lookupStatus from the actual tool result. Compare returned metadata with peer claims. Give a concise audit: supported metadata, unsupported claims, and that global regularity is not established by metadata. Do not call send_to_chat, inspect_chat or list_chats. Do not claim full-text review, DOI resolver access, or general web search: this operation only queries Crossref.' });
 const researcher = store.addMember(ws.id, { name: 'Source researcher', agentId,
-  developerPrompt: `Call search_sources once with source papers, query Navier Stokes regularity, limit 2. Then call send_to_chat once with targets ["${reviewer.id}"] and a report containing the exact returned title, DOI, authors (say absent if missing), year, and the explicit limitation: METADATA_ONLY_NOT_A_PROOF. Do not add claims about the contents or peer review. After sending, finish. Do not inspect or list chats.` });
+  developerPrompt: `${calculatorProbe ? 'First call the LibreChat calculator tool to calculate 17*19. Use its actual output, not mental arithmetic. Then proceed to the search and include the calculator result in your peer report. ' : ''}Call search_sources once with source papers, query Navier Stokes regularity, limit 2. Then call send_to_chat once with targets ["${reviewer.id}"] and a report containing the exact returned title, DOI, authors (say absent if missing), year, and the explicit limitation: METADATA_ONLY_NOT_A_PROOF. Do not add claims about the contents or peer review. After sending, finish. Do not inspect or list chats.` });
 console.log(JSON.stringify({ directory, workspaceId: ws.id, researcher: researcher.id, reviewer: reviewer.id }));
 await app.send(ws.id, researcher.id, 'Find one real source on Navier-Stokes regularity and send the factual source record to the auditor as instructed.');
 let last = '';
@@ -59,4 +60,25 @@ const auditLookups = trace.filter(turn => turn.method === 'continueAgent' && tur
 assert.ok(auditLookups.some(result => result.queryMode === 'exact_doi' && result.lookupStatus === 'found' &&
   final.members[reviewer.id].messages.some(message => message.role === 'assistant' && message.content.includes(result.requestedDoi))),
 'Auditor must perform an exact DOI lookup and cite the actually found DOI');
+if (calculatorProbe) {
+  // Calculator MUST be configured on the saved Agent. Supplying it as a
+  // request-level function would instead make it caller-owned in this protocol.
+  const researcherTurns = trace.filter(turn => turn.input.metadata?.member_id === researcher.id);
+  const mixedTurn = researcherTurns.find(turn => {
+    const items = turn.response.raw?.output || [];
+    return items.some(item => item.type === 'function_call' && item.name === 'calculator' &&
+      items.some(output => output.type === 'function_call_output' && output.call_id === item.call_id && String(output.output).includes('323'))) &&
+      items.some(item => item.type === 'function_call' && ['search_sources', 'send_to_chat'].includes(item.name));
+  });
+  assert.ok(mixedTurn, 'No aggregated provider calculator result plus external call observed; mixed path NOT VERIFIED');
+  const providerCall = mixedTurn.response.raw.output.find(item => item.type === 'function_call' && item.name === 'calculator');
+  const nextTurn = researcherTurns[researcherTurns.indexOf(mixedTurn) + 1];
+  assert.equal(nextTurn?.method, 'continueAgent', 'No native continuation after mixed result');
+  assert.equal(nextTurn.input.conversationId, mixedTurn.response.conversationId, 'Native continuity broken');
+  const replay = nextTurn.input.orderedItems || [];
+  assert.equal(replay.filter(item => item.type === 'function_call_output' && item.call_id === providerCall.call_id).length, 1,
+    'Provider result missing or duplicated in continuation');
+  assert.ok(!JSON.stringify(trace).includes('UNKNOWN_TOOL'), 'Unknown tool result in mixed run');
+  console.log(JSON.stringify({ sequentialMixedEvidence: 'PASS', sameStepMixed: 'NOT_VERIFIED', providerWire: 'NOT_CAPTURED' }));
+}
 console.log(JSON.stringify({ runtimeFlow: 'PASS', researchCorrectness: 'REQUIRES_REVIEW', directory }));
