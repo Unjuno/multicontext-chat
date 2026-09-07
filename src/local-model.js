@@ -44,7 +44,7 @@ export class LocalModelClient {
     if (record.agentId !== agentId) throw new Error('Local conversation model mismatch');
     return record;
   }
-  async generate({ agentId, globalPrompt, developerPrompt, signal }, id, messages) {
+  async generate({ agentId, globalPrompt, developerPrompt, signal }, messages) {
     const instructions = [];
     if (globalPrompt) instructions.push({ role: 'system', content: globalPrompt });
     if (developerPrompt) instructions.push({ role: 'developer', content: developerPrompt });
@@ -61,6 +61,9 @@ export class LocalModelClient {
       if (!call.id || ids.has(call.id) || !call.function?.name) throw new Error('Invalid local tool identity');
       ids.add(call.id);
     }
+    // Immutable response snapshots: a crash before Scheduler commits the new
+    // pointer must leave its old pointer safe for Retry or workspace branching.
+    const id = randomUUID();
     const record = { agentId, messages: [...messages, answer], responseId: data.id };
     await fs.mkdir(this.directory, { recursive: true, mode: 0o700 });
     const file = this.file(id), temporary = `${file}.${randomUUID()}.tmp`;
@@ -72,11 +75,10 @@ export class LocalModelClient {
       raw: { output: (answer.tool_calls || []).map(call => ({ type: 'function_call', call_id: call.id, name: call.function.name, arguments: call.function.arguments })) } };
   }
   async runAgent(args) {
-    const id = args.conversationId || randomUUID();
-    const messages = args.conversationId ? (await this.read(id, args.agentId)).messages
+    const messages = args.conversationId ? (await this.read(args.conversationId, args.agentId)).messages
       : (args.history || []).filter(item => ['user', 'assistant'].includes(item.role)).map(({ role, content }) => ({ role, content }));
     if (messages.at(-1)?.tool_calls?.length) throw new Error('Local conversation has unresolved tools');
-    return this.generate(args, id, [...messages, { role: 'user', content: args.prompt }]);
+    return this.generate(args, [...messages, { role: 'user', content: args.prompt }]);
   }
   async continueAgent(args) {
     const record = await this.read(args.conversationId, args.agentId);
@@ -84,7 +86,7 @@ export class LocalModelClient {
     const outputs = (args.orderedItems || []).filter(item => item.type === 'function_call_output');
     if (!pending.length || outputs.length !== pending.length || new Set(outputs.map(item => item.call_id)).size !== outputs.length ||
       pending.some(call => !outputs.some(item => item.call_id === call.id))) throw new Error('Local continuation tool outputs do not match pending calls');
-    return this.generate(args, args.conversationId, [...record.messages,
+    return this.generate(args, [...record.messages,
       ...outputs.map(item => ({ role: 'tool', tool_call_id: item.call_id, content: item.output }))]);
   }
 }

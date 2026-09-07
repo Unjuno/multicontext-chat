@@ -84,3 +84,16 @@ continued with its real output, and finished without another tool call, citing a
 returned DOI. Original transcript bytes were unchanged. `evidence.json` retains
 both model turns, tool output, and backup location. This exercises actual model
 and search behavior, but not full Scheduler crash recovery or GUI restoration.
+
+Retry isolation correction: responses now write immutable snapshots under new
+UUIDs instead of replacing the transcript referenced by the previous response.
+If a model response is saved but Scheduler never commits its new pointer, retrying
+the old pointer sees the original input, not an extra prompt or unfinished tool
+round. Workspace branches can share a prior pointer without mutating each other.
+Regression tests simulate a discarded response and verify identical retry input
+and independent branch input. This is not a process-kill test of the whole queue.
+
+The real pending-search restore probe was repeated successfully after this change
+in `local-restore-1788817646053`. Immutable snapshots currently retain unreferenced
+records as well as active ones, and backups include them. Safe garbage collection
+and bounded storage policy remain work; do not delete records by age alone.
