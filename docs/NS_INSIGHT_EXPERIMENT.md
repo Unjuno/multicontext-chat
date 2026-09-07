@@ -78,3 +78,24 @@ Regression checks cover observed wrong values, missing fields, invalid JSON,
 null, numeric strings, and correct exponent records. Next targeted repair should
 ask the failing worker to distinguish `||w||` from `E=||w||^2` and solve conjugacy
 equations explicitly, without supplying the expected answers as discoveries.
+
+## One corrective-feedback attempt
+
+`--focused --repair` allows exactly one follow-up to each failing member, using
+its existing conversation. The feedback names mismatched fields and gives a
+calculation strategy, not the expected numeric answers. Original and repaired
+reports/checks are stored separately; failure still prevents synthesis.
+
+Run `ns-insights-1788815595826`, workspace
+`db9a82ce-b8f1-438f-9f5a-8cf8f82e685b`, used three model requests. Initially the
+scaling task passed and the interpolation task failed only `viscosityPower`
+(returned 0.5). After feedback it returned 0 and also changed the previously
+correct `palinstrophyPower` from 0.75 to 1.5. The run was rejected without synthesis.
+Thus corrective feedback in the same context did **not** improve this trial.
+Do not label the mechanism an accuracy improvement or retry indefinitely.
+
+The next research strategy should use independently checked computational steps
+as inputs and reserve model effort for proposing structural assumptions and
+falsification questions. Broad end-to-end utility remains unproven. Separately,
+the original product audit still needs real provider-owned/external mixed-tool
+wire evidence; passing these external-search experiments cannot close that gate.

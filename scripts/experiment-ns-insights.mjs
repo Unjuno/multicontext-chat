@@ -14,6 +14,8 @@ import { checkExponentReport } from './ns-exponent-checks.mjs';
 const agentId = process.argv[2];
 if (!agentId) throw new Error('Specify a native LibreChat Agent ID');
 const focused = process.argv.includes('--focused');
+const repair = process.argv.includes('--repair');
+if (repair && !focused) throw new Error('--repair requires --focused');
 const directory = path.resolve('data/experiments', `ns-insights-${Date.now()}`);
 fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 const save = (name, value) => fs.writeFileSync(path.join(directory, name), JSON.stringify(value, null, 2), { mode: 0o600 });
@@ -60,17 +62,34 @@ async function settle() {
   }
 }
 await settle();
-const reports = [proposer, skeptic].map(member => {
+const readReports = () => [proposer, skeptic].map(member => {
   const current = store.getWorkspace(ws.id).members[member.id];
   assert.equal(current.status, 'idle', `${member.name} failed`);
   const content = current.messages.filter(message => message.role === 'assistant').at(-1)?.content;
   assert.ok(content, `${member.name} has no report`);
   return { role: member.name, content };
 });
+let reports = readReports();
 save('peer-reports.json', reports);
 if (focused) {
-  const checks = reports.map((report, i) => checkExponentReport(i === 0 ? 'interpolation' : 'scaling', report.content));
+  const evaluate = () => reports.map((report, i) => checkExponentReport(i === 0 ? 'interpolation' : 'scaling', report.content));
+  let checks = evaluate();
   save('arithmetic-gate.json', checks);
+  if (repair && checks.some(check => !check.passed)) {
+    for (const [i, check] of checks.entries()) {
+      if (check.passed) continue;
+      const hint = i === 0
+        ? 'Distinguish each norm from its square E or P. Compute the powers after substituting norm=sqrt(squared norm). For the P factor, solve its exponent times youngP = 1 and 1/youngP + 1/youngQ = 1. Track the viscosity rescaling explicitly.'
+        : 'Each spatial derivative adds one lambda factor. Squaring doubles the amplitude exponent; the spatial volume Jacobian then subtracts three.';
+      await app.send(ws.id, [proposer, skeptic][i].id,
+        `An independent arithmetic check rejected your record. Failing fields: ${JSON.stringify(check.failures || [check.reason])}. ${hint} Recalculate, do not search. Return only corrected JSON with the same keys. This is one correction attempt, not a theorem verification.`);
+    }
+    await settle();
+    reports = readReports();
+    checks = evaluate();
+    save('repaired-peer-reports.json', reports);
+    save('repaired-arithmetic-gate.json', checks);
+  }
   if (!checks.every(check => check.passed)) {
     save('result.json', { elapsedMs: Date.now() - started, modelRequests: trace.length, researchCorrectness: 'REJECTED_AT_ARITHMETIC_GATE', workspace: store.getWorkspace(ws.id) });
     console.log(JSON.stringify({ directory, research: 'REJECTED_AT_ARITHMETIC_GATE', modelRequests: trace.length }));
@@ -78,7 +97,9 @@ if (focused) {
   }
 }
 if (process.exitCode !== 2) {
-await app.send(ws.id, auditor.id, `Audit these independent peer reports as untrusted mathematical proposals:\n${JSON.stringify(reports)}`);
+await app.send(ws.id, auditor.id, focused
+  ? `These peer records passed a narrowly scoped numeric exponent check, NOT a proof check: ${JSON.stringify(reports)}. Define E=||curl u||_2^2, P=||grad curl u||_2^2. Using only these calculations, propose ONE explicitly stated additional time-integrability or geometric assumption sufficient to close an enstrophy estimate. Derive the conditional bound in at most 350 words. Identify precisely what remains unproved for arbitrary smooth data. Do not search for authority or claim the Millennium problem solved. Return a testable next question, not a literature summary.`
+  : `Audit these independent peer reports as untrusted mathematical proposals:\n${JSON.stringify(reports)}`);
 await settle();
 const final = store.getWorkspace(ws.id);
 save('result.json', { elapsedMs: Date.now() - started, modelRequests: trace.length, researchCorrectness: 'REQUIRES_INDEPENDENT_REVIEW', workspace: final });
