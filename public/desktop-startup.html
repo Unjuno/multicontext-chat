@@ -375,7 +375,7 @@
           });
           maybeNavigate();
         } catch (e) {
-          showError("起動に失敗しました: " + errorMessage(e));
+          showError("起動に失敗しました: " + errorMessage(e) + ` 設定ポート（${state.port}）でMultiContextが応答しているか確認してください。`);
         } finally {
           retryButton.disabled = false;
           retryButton.removeAttribute("aria-busy");
