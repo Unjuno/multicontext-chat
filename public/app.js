@@ -2070,6 +2070,11 @@ document.addEventListener('keydown', (e) => {
     workspaceSearch?.focus();
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+    e.preventDefault();
+    desktopSettings?.click();
+    return;
+  }
   if (e.key === '/' && !typing && currentId) {
     e.preventDefault();
     document.getElementById('broadcastPrompt')?.focus();
