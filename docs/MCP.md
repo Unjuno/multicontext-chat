@@ -20,7 +20,7 @@ GPT-OSS (llama.cpp)
 
 ## Architecture
 
-- **Thin adapter:** `src/mcp/handler.js` registers 19 tools on a `McpServer` from `@modelcontextprotocol/server` (v2, 2026-07-28 spec). Each tool directly calls `src/application.js` which is the single source of truth for workspace state, agent resolution, broadcast validation, compile gating, etc. `src/server.js` (REST) and `src/mcp/*` (MCP) share that layer; no second orchestration copy.
+- **Thin adapter:** `src/mcp/handler.js` registers 17 tools on a `McpServer` from `@modelcontextprotocol/server` (v2, 2026-07-28 spec). Stop operations are intentionally GUI-only; MCP can continue context extraction and orchestration but cannot interrupt user work. Each tool directly calls `src/application.js` which is the single source of truth for workspace state, agent resolution, broadcast validation, compile gating, etc. `src/server.js` (REST) and `src/mcp/*` (MCP) share that layer; no second orchestration copy.
 - **Transport:** Streamable HTTP integrated into the existing Node server (`http://127.0.0.1:<port>/mcp`). Created via `createMcpHandler` → `handler.fetch(Request)` wrapped for `node:http`. No second daemon. An optional stdio bridge could reuse the same registry but is not required for the normal Desktop path.
 - **Binding:** Default host remains loopback (`127.0.0.1`). The handler validates `Host`/`Origin` via `@modelcontextprotocol/node` guards when mounted behind plain `node:http`; framework wrappers (`express`/`hono`/`fastify`) would arm them by default. Do not expose MCP beyond localhost without understanding DNS rebinding and credential exposure.
 - **Spec version:** Tested against `@modelcontextprotocol/server` 1.x (v2 SDK, Streamable HTTP) and `@modelcontextprotocol/client` 1.x. Configuration examples below use OpenCode's current remote MCP format (December 2025 docs, verified 2026-01-30).
@@ -204,8 +204,6 @@ await mcp.callTool('multicontext_send', { workspace_id: wsId, chat_id: chatIds[1
 | `multicontext_delete_chat` | `workspace_id`, `chat_id` | |
 | `multicontext_broadcast` | `workspace_id`, `prompt 1-100k` | validates before queue |
 | `multicontext_send` | `workspace_id`, `chat_id`, `prompt` | ordinary user |
-| `multicontext_stop_workspace` | `workspace_id` | |
-| `multicontext_stop_chat` | `workspace_id`, `chat_id` | |
 | `multicontext_retry_chat` | `workspace_id`, `chat_id` | |
 | `multicontext_get_runtime_status` | `workspace_id?` | separated layers |
 | `multicontext_compile` | `workspace_id` | only SETTLED, shared guard |

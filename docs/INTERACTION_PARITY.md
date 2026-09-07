@@ -67,8 +67,8 @@ surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op)
 | delete member | `DELETE …/members/:id` | `multicontext_delete_chat` | `app.deleteChat` | = | = | n/a | VERIFIED | |
 | broadcast | `POST …/broadcast` | `multicontext_broadcast` | `app.broadcast` (+`origin`) | = | = | = | VERIFIED | queue/events compared |
 | direct enqueue | `POST …/members/:id/enqueue` | `multicontext_send` | `app.send` (+`origin`) | = | = | = | VERIFIED | |
-| stop member | `POST …/members/:id/stop` | `multicontext_stop_chat` | `app.stopChat` | = | = | n/a | VERIFIED | same abort semantics |
-| stop workspace | `POST …/stop` | `multicontext_stop_workspace` | `app.stopWorkspace` | = | = | n/a | VERIFIED | |
+| stop member | `POST …/members/:id/stop` | GUI only (MCP intentionally unavailable) | `app.stopChat` | GUI only | n/a | n/a | VERIFIED | user-controlled cancellation |
+| stop workspace | `POST …/stop` | GUI only (MCP intentionally unavailable) | `app.stopWorkspace` | GUI only | n/a | n/a | VERIFIED | user-controlled cancellation |
 | retry blocked member | `POST …/members/:id/retry` | `multicontext_retry_chat` | `app.retryChat` | = | = | n/a | VERIFIED | same requeue semantics |
 | compile | `POST …/compile` | `multicontext_compile` | `app.compile` | = | = | n/a | VERIFIED | same preconditions; isolation asserted on both |
 | start run | — | `multicontext_orchestrate_start_run` | `app.startRun` → engine | = | = | = | MCP ONLY | no GUI start-run route by design; engine shared + spy-verified |
