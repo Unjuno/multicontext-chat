@@ -1473,8 +1473,22 @@ async function refresh(expectedId = currentId) {
       currentId = null;
       lastWorkspace = null;
       document.title = 'MultiContext — 並列AIワークスペース';
-      $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースが見つかりません。左の一覧から選び直してください。</div>';
-      refreshList();
+      try {
+        const { workspaces = [] } = await request('/api/workspaces?include_archived=true');
+        const fallback = workspaces
+          .filter((workspace) => !workspace.archived)
+          .sort((a, b) => String(workspaceActivityTimestamp(b)).localeCompare(String(workspaceActivityTimestamp(a))))[0];
+        if (fallback) {
+          await select(fallback.id);
+        } else {
+          $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースがありません。新規作成から始めてください。</div>';
+          await refreshList(null);
+        }
+      } catch (fallbackError) {
+        console.error(fallbackError);
+        $('#app').innerHTML = '<div class="small" style="padding:24px;text-align:center">ワークスペースが見つかりません。左の一覧から選び直してください。</div>';
+        refreshList().catch(() => {});
+      }
     } else {
       const banner = document.createElement('div');
       const hasStaleData = Boolean(lastWorkspace);
