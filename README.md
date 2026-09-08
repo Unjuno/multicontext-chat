@@ -2,8 +2,11 @@
 
 Parallel isolated local LLM chats with per-chat personas, queued cross-chat messaging, built-in source search and calculation, and optional response synthesis. The primary workflow connects directly to a local model server: no LibreChat account, API key, or saved Agent is required. LibreChat integration is optional legacy compatibility, not a prerequisite.
 
-> Release status: the registration-free direct-local core has passed native
-> macOS, MCP, Compile, test, and packaged-bundle verification. Do not distribute
+> Release status: the registration-free direct-local path has recorded native
+> macOS, MCP, Compile, test, and packaged-bundle checkpoints; these are not a
+> fresh GUI certification of every subsequent commit. See the dated/scope-specific
+> [desktop audit](docs/DESKTOP_RESEARCH_AUDIT.md) and
+> [research experiments](docs/RESEARCH_METHOD_AB.md). Do not distribute
 > the unsigned local DMG; Developer ID signing, notarization/stapling, and a
 > final pass on that signed artifact are still required for general distribution.
 
@@ -20,6 +23,32 @@ Parallel isolated local LLM chats with per-chat personas, queued cross-chat mess
 - The application does not decide what an input means or when a model should use those tools. Prompt/model behavior owns that decision.
 - `SETTLED` is a runtime state: no active generation, queued work, or blocked failed turn remains.
 - Compile is manual. Its result is user-facing only and is not injected back into member contexts.
+
+## What the research experiments establish
+
+MultiContext is an orchestration and evidence-recording tool, not a mathematical
+verifier. Real local GPT-OSS Navier–Stokes trials completed searches, calculations,
+peer inspection and continuation, but broad persona reviews repeatedly accepted
+incorrect identities. A successful tool call or agreement between chats does not
+make their conclusion correct. No Millennium problem solution or novel regularity
+result has been established by these experiments.
+
+Bounded single-claim checks recovered some counterexamples and elementary bounds;
+even these sometimes omitted requested derivations or contradicted intermediate
+steps. A review-present/no-review comparison did not demonstrate an accuracy
+benefit from attaching reviews. The results suggest a workflow to test, not a
+proven winning strategy:
+
+1. Define one obligation, its assumptions and a concrete acceptance check.
+2. Let a member work independently with search/calculation before peer exposure.
+3. Inspect the actual tool inputs/results and every inference, not just the verdict.
+4. Record rejected or incomplete claims with source message IDs; revise explicitly.
+5. Share only with those assessments attached. Treat Compile as unverified synthesis.
+
+Native peer inspection carries the target's latest eight review records and an
+omitted-record count. Reviews are self-reported assessments, not proof certificates;
+retrieve missing evidence before relying on a truncated handoff. For all successes,
+failures, controls and limitations, see the [experiment record](docs/RESEARCH_METHOD_AB.md).
 
 ## Quick start — local model, no registration
 
