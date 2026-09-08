@@ -35,6 +35,22 @@ test('zero discovered Agents -> missing', async () => {
 });
 
 // 2 exactly one -> auto selected/persisted
+test('local empty discovery gives registration-free recovery guidance without enqueueing', async () => {
+  const store = makeStore();
+  const client = mock([]);
+  const scheduler = new Scheduler({ store, client });
+  const app = createApplication({ config: makeConfig({ backend: 'local' }), store, client, scheduler });
+  const ws = await app.createWorkspace({ name: 'Local empty' });
+  await app.addChat(ws.id, { name: 'A' });
+  const member = Object.values(store.getWorkspace(ws.id).members)[0];
+  const before = JSON.stringify(store.getWorkspace(ws.id));
+  for (const operation of [() => app.broadcast(ws.id, 'test'), () => app.send(ws.id, member.id, 'test')]) {
+    await assert.rejects(operation, e => e.code === 'AGENT_SELECTION_REQUIRED' &&
+      e.message.includes('ローカル推論サーバー') && e.message.includes('登録は不要'));
+    assert.equal(JSON.stringify(store.getWorkspace(ws.id)), before);
+  }
+});
+
 test('exactly one discovered Agent -> auto selected/persisted', async () => {
   const store = makeStore();
   const single = [{ id: 'solo', name: 'Solo' }];

@@ -57,6 +57,9 @@ function sanitizeWorkspace(workspace, runtimeState, runningMemberIds, includeMes
 }
 
 export function createApplication({ config, store, client, scheduler } = {}) {
+  const noAgentsMessage = config?.backend === 'local'
+    ? '利用可能なローカルモデルがありません。ローカル推論サーバーを起動してモデルを読み込み、設定の接続先URLを確認してください。LibreChatへの登録は不要です。'
+    : '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
   if (!store || !client || !scheduler) throw new Error('store/client/scheduler required');
   let cachedDefaultAgentId = null;
   let cachedDefaultFetchedAt = 0;
@@ -209,7 +212,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
         if (!updated.defaultAgentId) store.updateWorkspace(workspace.id, { defaultAgentId: single });
         return single;
       }
-      throw problem('利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
+      throw problem(noAgentsMessage, 400, AGENT_SELECTION_REQUIRED);
     }
     const agents = availableAgents ?? await requireFreshAgents();
     if (agents.length && !validateAgentId(effective, agents)) {
@@ -229,7 +232,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     for (const m of Object.values(workspace.members).filter(x => x.active)) {
       const eff = String(m.agentId || workspace.defaultAgentId || '').trim();
       if (!eff) {
-        if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
+        if (agents.length === 0) throw problem(noAgentsMessage, 400, AGENT_SELECTION_REQUIRED);
         if (agents.length > 1 && !workspace.defaultAgentId && !m.agentId) throw problem('複数のAgentが存在します。ワークスペースまたはチャットで使用するAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
         // single agent case would have been auto-resolved via ensure, so this is config error
         throw problem('Agentが未設定です。ワークスペースの既定Agentを設定するか、各チャットでAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
@@ -519,7 +522,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       } else if (agents.length > 1) {
         throw problem('複数のAgentが存在します。ワークスペースまたはチャットで使用するAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
       } else if (agents.length === 0) {
-        throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 400, AGENT_SELECTION_REQUIRED);
+        throw problem(noAgentsMessage, 400, AGENT_SELECTION_REQUIRED);
       }
     }
     const updatedWs = store.requireWorkspace(workspaceId);
@@ -569,7 +572,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       }
     }
     if (!effective) {
-      if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 400, AGENT_SELECTION_REQUIRED);
+      if (agents.length === 0) throw problem(noAgentsMessage, 400, AGENT_SELECTION_REQUIRED);
       if (agents.length > 1) throw problem('複数のAgentが存在します。ワークスペースまたはチャットで使用するAgentを選択してください。', 400, AGENT_SELECTION_REQUIRED);
       throw problem('Agentが未設定です。', 400, AGENT_SELECTION_REQUIRED);
     }
@@ -656,7 +659,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
         effective = String(agents[0].id);
       }
       if (!effective) {
-        if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 400, AGENT_SELECTION_REQUIRED);
+        if (agents.length === 0) throw problem(noAgentsMessage, 400, AGENT_SELECTION_REQUIRED);
         throw problem(`チャット "${t.name}" のAgentが未設定です。ワークスペースの既定エージェントを選択してください。`, 400, AGENT_SELECTION_REQUIRED);
       }
       if (!agents.some(a => String(a.id) === String(effective))) {
@@ -764,7 +767,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       const status = await getAvailableAgentsWithStatus(true);
       if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
       const agents = status.agents;
-      if (agents.length === 0) throw problem('利用可能なLibreChat Agentがありません。', 400, AGENT_SELECTION_REQUIRED);
+      if (agents.length === 0) throw problem(noAgentsMessage, 400, AGENT_SELECTION_REQUIRED);
       if (agents.length > 1) throw problem('Compileに使用するAgentが未設定です。compile_agent_id またはワークスペース既定Agentを設定してください。', 400, AGENT_SELECTION_REQUIRED);
     }
     // Validate stale

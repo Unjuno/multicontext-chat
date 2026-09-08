@@ -186,3 +186,16 @@ rerun successfully; output is `/tmp/mcc-blocked-audit-tests.log`. Their fixture
 coverage does not prove recovery of these real conversations. Actual recovery
 would need an explicit choice of Agent/context handling or continued research;
 do not erase the blocked records merely to make the status panel green.
+
+### Registration-free missing-model guidance
+
+Canonical application operations previously told users to create a LibreChat
+Agent even with `backend: local` and a successful but empty model discovery.
+They now share a backend-specific missing-model message: local users are told
+to start the local inference server, load a model, and check its URL, explicitly
+without LibreChat registration. The existing error code remains
+`AGENT_SELECTION_REQUIRED`. A regression checks both broadcast and direct-send
+rejection and verifies the whole workspace stays unchanged; the focused Agent
+resolution suite passes 30/30. This change addresses empty-discovery guidance,
+not every transport-error translation or legacy scheduler message. Running and
+packaged builds have not yet been refreshed for this wording change.
