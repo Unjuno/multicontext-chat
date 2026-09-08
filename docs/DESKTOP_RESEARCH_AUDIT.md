@@ -1,5 +1,17 @@
 # Desktop research build audit — 2026-09-08
 
+## Current product scope (supersedes earlier blocking conclusions below)
+
+The user explicitly removed LibreChat from the required workflow. Acceptance now
+targets registration-free direct-local orchestration; legacy LibreChat mixed-tool
+E2E remains unverified optional compatibility, not a blocker for this local path.
+No integration code, saved settings, or legacy data was deleted or silently
+migrated. The running desktop's existing LibreChat selection is not evidence of
+native direct-local onboarding. That flow, current final-artifact checks, and
+signed distribution requirements must still be judged on their own evidence.
+Earlier login-wait conclusions are historical and no longer a reason to halt
+the local product audit. See `RELEASE_CHECKLIST.md` for the current gates.
+
 Application code audited: `f8e0971`, including source-linked GUI reviews, observed
 search evidence, registration-free local model orchestration, and reviewed MCP
 handoff. The subsequent changes in this audit affect verification scripts/tests.

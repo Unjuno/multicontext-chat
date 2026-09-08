@@ -2,10 +2,11 @@
 
 The Node runtime can connect directly to a loopback OpenAI-compatible model server,
 without LibreChat, MongoDB, an account, API key, or saved LibreChat Agent.
+This is the required product path; LibreChat compatibility is optional.
 Existing LibreChat configuration remains unchanged by default.
 
 ```sh
-MULTICONTEXT_BACKEND=local MULTICONTEXT_LOCAL_MODEL_URL=http://127.0.0.1:8080 npm start
+MULTICONTEXT_BACKEND=local MULTICONTEXT_LOCAL_MODEL_URL=http://127.0.0.1:8080 MULTICONTEXT_DATA_FILE=./data/local-state.json npm start
 ```
 
 Start a tool-capable local model server first. Model discovery uses `/v1/models`;
@@ -24,7 +25,8 @@ Transcripts are saved beside the configured state file in
 atomic replacement. Tool outputs must match pending call IDs exactly. Instructions
 are rebound per request, and the same canonical Scheduler executes external tools.
 Do not delete transcript files for active conversations. These files currently
-need to be included separately in backups.
+are included with state by the local backup operation described below. If copying
+manually, include both the state file and its adjacent conversation directory.
 
 ## Evidence and remaining product work
 
@@ -37,10 +39,11 @@ unmatched outputs, model mismatch, remote endpoints, and invalid conversation ID
 Full check: 311 total / 308 pass / 0 fail / 3 skip before the experiment selector
 change; that selector was subsequently exercised in the successful real run.
 
-Still pending: desktop first-run/backend settings and managed launch integration,
+At the initial adapter checkpoint, pending work included desktop first-run/backend settings and managed launch integration,
 backup/delete lifecycle integration, crash-window/retry tests, long-context policy,
-and built-in computation tools. This is a working server path, not yet a completed
-registration-free desktop onboarding experience. Old LibreChat workspaces must not
+and built-in computation tools. Later checkpoints below supersede that initial
+implementation status; they do not collectively certify all native onboarding interactions.
+Old LibreChat workspaces must not
 be blindly opened against the local backend: their conversation IDs are incompatible.
 
 Desktop integration checkpoint: new configurations now default to local while

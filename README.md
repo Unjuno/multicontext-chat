@@ -1,6 +1,6 @@
 # MultiContext Chat
 
-Parallel isolated LLM chats with per-chat prompts/tools, queued cross-chat messaging, and optional response compression. LibreChat supplies the Agent runtime, model/provider integrations, Web Search, MCP, code execution, knowledge, and other existing tools.
+Parallel isolated local LLM chats with per-chat personas, queued cross-chat messaging, built-in source search and calculation, and optional response synthesis. The primary workflow connects directly to a local model server: no LibreChat account, API key, or saved Agent is required. LibreChat integration is optional legacy compatibility, not a prerequisite.
 
 > Release status: macOS internal verification build. Core workspace, queue,
 > Agent selection, retry/stop, Compile, and external MCP flows are usable, but
@@ -21,7 +21,25 @@ Parallel isolated LLM chats with per-chat prompts/tools, queued cross-chat messa
 - `SETTLED` is a runtime state: no active generation, queued work, or blocked failed turn remains.
 - Compile is manual. Its result is user-facing only and is not injected back into member contexts.
 
-## LibreChat modes
+## Quick start — local model, no registration
+
+Start a tool-capable local model server on `http://127.0.0.1:8080`, then run:
+
+```bash
+npm run check
+MULTICONTEXT_BACKEND=local MULTICONTEXT_LOCAL_MODEL_URL=http://127.0.0.1:8080 MULTICONTEXT_DATA_FILE=./data/local-state.json npm start
+```
+
+Open `http://127.0.0.1:4317` and select the discovered model. Personas are configured
+in MultiContext chats. Search requires internet access but no search-service account;
+retrieved metadata is not proof. See [local setup](docs/LOCAL_BACKEND.md).
+
+The separate local state file avoids reusing LibreChat conversation identifiers.
+New desktop configurations default to local mode; existing saved desktop settings
+are preserved and may still select LibreChat. Change the backend in desktop settings
+to use local mode; do not rename legacy state files to force a migration.
+
+## Optional LibreChat modes
 
 ### `native` (default)
 
@@ -46,7 +64,7 @@ Native mode stores one stable LibreChat conversation id per MultiContext member 
 
 Works with stock LibreChat. MultiContext owns each member's bounded history, sends `store:false`, and replays that member history on every turn. The request boundary still contains separate `system` and `developer` items, but stock LibreChat may normalize them internally.
 
-## Quick start
+## Optional legacy LibreChat setup
 
 ```bash
 cp .env.example .env
