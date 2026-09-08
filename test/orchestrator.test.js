@@ -48,6 +48,16 @@ test('orchestrator create_session preset creates 4 members', async () => {
     'A — Geometric Measure Analyst', 'B — Harmonic Analyst', 'C — Computer-Assisted Skeptic', 'D — Adversarial Auditor',
   ]);
   assert.match(PRESETS['navier-stokes-geometric-4'].seedPrompt, /THEOREM/);
+  assert.deepEqual(PRESETS['evidence-obligation-4'].members.map((m) => m.name), [
+    'A — Claim Formalizer', 'B — Source Auditor', 'C — Falsification Checker', 'D — Integration Auditor',
+  ]);
+  assert.match(PRESETS['evidence-obligation-4'].seedPrompt, /Phase 1 only/);
+  assert.match(PRESETS['evidence-obligation-4'].seedPrompt, /separate audit phase/);
+  assert.match(PRESETS['evidence-obligation-4'].members[2].developerPrompt, /actual returned values/);
+  assert.match(PRESETS['evidence-obligation-4'].members[0].developerPrompt, /Do not list tautological definition checks/);
+  assert.match(PRESETS['evidence-obligation-4'].members[1].developerPrompt, /at most three searches/);
+  assert.match(PRESETS['evidence-obligation-4'].members[2].developerPrompt, /check every domain hypothesis/);
+  assert.match(PRESETS['evidence-obligation-4'].members[3].developerPrompt, /without calling any peer tool/);
 });
 
 test('orchestrator distill truncates', async () => {

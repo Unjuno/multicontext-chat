@@ -78,6 +78,21 @@ test('MCP preset creation persists independent tool access and search evidence g
   });
 });
 
+test('evidence-obligation preset creates four bounded roles without generation', async () => {
+  await withMcpServer({ listAgents: async () => singleAgent }, async ({ store, client: mcp }) => {
+    const response = await mcp.callTool({ name: 'multicontext_orchestrate_create_session', arguments: { preset: 'evidence-obligation-4' } });
+    assert.ok(!response.isError);
+    const workspace = Object.values(store.state.workspaces)[0];
+    assert.deepEqual(Object.values(workspace.members).map(m => m.name), [
+      'A — Claim Formalizer', 'B — Source Auditor', 'C — Falsification Checker', 'D — Integration Auditor',
+    ]);
+    const queued = store.peekOrchestratorQueue(workspace.id);
+    assert.equal(queued.length, 1);
+    assert.match(queued[0].prompt, /Phase 1 only/);
+    assert.ok(Object.values(workspace.members).every(m => m.messages.length === 0 && m.queue.length === 0));
+  });
+});
+
 test('MCP research handoffs retain rejected assessments, source IDs and search evidence without mutation', async () => {
   await withMcpServer({ listAgents: async () => singleAgent }, async ({ store, client: mcp }) => {
     const ws = store.createWorkspace({});

@@ -11,7 +11,8 @@ import { PRESETS } from '../src/mcp/orchestrator.js';
 if (!process.argv[2]) throw new Error('Pass saved continuation-probe result.json');
 const order = process.env.MULTICONTEXT_NS_REVIEW_ORDER || 'AB';
 const presetReview = process.env.MULTICONTEXT_NS_PRESET_REVIEW === '1';
-if (presetReview && (order !== 'AB' || process.env.MULTICONTEXT_NS_BLIND_FIRST === '1' || process.env.MULTICONTEXT_NS_ATOMIC === '1')) {
+const obligationReview = process.env.MULTICONTEXT_NS_OBLIGATION_REVIEW === '1';
+if ((presetReview || obligationReview) && (order !== 'AB' || process.env.MULTICONTEXT_NS_BLIND_FIRST === '1' || process.env.MULTICONTEXT_NS_ATOMIC === '1' || (presetReview && obligationReview))) {
   throw new Error('Preset review cannot be combined with another experiment variant');
 }
 if (!['AB', 'BA'].includes(order)) throw new Error('MULTICONTEXT_NS_REVIEW_ORDER must be AB or BA');
@@ -67,8 +68,16 @@ if (presetReview) {
     prompt: candidates,
   })));
 }
+if (obligationReview) {
+  arms.splice(0, arms.length, ...PRESETS['evidence-obligation-4'].members.map(member => ({
+    name: member.name,
+    instruction: member.developerPrompt,
+    prompt: candidates,
+  })));
+}
 if (order === 'BA') arms.reverse();
-await save('setup.json', { model, instruction, candidates, source: path.resolve(process.argv[2]), order, variant: presetReview ? 'preset-independent-review' : 'review', arms });
+await save('setup.json', { model, instruction, candidates, source: path.resolve(process.argv[2]), order,
+  variant: presetReview ? 'preset-independent-review' : obligationReview ? 'evidence-obligation-phase-1' : 'review', arms });
 console.log(JSON.stringify({ directory }));
 for (const arm of arms) {
   const member = store.addMember(workspace.id, { name: arm.name, agentId: model, developerPrompt: arm.instruction || instruction, canSendOthers: false });

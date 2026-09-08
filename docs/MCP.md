@@ -132,12 +132,22 @@ run creation) keeps waiting rather than clearing. Pure helpers live in
 
 **Research presets:** `multicontext_orchestrate_create_session` accepts
 `navier-stokes-4`, `navier-stokes-adversarial-4`,
-`navier-stokes-proof-builder-4`, and `navier-stokes-geometric-4`. The geometric
+`navier-stokes-proof-builder-4`, `navier-stokes-geometric-4`, and
+`evidence-obligation-4`. The geometric
 variant combines singular-set geometry, critical-space analysis,
 computer-assisted sanity checks, and adversarial auditing. For reliable
 knowledge accumulation, use bounded prompts with `THEOREM`, `GAP`, `CHECK`, and
 `CONFIDENCE` labels; run Compile only after the workspace is confirmed
 `SETTLED`.
+
+`evidence-obligation-4` is the domain-neutral research flywheel preset. It
+separates claim formalization, primary-source support, concrete
+calculation/falsification, and integration audit. Session creation only queues
+its Phase 1 instructions; it does not generate automatically. Run Phase 1,
+wait for `SETTLED`, inspect the actual evidence, attach rejected or needs-check
+reviews, and explicitly send a later audit prompt to the Integration Auditor.
+Do not combine the phases into one broadcast: a peer answer, review label,
+successful search, calculator output, or Compile result is not proof.
 
 **Manual minimal:**
 

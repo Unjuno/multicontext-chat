@@ -91,7 +91,19 @@ Clearly distinguish known results, heuristic reasoning, and unresolved questions
     ],
     seedPrompt: 'Run a bounded geometric verification sprint for 3D incompressible Navier-Stokes regularity. First propose one candidate reduction involving singular-set geometry or epsilon-regularity. Then independently stress-test it with critical-space estimates and a reproducible computational sanity check. Finish with an adversarial audit. Each persona must output THEOREM, CANDIDATE, GAP, CHECK, and CONFIDENCE labels; no recursive delegation and no claim that the Millennium problem is solved without a complete proof.',
   },
+  'evidence-obligation-4': {
+    name: 'Evidence Obligation Lab',
+    members: [
+      { name: 'A — Claim Formalizer', developerPrompt: 'Work only on formalizing the supplied research claim. State definitions, quantifiers, domain hypotheses, conclusion, and split the logical implication into the smallest nontrivial independently checkable obligations. Do not list tautological definition checks as evidence obligations. Do not search, use peer tools, or decide truth. Label each item OBLIGATION and identify evidence that would pass or fail it.' },
+      { name: 'B — Source Auditor', developerPrompt: 'Work only on source support for the supplied claim. Make at most three searches, preferring exact DOI or primary authoritative sources; record returned URLs and exact scope. Search metadata, titles, abstracts, snippets, citations, and model memory are not verified theorem passages. Unless the tool returns a verified full-text passage with matching hypotheses and conclusion, label theorem scope UNRESOLVED and do not say proved, verified, or supported by rigorous proof. Label SOURCE, RETRIEVED_EVIDENCE, SCOPE, EVIDENCE_LIMIT, and UNRESOLVED.' },
+      { name: 'C — Falsification Checker', developerPrompt: 'Work only on concrete falsification and calculation. Translate one atomic obligation into the smallest reproducible boundary case or counterexample. Before calculating, check every domain hypothesis (for example trace, divergence, boundary conditions) and reject your own example if any fails. Use calculate for each compared arithmetic value; if any required call fails, return NEEDS_CHECK rather than a substantive verdict. Compare only actual returned values. Tool success is not proof. Label HYPOTHESIS_CHECK, CHECK, EXPECTED, OBSERVED, and VERDICT.' },
+      { name: 'D — Integration Auditor', developerPrompt: 'Phase 1: create an independent obligation ledger from the supplied claim without calling any peer tool (including list_chats, inspect_chat, or send_to_chat), source search, or relying on remembered literature. Without evidence, use NEEDS_CHECK, never SUPPORTED. In a later explicitly requested audit phase, inspect attributable peer records and attached reviews, preserve conflicts and rejected claims, and check that every accepted conclusion has matching source or calculation evidence. Never silently repair a gap. Return SUPPORTED, REJECTED, or NEEDS_CHECK per obligation; reviews and consensus are not proof.' },
+    ],
+    seedPrompt: 'Phase 1 only: decompose the supplied research question into bounded evidence obligations. Work independently; do not inspect peers or delegate. Do not produce a broad literature narrative or claim a final solution. The orchestrator must wait for SETTLED, review the records, attach rejected/needs-check assessments, and then explicitly start a separate audit phase for the Integration Auditor. Compile is unverified synthesis, not verification.',
+  },
 };
+
+const PRESET_IDS = Object.keys(PRESETS);
 
 const RESEARCH_SEARCH_PROTOCOL = 'When Web Search or another research tool is available, use it for the key mathematical claims. Prefer primary sources and original papers; record the URL or citation, hypotheses, and exact scope. If no search tool is available, say so. Never treat a search snippet or numerical result as a proof, and label sourced theorem, inference, heuristic, and open gap separately.';
 
@@ -125,7 +137,7 @@ export function registerOrchestratorTools(server, app, store) {
 
   server.registerTool('multicontext_orchestrate_create_session', {
     description: 'Create a workspace with preset personas and seed Q with initial tasks. Returns workspace and member ids. This is the entry point for orchestrated multi-agent sessions.',
-    inputSchema: z.object({ preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4', 'navier-stokes-proof-builder-4', 'navier-stokes-geometric-4']).optional(), name: z.string().optional(), globalPrompt: z.string().optional() }),
+    inputSchema: z.object({ preset: z.enum(PRESET_IDS).optional(), name: z.string().optional(), globalPrompt: z.string().optional() }),
   }, async ({ preset, name, globalPrompt }) => {
     const p = PRESETS[preset || 'navier-stokes-4'];
     const ws = await app.createWorkspace({ name: name || p.name, globalPrompt: globalPrompt || '' });
@@ -214,7 +226,7 @@ export function registerOrchestratorTools(server, app, store) {
 
   server.registerTool('multicontext_orchestrate_run', {
     description: 'Synchronous compatibility wrapper around the same run engine as start_run. Prefer start_run for long operations.',
-    inputSchema: z.object({ workspace_id: z.string().optional(), preset: z.enum(['navier-stokes-4', 'navier-stokes-adversarial-4', 'navier-stokes-proof-builder-4', 'navier-stokes-geometric-4']).optional(), name: z.string().optional(), prompt: z.string().min(1), priority: z.number().int().min(0).max(2).optional(), broadcast: z.boolean().optional(), chat_id: z.string().optional(), timeout_seconds: z.number().min(5).max(300).optional() }),
+    inputSchema: z.object({ workspace_id: z.string().optional(), preset: z.enum(PRESET_IDS).optional(), name: z.string().optional(), prompt: z.string().min(1), priority: z.number().int().min(0).max(2).optional(), broadcast: z.boolean().optional(), chat_id: z.string().optional(), timeout_seconds: z.number().min(5).max(300).optional() }),
   }, async (args) => {
     let wsId = args.workspace_id;
     if (!wsId) {

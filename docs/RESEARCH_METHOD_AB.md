@@ -1,5 +1,46 @@
 # Research orchestration A/B record
 
+## Productized obligation workflow
+
+The real-model experiments below found that broad persona narratives could
+agree on false elementary claims even after successful searches and calculations.
+Bounded single-claim checks were more useful, although still incomplete. The MCP
+orchestrator therefore includes a domain-neutral `evidence-obligation-4` preset:
+
+- Claim Formalizer: definitions, quantifiers, assumptions and atomic obligations;
+- Source Auditor: primary-source scope and explicit evidence limitations;
+- Falsification Checker: one reproducible boundary case with actual tool values;
+- Integration Auditor: an independent ledger first, then a separately requested
+  audit of peer records and attached assessments.
+
+Creation only queues Phase 1; it does not generate or automatically expose peers.
+After Phase 1 settles, the human or parent orchestrator must inspect tool evidence,
+attach attributable review notes, and explicitly start the audit phase. Compile
+remains unverified synthesis. This workflow encodes a safer experimental method;
+it does not make the local model a theorem prover or demonstrate improved accuracy
+until matched real-model trials are performed.
+
+First Phase 1 trial `ns-critique-Ea3TwL` completed all four roles idle with empty
+queues: 15 model requests, no request errors, and provider-reported 48,165 total
+tokens (43,031 prompt including replay/cache accounting; 5,134 completion). The
+method produced clearer separate artifacts but did not pass the research-quality
+gate. The formalizer mostly emitted tautological definition checks. The source
+auditor made nine searches, then promoted metadata/snippets and model memory to
+theorem claims, including unsupported references. The falsification checker
+rejected the false identity but chose a field outside the stated divergence-free
+domain and its only calculator call failed. The integration auditor called
+`list_chats` during its supposedly independent phase and supported false claims
+without evidence. Application telemetry correctly retained the failed tool call.
+
+This is negative real-model evidence, not a successful method comparison. It led
+to a second prompt-policy revision: nontrivial logical obligations; a three-search
+cap and fail-closed theorem status without matching full-text scope; explicit
+domain-hypothesis checks and NEEDS_CHECK on required calculator failure; and no
+peer tool at all during the independent integration ledger. These are model
+instructions, not hard capability enforcement. Their behavioral effect remains
+unverified until a fresh matched run; do not overwrite or reinterpret the failed
+trial.
+
 ## Review propagation correction
 
 The canonical `inspectPeerChat` path previously returned excerpts and tool
