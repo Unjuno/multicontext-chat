@@ -1,5 +1,6 @@
 import { CrossChatToolExecutor, extractToolCalls, extractProviderToolResults, isCrossChatToolCall, buildOrderedContinuation, assertProviderResultsComplete } from './cross-chat-executor.js';
 import { createSearchEvidence, recordSearchEvidence } from './search-evidence.js';
+import { createToolEvidence, recordToolEvidence } from './tool-evidence.js';
 export class Scheduler {
   constructor({ store, client, app, maxHistoryMessages = 120, maxNativeToolIterations = 10, maxConcurrentRequests = Number.POSITIVE_INFINITY }) {
     this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.maxNativeToolIterations = maxNativeToolIterations; this.maxConcurrentRequests = Math.max(1, Number(maxConcurrentRequests) || 4); this.activeRequests = 0; this.requestWaiters = []; this.running = new Map(); this.executor = null;
@@ -105,6 +106,9 @@ export class Scheduler {
         const workspace = this.store.getWorkspace(workspaceId); const current = this.store.getMember(workspaceId, memberId);
         if (!workspace || !current || controller.signal.aborted) break;
         const mkErr = (msg, code, status=400) => Object.assign(new Error(msg), { code, status });
+        const localBackend = this.client?.provider === 'local';
+        const agentSource = localBackend ? 'ローカルモデル' : 'LibreChat Agent';
+        const discoveryFailure = error => `${agentSource}の一覧取得に失敗しました: ${error}`;
         let effectiveAgentId = String(current.agentId || workspace.defaultAgentId || '').trim();
         let availableAgents = null;
         let discoveryError = null;
@@ -128,7 +132,7 @@ export class Scheduler {
               discoveryError = e;
             }
             if (discoveryError) {
-              const err = mkErr(`LibreChat Agentの取得に失敗しました: ${discoveryError?.message || String(discoveryError)}`, 'DISCOVERY_FAILED', 503);
+              const err = mkErr(discoveryFailure(discoveryError?.message || String(discoveryError)), 'DISCOVERY_FAILED', 503);
               err.cause = discoveryError;
               throw err;
             }
@@ -136,7 +140,7 @@ export class Scheduler {
         }
         if (!effectiveAgentId) {
           if (discoveryError) {
-            const err = mkErr(`LibreChat Agentの取得に失敗しました: ${discoveryError?.message || String(discoveryError)}`, 'DISCOVERY_FAILED', 503);
+            const err = mkErr(discoveryFailure(discoveryError?.message || String(discoveryError)), 'DISCOVERY_FAILED', 503);
             err.cause = discoveryError;
             throw err;
           }
@@ -148,35 +152,45 @@ export class Scheduler {
               try {
                 agents = await this.client.listAgents();
               } catch (e) {
-                throw mkErr(`LibreChat Agentの取得に失敗しました: ${e?.message || String(e)}`, 'DISCOVERY_FAILED', 503);
+                throw mkErr(discoveryFailure(e?.message || String(e)), 'DISCOVERY_FAILED', 503);
               }
             }
           }
-          if (!agents || agents.length === 0) throw mkErr('利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 'AGENT_SELECTION_REQUIRED', 400);
-          if (agents.length > 1) throw mkErr('複数のLibreChat Agentがあります。ワークスペースの既定エージェントを選択してください。', 'AGENT_SELECTION_REQUIRED', 400);
-          throw mkErr('利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。', 'AGENT_SELECTION_REQUIRED', 400);
+          if (!agents || agents.length === 0) throw mkErr(localBackend
+            ? '利用可能なローカルモデルがありません。ローカル推論サーバーを確認してください。'
+            : '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成してください。', 'AGENT_SELECTION_REQUIRED', 400);
+          if (agents.length > 1) throw mkErr('複数のAgentがあります。ワークスペースの既定エージェントを選択してください。', 'AGENT_SELECTION_REQUIRED', 400);
+          throw mkErr(localBackend
+            ? '利用可能なローカルモデルが設定されていません。ローカル推論サーバーを確認するか、設定からモデルを選択してください。'
+            : '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。', 'AGENT_SELECTION_REQUIRED', 400);
         }
         if (availableAgents === null) {
           if (!canList) {
             availableAgents = [];
           } else {
             try { availableAgents = await this.client.listAgents(); } catch (e) {
-              throw mkErr(`LibreChat Agentの取得に失敗しました: ${e?.message || String(e)}`, 'DISCOVERY_FAILED', 503);
+              throw mkErr(discoveryFailure(e?.message || String(e)), 'DISCOVERY_FAILED', 503);
             }
           }
         }
         if (availableAgents && availableAgents.length && !availableAgents.some(a => String(a.id) === effectiveAgentId)) {
           if (current.agentId && String(current.agentId) === effectiveAgentId) {
-            throw mkErr('このチャットに設定されたエージェントがLibreChatに存在しません。エージェントを選び直すか、ワークスペース既定を使用してください。', 'AGENT_NOT_AVAILABLE', 400);
+            throw mkErr(localBackend
+              ? 'このチャットに設定されたモデルをローカル推論サーバーで利用できません。モデルを選び直すか、ワークスペース既定を使用してください。'
+              : 'このチャットに設定されたエージェントがLibreChatに存在しません。エージェントを選び直すか、ワークスペース既定を使用してください。', 'AGENT_NOT_AVAILABLE', 400);
           } else {
-            throw mkErr('設定されている既定エージェントがLibreChatに存在しません。エージェントを選び直してください。', 'AGENT_NOT_AVAILABLE', 400);
+            throw mkErr(localBackend
+              ? '設定されている既定モデルをローカル推論サーバーで利用できません。モデルを選び直してください。'
+              : '設定されている既定エージェントがLibreChatに存在しません。エージェントを選び直してください。', 'AGENT_NOT_AVAILABLE', 400);
           }
         }
         const japMap = (msg) => {
           const m = String(msg || '');
-          if (m.includes('LibreChat agentId is required')) return '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
+          if (m.includes('LibreChat agentId is required')) return localBackend
+            ? '利用可能なローカルモデルが設定されていません。ローカル推論サーバーを確認するか、設定からモデルを選択してください。'
+            : '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
           if (m.includes('Invalid API key') || m.includes('invalid_api_key')) return 'LibreChat接続キーを確認してください';
-          if (m.includes('Failed to connect') || m.includes('fetch failed') || m.includes('Connection refused')) return 'LibreChatに接続できません';
+          if (m.includes('Failed to connect') || m.includes('fetch failed') || m.includes('Connection refused')) return localBackend ? 'ローカル推論サーバーに接続できません' : 'LibreChatに接続できません';
           if (m.includes('GPT-OSS') || m.includes('llama')) return 'GPT-OSSを利用できません';
           return m;
         };
@@ -191,6 +205,7 @@ export class Scheduler {
           if (controller.signal.aborted || !this.store.getMember(workspaceId, memberId)) continue;
           let currentResult = result;
           const searchEvidence = createSearchEvidence();
+          const toolEvidence = createToolEvidence();
           let currentConversationId = result.conversationId;
           let toolCalls = extractToolCalls(currentResult.raw);
           const crossToolCalls = toolCalls.filter(isCrossChatToolCall);
@@ -222,6 +237,7 @@ export class Scheduler {
                 signal: controller.signal,
               });
               recordSearchEvidence(searchEvidence, crossToolCalls, toolResults);
+              recordToolEvidence(toolEvidence, crossToolCalls, toolResults);
               for (const r of toolResults) {
                 try {
                   const tc = toolCalls.find(t => (t.call_id || t.call_id === r.call_id) && t.call_id === r.call_id) || toolCalls[0];
@@ -283,12 +299,19 @@ export class Scheduler {
               crossToolCalls.splice(0, crossToolCalls.length, ...nextCrossToolCalls);
             }
           }
-          this.store.completeRun(workspaceId, memberId, item.id, { ...currentResult, searchEvidence });
+          this.store.completeRun(workspaceId, memberId, item.id, { ...currentResult, searchEvidence, toolEvidence });
           try { this.store.appendEvent(workspaceId, { type: 'member.completed', origin: 'system', memberId, qId: item.id }); } catch {}
           this.store.trimMessages(workspaceId, memberId, this.maxHistoryMessages);
         } catch (inner) {
           const msg = japMap(inner?.message || String(inner));
-          throw new Error(msg);
+          // Preserve the machine-readable classification while translating the
+          // user-facing message. Otherwise direct-local configuration errors
+          // lose AGENT_SELECTION_REQUIRED and are incorrectly requeued as if a
+          // transient provider outage had occurred.
+          const translated = new Error(msg, { cause: inner });
+          if (inner?.code) translated.code = inner.code;
+          if (inner?.status) translated.status = inner.status;
+          throw translated;
         } finally {
           releaseRequestSlot?.();
         }

@@ -378,6 +378,30 @@ test('scheduler config errors not requeued', async () => {
   if (after.status === 'error') assert.ok(after.queue.length === 0); // not requeued indefinitely
 });
 
+test('scheduler preserves local missing-model classification and does not requeue', async () => {
+  const store = makeStore();
+  const client = {
+    provider: 'local',
+    listAgents: async () => [],
+    health: async () => ({ ok: true, agents: 0, mode: 'native', provider: 'local' }),
+    runAgent: async () => { throw new Error('model execution must not start'); },
+  };
+  const scheduler = new Scheduler({ store, client });
+  const ws = store.createWorkspace({ name: 'Local scheduler recovery' });
+  const member = store.addMember(ws.id, { name: 'Unconfigured local chat' });
+  const item = store.enqueue(ws.id, member.id, 'queued before discovery');
+
+  scheduler.kickMember(ws.id, member.id, { defer: false });
+  while (scheduler.running.size > 0) await new Promise(resolve => setTimeout(resolve, 5));
+
+  const after = store.requireWorkspace(ws.id).members[member.id];
+  assert.equal(after.status, 'idle');
+  assert.equal(after.queue.length, 0, 'configuration errors must not form an endless retry queue');
+  assert.equal(after.current, null);
+  assert.match(after.lastError, /ローカル推論サーバー/);
+  assert.equal(after.lastRun.queueItemId, item.id);
+});
+
 // UI static checks
 test('no obsolete エージェントIDを設定してください copy', () => {
   const appJs = readFileSync(fileURLToPath(new URL('../public/app.js', import.meta.url)), 'utf8');

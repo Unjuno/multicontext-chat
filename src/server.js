@@ -173,7 +173,21 @@ export function createApp({ config = defaultConfig, store, client, scheduler, pu
       try { return json(res, 200, createLocalBackup({ dataFile: config.dataFile, scheduler, store })); }
       catch (error) { return json(res, error.status || 500, { error: error.message }); }
     }
-    if (url.pathname === '/api/health' && req.method === 'GET') { const librechat = await client.health(); return json(res, librechat.ok ? 200 : 503, { ok: librechat.ok, version: APP_VERSION, backend: config.backend || 'librechat', librechat, publicUrl: config.publicUrl || null }); }
+    if (url.pathname === '/api/health' && req.method === 'GET') {
+      const modelBackend = await client.health();
+      const backend = config.backend || 'librechat';
+      return json(res, modelBackend.ok ? 200 : 503, {
+        ok: modelBackend.ok,
+        version: APP_VERSION,
+        backend,
+        modelBackend,
+        // Preserve the established response field only for the explicit
+        // compatibility backend. Direct-local mode must not describe its
+        // model as LibreChat.
+        ...(backend === 'librechat' ? { librechat: modelBackend } : {}),
+        publicUrl: config.publicUrl || null,
+      });
+    }
     if (url.pathname === '/api/agents' && req.method === 'GET') {
       try {
         const agents = await app.listAgents();

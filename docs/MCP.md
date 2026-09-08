@@ -2,7 +2,7 @@
 
 **What this is:** A thin control adapter that exposes MultiContext itself as an MCP server so external coding/agent clients (OpenCode, Cursor, Claude Code, other MCP-compatible hosts) can configure and operate workspaces programmatically.
 
-**What it is NOT:** LibreChat Agent MCP. LibreChat's own MCP lets an Agent use tools *while generating*. This server lets an *external application* control MultiContext (workspaces, queues, broadcast) which then talks to LibreChat → GPT-OSS.
+**What it is NOT:** a model-provider MCP or a requirement to install LibreChat. This server lets an *external application* control MultiContext (workspaces, queues, broadcast). The default path talks directly to a loopback local model; LibreChat is an optional compatibility adapter.
 
 ```
 OpenCode / external MCP client
@@ -13,9 +13,9 @@ existing MultiContext application operations (src/application.js)
         ↓
 workspace / FIFO queues / scheduler
         ↓
-LibreChat (Remote Agents)
-        ↓
-GPT-OSS (llama.cpp)
+local model (GPT-OSS / llama.cpp, default)
+        or
+LibreChat Remote Agents (optional compatibility)
 ```
 
 ## Architecture
@@ -50,7 +50,7 @@ MULTICONTEXT_MCP_ENABLED=true node --env-file=.env src/server.js
 - **Storage:** Desktop stores the MCP token in Keychain only; `config.json` never contains it, logs redact `mcp_token`/`multicontext_mcp`, runtime status `/api/mcp/status` only reports `{enabled, tokenConfigured, endpoint}`.
 - **Regeneration:** `generate_mcp_token` Tauri command overwrites Keychain; if MultiContext is Desktop-owned it is automatically restarted to pick up the new `MULTICONTEXT_MCP_TOKEN` env (no manual relaunch needed); if it is external (not in `Managed` map) it is never killed — the change takes effect after you restart the external `node src/server.js` process. The same applies to `set_mcp_enabled` toggling. Copy actions may temporarily expose the full token in clipboard — this is intentional for one-time paste into the client config.
 - **Production bundle:** `npm run build:server` (esbuild, `dist/server.bundle.mjs` ~1MB, `src` ESM + `@modelcontextprotocol/*` + `zod` inlined) is self-contained. Tauri `beforeBuildCommand` builds it and bundles `dist/` as `multicontext/dist` resources; the Desktop `MultiContext.app` therefore runs `/mcp` without a checkout or `node_modules` — bare `import '@modelcontextprotocol/server'` never reaches the production filesystem.
-- **Discovery vs zero:** `GET /api/agents` and `multicontext_list_agents` now use fresh discovery (`503 DISCOVERY_FAILED` on fetch/auth/timeout) instead of returning a stale cached 200. UI/MCP show “Agent取得に失敗” rather than stale list when LibreChat is down.
+- **Discovery vs zero:** `GET /api/agents` and `multicontext_list_agents` use fresh discovery (`503 DISCOVERY_FAILED` on fetch/auth/timeout) instead of returning a stale cached 200. In local mode this means `/v1/models`; in optional LibreChat mode it means Remote Agents discovery. UI/MCP show the backend-specific recovery message rather than a stale list.
 - **Body limit:** `POST /mcp` enforces the same 1 MB bound as `readBody()` for REST; larger payloads return `413 PAYLOAD_TOO_LARGE`.
 - **Logging:** `src-tauri/src/process.rs::redact` and `src-tauri/src/main.rs::get_logs` redact `sk-`, `bearer`, `mcp_token`, etc.; MCP responses never include `LIBRECHAT_API_KEY`, `MULTICONTEXT_MCP_TOKEN`, `conversationId`, `current`, `lastRun`.
 
@@ -230,7 +230,7 @@ Resources via `multicontext://workspaces` etc are not required; tools are primar
 
 ## Agent Selection Behavior
 
-- Source of truth is LibreChat `GET /api/agents/v1/responses/models`.
+- Source of truth is the selected backend: local `/v1/models` by default, or LibreChat `GET /api/agents/v1/responses/models` in compatibility mode.
 - Effective: `member.agentId ?? workspace.defaultAgentId ?? (exactly-one-agent ? thatId : mode-dependent)`. Explicit IDs are never silently overwritten. `settings.agentSelectionMode` defaults to `require_selection`; set it to `auto_first` through workspace update when convenience is preferred.
 - **Single agent:** auto-selected for new workspaces/members and for compile fallback.
 - **Multiple agents, no default:** `AGENT_SELECTION_REQUIRED` (400, Japanese message) before any queue mutation; broadcast validates all active members before enqueue, direct validates target, cross-chat `send-to-chat` validates all targets before any enqueue (avoid partial delivery).
@@ -243,6 +243,6 @@ Resources via `multicontext://workspaces` etc are not required; tools are primar
 - **Non-loopback invariant:** MCP shares the main Node listener (`http://127.0.0.1:<port>/mcp`, `mcpHost` does not create a separate listener). Startup enforces: if MCP is enabled and either `MULTICONTEXT_HOST` or `MULTICONTEXT_MCP_HOST` is non-loopback (`0.0.0.0`, `::`, `192.168.x.x` ...), a non-empty `MULTICONTEXT_MCP_TOKEN` is required — otherwise `validateMcpConfig()` fails fast with an actionable error (`MCP enabled with non-loopback bind requires MULTICONTEXT_MCP_TOKEN`). Loopback binds (`127.0.0.1`, `localhost`, `::1`, `::ffff:127.0.0.1`) with no token remain allowed for local development. MCP disabled bypasses the check.
 - **REST auth invariant:** any non-loopback bind also requires a non-empty `MULTICONTEXT_APP_TOKEN`; otherwise startup fails fast instead of leaving `/api/*` unauthenticated. Loopback-only desktop development may omit it.
 - MCP token is distinct, stored in Keychain, never returned from `runtime_status`, `/api/mcp/status`, or logs. `GET /api/mcp/token` would be 404; `get_opencode_config` returns token only for explicit clipboard copy.
-- LibreChat key, provider credentials, `conversationId`/`current`/`lastRun` are never serialized to MCP or REST public views.
+- Optional LibreChat keys, provider credentials, `conversationId`/`current`/`lastRun` are never serialized to MCP or REST public views.
 - Tool `send-to-chat` still validates `allowCrossChatSend` etc.; private `inspect_chat` respects `allowCrossChatInspect`.
 - If you must bind beyond localhost (`MULTICONTEXT_HOST=0.0.0.0`), set a strong token and understand the credential is network-visible; prefer SSH tunnel.

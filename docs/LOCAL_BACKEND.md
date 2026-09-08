@@ -3,11 +3,16 @@
 The Node runtime can connect directly to a loopback OpenAI-compatible model server,
 without LibreChat, MongoDB, an account, API key, or saved LibreChat Agent.
 This is the required product path; LibreChat compatibility is optional.
-Existing LibreChat configuration remains unchanged by default.
+Existing saved desktop configurations remain unchanged; new desktop and Node
+starts use the registration-free local path by default.
 
 ```sh
-MULTICONTEXT_BACKEND=local MULTICONTEXT_LOCAL_MODEL_URL=http://127.0.0.1:8080 MULTICONTEXT_DATA_FILE=./data/local-state.json npm start
+npm start
 ```
+
+Those local values are the defaults. Set `MULTICONTEXT_LOCAL_MODEL_URL` or
+`MULTICONTEXT_DATA_FILE` only when your endpoint or state location differs. Select
+`MULTICONTEXT_BACKEND=librechat` explicitly only for the optional compatibility path.
 
 Start a tool-capable local model server first. Model discovery uses `/v1/models`;
 inference uses `/v1/chat/completions`. See the
@@ -40,14 +45,21 @@ startup settings were saved has been corrected, with a handler regression test.
 This closes native backup-button verification, not restoration through a GUI.
 Historical pending statements below describe earlier checkpoints.
 
-Post-correction checks: 350 Node tests (347 passed, 0 failed, 3 policy skips),
-49 Rust tests passed, production `.app` build passed, all 10 packaged public files
-and bundled server matched. The bundled HTTP MCP smoke passed before the wording
-change; server code did not change. The new message was handler-tested and
-verified packaged, not re-clicked in a freshly restarted native process.
-Signing verification failed (adhoc/no TeamIdentifier); `security find-identity`
-reported zero valid code-signing identities. This remains an internal build,
-not a Developer-ID-signed/notarized public artifact.
+Latest superseding release checkpoint: 366 Node tests were collected (363 passed,
+0 failed, 3 product-policy skips), and all 50 Rust tests passed. The production
+`.app` build, bundled HTTP MCP smoke, and recursive comparison of the bundled
+server plus all 11 public files passed. A freshly launched native direct-local
+app displayed only the model and MultiContext as required startup services;
+settings contained no LibreChat path, URL, or credential controls. Its health
+response used the backend-neutral `modelBackend` field and omitted `librechat`.
+An authenticated MCP calculation was observed automatically in that native UI,
+including Scheduler-owned tool evidence, and a second real Compile preserved the
+deterministic incomplete-coverage warning separately from unverified model prose.
+The Scheduler also retains machine-readable error codes after localizing messages,
+so a missing local model is treated as a configuration error and is not left in
+an endless retry queue.
+Signing verification still fails correctly (ad hoc/no TeamIdentifier). This is
+an internally verified build, not a Developer-ID-signed/notarized public artifact.
 
 Direct GPT-OSS real run `research-flywheel-1788816693082` passed source search,
 canonical cross-chat delivery, and exact DOI lookup without LibreChat login or

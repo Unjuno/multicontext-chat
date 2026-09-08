@@ -1,5 +1,56 @@
 # Desktop research build audit — 2026-09-08
 
+## Direct-local final core checkpoint (2026-09-08)
+
+This checkpoint supersedes earlier local-path and native-window gaps in this
+record. LibreChat is not part of the required product path: it remains available
+only when a user explicitly selects the compatibility backend. No compatibility
+data or code was deleted.
+
+- A fresh production-bundle launch logged `backend=local` and
+  `startup: direct-local backend; LibreChat omitted`. Startup required exactly
+  the model and MultiContext. The native AI-stack detail showed those services,
+  the discovered model, and optional MCP; it showed no LibreChat row.
+- Native Settings selected `ローカルLMへ直接接続（登録不要）` and exposed the
+  model/MCP controls without LibreChat checkout, URL, or key fields. The local
+  child environment does not receive LibreChat URLs, mode flags, or credentials.
+- `GET /api/health` returned `backend: local` and a backend-neutral
+  `modelBackend` object, with no `librechat` property.
+- Through the native server's authenticated MCP endpoint, workspace
+  `7cd95a05-3fc6-45b6-8b1a-3cc5cd030424` executed exactly one real
+  `calculate((7*8)+1)` call. It settled in about 2.3 seconds with value 57 and
+  `proofVerified: false`. Persisted Scheduler evidence recorded one attempt,
+  one success, zero failures, and zero replays. The already-open native GUI
+  discovered the result and displayed the same tool evidence without reload.
+- The first real Compile exposed a product defect: deterministic coverage
+  correctly reported one older assistant message with unrecorded tool evidence,
+  while model prose contradicted that fact. Compile now renders an expandable
+  app-owned audit before a separately labelled `モデルによる統合（未検証）`, and
+  copy/download preserves the exact JSON. The synthesis prompt cannot create
+  machine-audit sections or restate their counts. A second real Compile retained
+  `unrecordedAssistantMessages: 1`; its model prose no longer claimed complete
+  coverage and identified the old answer as unrecorded in its evidence/gaps.
+- Final code review found one additional direct-local edge case: translated
+  Scheduler errors discarded `AGENT_SELECTION_REQUIRED`, so a pre-existing
+  queued item could be requeued when no local model was available. Translation
+  now preserves error code/status/cause; a regression verifies idle state, an
+  empty queue, and registration-free recovery guidance without model dispatch.
+- Final automated evidence: `npm run check` collected 366 tests (363 passed,
+  0 failed, 3 intentional product-policy skips); Rust passed 50/50;
+  `npm run verify:bundle`, the bundled MCP smoke, production `.app`/DMG build,
+  and `npm run verify:desktop` all passed. The desktop verifier matched the
+  bundled server and all 11 public files.
+- `npm run verify:signing` still rejects the ad-hoc artifact because no Developer
+  ID TeamIdentifier is present. Signing, notarization/stapling, and a final GUI
+  pass on that signed artifact remain the separate general-distribution gate.
+
+This verifies the registration-free direct-local core as usable for internal
+macOS release: local-model generation, canonical MCP operation, native
+observation, bounded tool attribution, and Compile all worked together. It does
+not certify optional LibreChat mixed-tool compatibility, external source truth,
+model-written synthesis, or a Navier-Stokes proof. The two-run method comparison
+and its deliberately narrow conclusion are recorded in `RESEARCH_METHOD_AB.md`.
+
 ## Native review-note save and authenticated MCP readback (2026-09-08)
 
 - Rebuilt `b7a463d` with `npm run desktop:build -- --bundles app` and passed

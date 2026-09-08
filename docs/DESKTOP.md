@@ -7,18 +7,18 @@ Tauri 2 launcher for the existing MultiContext web application. The desktop app 
 ```
 MultiContext Desktop (Tauri)
   ├─ startup UI (desktop-startup.html)
-  ├─ health checks (LibreChat, model, MultiContext)
+  ├─ health checks (model, MultiContext)
   ├─ process ownership (EXTERNAL vs STARTED_BY_MULTICONTEXT)
-  └─ WebView -> http://127.0.0.1:4317 (existing HTML/CSS/JS)
+  └─ native WebView (existing HTML/CSS/JS)
         |
         v
    MultiContext Node server (src/server.js)
         |
         v
-   LibreChat (Remote Agents API)
-        |
-        v
    gpt-oss / llama.cpp (http://127.0.0.1:8080)
+
+Optional compatibility path:
+MultiContext -> LibreChat Remote Agents API -> model provider
 ```
 
 Existing `npm start` continues to work without Tauri.
@@ -29,8 +29,8 @@ Existing `npm start` continues to work without Tauri.
 - Node >=22 (`which node` must be resolvable from Finder; checked at `/opt/homebrew/bin/node`, `/usr/local/bin/node`, `/run/current-system/sw/bin/node`)
 - Rust 1.77+ (`rustc --version`)
 - Tauri CLI `2.x` (`npx tauri --version` or `@tauri-apps/cli`)
-- LibreChat checkout (if managed) and/or running `http://127.0.0.1:3080`
 - Model backend at `http://127.0.0.1:8080/v1` (OpenAI-compatible base; or external), template `scripts/llama/gpt-oss-chat-template.fixed.jinja`
+- LibreChat is needed only when the optional `librechat` compatibility backend is selected.
 
 ## First-time Setup
 
@@ -38,34 +38,36 @@ The desktop app is self-contained: it bundles the MultiContext Node server into
 `MultiContext.app/Contents/Resources/multicontext/` and starts it from there, so
 it does **not** depend on the Git checkout remaining at a development path.
 
-**Simplest path (external services already running):**
+**標準経路（登録・LibreChat不要）:**
 
-1. Start LibreChat and your model backend (gpt-oss / llama.cpp) yourself, OR
-2. Let Desktop manage them: open Settings (⚙) on the startup screen, set
-   `LibreChat: 管理` + its checkout path, `モデル: 管理` + `llama-server`,
-   model `.gguf`, and chat template, then `保存` → `開始`.
+1. Open Settings (⚙), keep `ローカルLMへ直接接続` selected.
+2. Either start the OpenAI-compatible model backend yourself, or let Desktop
+   manage it by selecting `llama-server`, the model `.gguf`, and chat template.
+3. Press `保存して開始`. No account, registration, LibreChat checkout, or
+   LibreChat connection key is required.
 
 After the first save, config lives at
 `~/Library/Application Support/com.unjuno.multicontext/config.json`
 (created via Tauri `app_config_dir`). The Desktop-owned workspace state lives
-next to it at `~/Library/Application Support/com.unjuno.multicontext/state.json`
+next to it at `~/Library/Application Support/com.unjuno.multicontext/local-state.json`
 (`MULTICONTEXT_DATA_FILE` is set explicitly for the bundled server), which is
 separate from a dev checkout's `./data/state.json` — workspaces created inside
 the app do not appear under `node src/server.js` and vice versa. Defaults:
 
 Settings の「データ保存場所を開く」からこのディレクトリを Finder で開けます。
-手動バックアップはアプリ終了後に `state.json` と `state.json.bak` を別の安全な場所へコピーしてください。
-`state.json.bak` は自動復元用の直前バックアップです。復元が必要な場合は、アプリを終了して元の `state.json` を退避してから、バックアップしたファイルを `state.json` に戻してください。
+手動バックアップはアプリ終了後に `local-state.json` と `local-state.json.bak` を別の安全な場所へコピーしてください。
+`local-state.json.bak` は自動復元用の直前バックアップです。復元が必要な場合は、アプリを終了して元の `local-state.json` を退避してから、バックアップしたファイルを `local-state.json` に戻してください。互換モードは従来どおり `state.json` を使います。
 
-- `librechat_url: http://127.0.0.1:3080`
+- `backend: local`
 - `model_url: http://127.0.0.1:8080/v1`
 - `multicontext_port: 4317` (canonical; the old misspelling `multicontent_port` is still accepted as a backward-compatible alias)
-- `manage_librechat: true`, `manage_model: true` (new installs default to managed GPT-OSS + LibreChat; healthy external services are still reused first and never killed)
+- `manage_model: true`, `manage_librechat: false` (LibreChat management is opt-in compatibility only; healthy external services are still reused first and never killed)
 
 If required fields are missing, the startup screen explains what is missing.
 
-**LibreChat 接続キー (no Terminal needed):** on the Settings screen, the
-`LibreChat 接続` section shows the current connection state
+**Optional LibreChat compatibility:** when `LibreChat連携` is explicitly
+selected, the Settings screen exposes the `LibreChat 接続` section, which
+shows the current connection state
 (`要設定` / `接続済み` / `接続キーを確認してください` / `LibreChat に接続できません`)
 and an input for the key. The key is a **LibreChat Remote Agents API key** and is
 validated against the Remote Agents API (`GET /api/agents/v1/responses/models`
@@ -79,9 +81,10 @@ empty key field preserves the stored key; deletion requires the explicit
 `保存済みキーを削除` action. On startup, Desktop reads it from the Keychain and
 injects it only into the managed MultiContext child process environment
 (`LIBRECHAT_API_KEY`). This makes a Finder-double-click launch fully
-self-contained. As a fallback, Desktop also forwards `LIBRECHAT_API_KEY` / proxy
-vars from its own environment if set via `launchctl setenv`. LibreChat continues
-to own provider credentials.
+self-contained. Direct-local mode does not read, validate, or forward this key.
+As a fallback in compatibility mode, Desktop also forwards
+`LIBRECHAT_API_KEY` / proxy vars from its own environment if set via
+`launchctl setenv`. LibreChat continues to own provider credentials.
 
 If you prefer to run the backends manually, the original commands still apply:
 
@@ -97,7 +100,7 @@ llama-server -m /path/to/gpt-oss-20b-MXFP4.gguf --jinja \
 ## Development
 
 ```bash
-npm run desktop:dev   # tauri dev (loads desktop-startup.html, then http://127.0.0.1:4317)
+npm run desktop:dev   # tauri dev (loads desktop-startup.html, then the bundled workspace UI)
 # or
 npm start             # just the Node server at 4317
 npx tauri dev --help
@@ -107,11 +110,13 @@ npx tauri dev --help
 `startup-progress` events (each tagged with an `attempt_id` generation token).
 It shows user-facing states
 (`確認中` / `起動中` / `接続中` / `準備完了` / `要設定` / `エラー`) for each service and
-auto-navigates to `http://127.0.0.1:4317` exactly once, when every service is
-truly `READY`. MultiContext is only considered `READY` after its own
+auto-navigates to the bundled workspace UI exactly once, when every required
+service is truly `READY`. Direct-local requires only the model and MultiContext;
+LibreChat is neither probed nor represented by a placeholder service.
+MultiContext is only considered `READY` after its own
 `GET /api/health` returns `ok === true` — the body is parsed even on HTTP 503
-so a structured `{ok:false, librechat:{ok:false}}` yields a precise credential
-vs. offline vs. wrong-service message. `Retry` always starts a fresh attempt
+so compatibility-mode failures yield a precise credential vs. offline vs.
+wrong-service message. `Retry` always starts a fresh attempt
 (`state.statuses = {}` + new `attemptId`; delayed events from a previous attempt
 are ignored). The `connection_status` command reports LibreChat reachability/auth
 against the Remote Agents API without exposing the key. Before navigation the
@@ -128,8 +133,9 @@ header:
 Clicking it opens a detail popover with per-service rows:
 
 - GPT-OSS — `準備完了` / `起動中` / `確認中` / `エラー` (strict `is_model_healthy` on `{"data":[...]}` / `{"models":[...]}`)
-- LibreChat — `接続済み` / `接続中` / `要設定` / `エラー` (Remote Agents `GET /api/agents/v1/responses/models` with `Bearer`, never exposed)
 - MultiContext — `準備完了` / `確認中` / `エラー` (strict `ok===true`, 503 body parsed)
+- 利用モデル — the directly discovered local model
+- LibreChat — shown only for the explicitly selected compatibility backend
 
 Aggregate: all `ready` → `準備完了`, any `error` → `要確認`, otherwise `起動中` / `要設定`.
 
@@ -193,13 +199,13 @@ commit them to this repository.
 
 ## Configuration (external vs managed)
 
-- **External (reused first):** If LibreChat/model already healthy at configured URLs, Desktop reuses them (`ownership: EXTERNAL`) and does **not** terminate them on quit.
-- **Managed (new-install default `true`, “start if absent”):** If `manage_librechat` or `manage_model` true and health fails, Desktop attempts to start the service and marks `STARTED_BY_MULTICONTEXT`, then stops it on quit (SIGTERM to the whole process group). Existing saved configs keep their stored `manage_*` values. MultiContext Node is always managed if not already running: Desktop resolves `server_root` via `app.path().resource_dir()/multicontext` (production) or the repo checkout (dev), then runs `find_node()` + `node src/server.js` from the bundled resources.
+- **External (reused first):** If the model is already healthy at its configured URL, Desktop reuses it (`ownership: EXTERNAL`) and does **not** terminate it on quit. The same rule applies to LibreChat in compatibility mode.
+- **Managed:** The model defaults to managed (“start if absent”). LibreChat management defaults off and is considered only in compatibility mode. Desktop stops only children it started itself (SIGTERM to the whole process group). Existing saved configs keep their stored `manage_*` values. MultiContext Node is always managed if not already running: Desktop resolves `server_root` via `app.path().resource_dir()/multicontext` (production) or the repo checkout (dev), then runs `find_node()` + `node src/server.js` from the bundled resources.
 
 Readiness:
 - **Model:** considered healthy only when its OpenAI-compatible `/v1/models` returns a `{"data":[...]}` shape (a bare 200 HTML page is not treated as ready).
-- **LibreChat:** considered healthy when its `/health` returns 2xx.
-- **MultiContext:** considered `READY` only when `GET /api/health` returns 2xx **and** `ok === true`. A listening-but-unusable server (503, wrong service on the port, missing/wrong LibreChat key) is reported as `エラー`, not `READY`.
+- **LibreChat (compatibility only):** considered healthy when its `/health` returns 2xx.
+- **MultiContext:** considered `READY` only when `GET /api/health` returns 2xx **and** `ok === true`. A listening-but-unusable server (503 or wrong service on the port) is reported as `エラー`, not `READY`; compatibility mode additionally reports missing/wrong LibreChat keys.
 
 Managed launch profile (GPT-OSS / llama.cpp): the fixed serving profile
 (`reasoning_effort=low`, `ctx-size=8192`, `parallel=4`) lives in
@@ -221,7 +227,7 @@ UI: `ログを表示` -> `open_logs_dir` (Finder) or `get_logs` (in-app).
 
 ## Troubleshooting
 
-- **LibreChat not found:** Check `librechat_url` and that LibreChat was started via `npm run backend` in its checkout.
+- **LibreChat not found:** This is relevant only in compatibility mode. Check `librechat_url`, or switch back to the default direct-local backend.
 - **Model not reachable:** Check `model_url` and that `llama-server` was started with the fixed template (`ps aux | grep llama` should show `--chat-template-file ...fixed.jinja`).
 - **MultiContext port occupied:** Change `multicontext_port` in config or stop the conflicting service (`lsof -i :4317`). If another service is already answering on the port, MultiContext reports `エラー` rather than a false `READY`.
 - **Node not found (Finder):** Desktop checks `/opt/homebrew/bin/node`, `/usr/local/bin/node`, `/run/current-system/sw/bin/node`, `which node`, and `PATH`. Set absolute path in config if needed.
@@ -241,7 +247,10 @@ The token is never shown persistently and never returned from `/api/mcp/status` 
 
 ## Security
 
-- No API keys stored in `config.json` or `localStorage`. LibreChat owns provider credentials. MCP token is stored in Keychain (`multicontext_mcp_token`), never in config.json.
+- No API keys are required for the direct-local model path or stored in
+  `config.json`/`localStorage`. In optional compatibility mode, LibreChat owns
+  provider credentials. The MCP token is stored in Keychain
+  (`multicontext_mcp_token`), never in `config.json`.
 - Logs redact `sk-`, `bearer`, `token`, `password`, `api_key`, `mcp_token`, `multicontext_mcp`.
 - `MULTICONTEXT_PUBLIC_URL` origin handling unchanged (no broad Host trust). MCP binds to loopback by default; `Host`/`Origin` validation via `@modelcontextprotocol/node` guards.
 

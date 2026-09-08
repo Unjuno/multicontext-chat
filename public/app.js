@@ -2,6 +2,7 @@ import { workspaceStatusLabel as sharedWorkspaceLabel, memberStatusLabel as shar
 import { pickDisplayedRun, followedRunState } from './follow-run.js';
 import { selectActivityEvents } from './activity-feed.js';
 import { searchEvidenceLabel } from './search-evidence.js';
+import { toolEvidenceLabel, compileToolAuditLabel, compileRecordMarkdown } from './tool-evidence.js';
 import { reviewNotesHtml, reviewButtonHtml, openReviewDialog } from './review-notes.js';
 
 let currentId = null;
@@ -333,10 +334,13 @@ function recordClientDiagnostic(error, context = 'unknown') {
 async function refreshHealth() {
   try {
     const health = await request('/api/health');
-    $('#health').textContent = `LibreChat ${health.librechat.mode} · ${health.librechat.agents} エージェント · ${health.librechat.latencyMs}ms`;
-    $('#health').title = `MultiContext v${health.version || '不明'} · mode=${health.librechat.mode} agents=${health.librechat.agents} latency=${health.librechat.latencyMs}ms`;
+    runtimeBackend = health.backend || 'librechat';
+    const modelBackend = health.modelBackend || health.librechat || {};
+    const source = runtimeBackend === 'local' ? 'ローカルLM直結' : `LibreChat ${modelBackend.mode || 'unknown'}`;
+    $('#health').textContent = `${source} · ${modelBackend.agents || 0}モデル · ${modelBackend.latencyMs || 0}ms`;
+    $('#health').title = `MultiContext v${health.version || '不明'} · backend=${runtimeBackend} mode=${modelBackend.mode || 'unknown'} agents=${modelBackend.agents || 0} latency=${modelBackend.latencyMs || 0}ms`;
   } catch (error) {
-    $('#health').textContent = `LibreChat 接続不可 · ${error.message}`;
+    $('#health').textContent = `AIバックエンド接続不可 · ${error.message}`;
     $('#health').title = error.message;
   }
 }
@@ -347,6 +351,7 @@ let runtimePollTimer = null;
 let runtimePolling = false;
 let runtimeAbort = null;
 let runtimeVersion = null;
+let runtimeBackend = null;
 
 function getTauriInvoke() {
   try {
@@ -369,8 +374,9 @@ function renderRuntime(statuses) {
     aggregateStatus: (list) => {
       if (!list || !list.length) return { text: 'AIスタック ● 確認中', cls: 'checking' };
       const states = list.map(x=>String(x.state).toLowerCase());
-      const core = list.filter(x => ['モデル', 'LibreChat', 'MultiContext'].includes(x.name));
-      if (core.length === 3 && core.every(x => String(x.state).toLowerCase() === 'ready') && !states.includes('error')) {
+      const required = list.some(x => x.name === 'LibreChat') ? ['モデル', 'LibreChat', 'MultiContext'] : ['モデル', 'MultiContext'];
+      const core = list.filter(x => required.includes(x.name));
+      if (core.length === required.length && core.every(x => String(x.state).toLowerCase() === 'ready') && !states.includes('error')) {
         return { text: 'AIスタック ● 準備完了', cls: 'ready' };
       }
       if (states.every(s=>s==='ready')) return { text: 'AIスタック ● 準備完了', cls: 'ready' };
@@ -410,19 +416,21 @@ function renderRuntime(statuses) {
   }
 }
 
-async function fetchAgentRuntimeEntry(signal) {
+async function fetchAgentRuntimeEntry(signal, backend = runtimeBackend) {
+  const local = backend === 'local';
+  const name = window.DesktopUI?.agentServiceName?.(backend) || (local ? '利用モデル' : 'LibreChat Agent');
   try {
     const data = await request('/api/agents', { signal });
     const count = Array.isArray(data.agents) ? data.agents.length : 0;
-    if (count > 0) return { name: 'LibreChat Agent', state: 'ready', message: '利用可能', ownership: null, attempt_id: 0 };
-    return { name: 'LibreChat Agent', state: 'error', message: '未設定 — LibreChatでAgentを作成してください', ownership: null, attempt_id: 0 };
+    if (count > 0) return { name, state: 'ready', message: `${count}件利用可能`, ownership: null, attempt_id: 0 };
+    return { name, state: 'error', message: local ? 'モデル未検出 — ローカル推論サーバーを確認してください' : '未設定 — LibreChatでAgentを作成してください', ownership: null, attempt_id: 0 };
   } catch (e) {
     if (e && e.name === 'AbortError') throw e;
     const msg = String(e.message || '');
     if (msg.includes('DISCOVERY_FAILED') || msg.includes('取得に失敗') || msg.includes('503') || msg.includes('Failed to fetch')) {
-      return { name: 'LibreChat Agent', state: 'error', message: 'Agent取得に失敗 — LibreChat接続を確認してください', ownership: null, attempt_id: 0 };
+      return { name, state: 'error', message: local ? 'モデル取得に失敗 — ローカル推論サーバーを確認してください' : 'Agent取得に失敗 — LibreChat接続を確認してください', ownership: null, attempt_id: 0 };
     }
-    return { name: 'LibreChat Agent', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 };
+    return { name, state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 };
   }
 }
 async function fetchMcpRuntimeEntry(signal) {
@@ -447,6 +455,7 @@ async function pollRuntime() {
   try {
     const invoke = getTauriInvoke();
     let base = null;
+    let health = null;
     if (invoke) {
       try {
         base = await invoke('runtime_status');
@@ -462,12 +471,14 @@ async function pollRuntime() {
     }
     if (!base) {
       // Browser / fallback path: derive from /api/health. GPT-OSS health cannot be verified from browser layer.
-      const health = await request('/api/health', { signal: controller.signal });
+      health = await request('/api/health', { signal: controller.signal });
       runtimeVersion = health.version || null;
+      runtimeBackend = health.backend || 'librechat';
+      const modelBackend = health.modelBackend || health.librechat || {};
       const mcState = health.ok ? 'ready' : 'error';
-      const mcMsg = health.ok ? '準備完了' : (health.librechat && !health.librechat.ok ? 'LibreChat 接続を確認してください' : 'MultiContext が利用できません');
-      const lcState = health.librechat && health.librechat.ok ? 'ready' : 'error';
-      const lcMsg = health.librechat && health.librechat.ok ? '接続済み' : 'LibreChat 接続を確認';
+      const mcMsg = health.ok ? '準備完了' : (runtimeBackend === 'local' ? 'ローカルモデル接続を確認してください' : 'LibreChat 接続を確認してください');
+      const lcState = modelBackend.ok ? 'ready' : 'error';
+      const lcMsg = modelBackend.ok ? '接続済み' : 'LibreChat 接続を確認';
       // GPT-OSS cannot be probed from the browser layer. Preserve a trusted
       // READY result handed off by the startup screen instead of replacing it
       // with an endless CHECKING state after navigation.
@@ -477,10 +488,20 @@ async function pollRuntime() {
       const modelMsg = modelState === 'ready' ? (cachedModel.message || '準備完了') : 'デスクトップランタイムで確認中';
       base = [
         { name: 'モデル', state: modelState, message: modelMsg, ownership: null, attempt_id: 0 },
-        { name: 'LibreChat', state: lcState, message: lcMsg, ownership: null, attempt_id: 0 },
+        ...(runtimeBackend === 'librechat' ? [{ name: 'LibreChat', state: lcState, message: lcMsg, ownership: null, attempt_id: 0 }] : []),
         { name: 'MultiContext', state: mcState, message: mcMsg, ownership: null, attempt_id: 0 },
       ];
+    } else {
+      try {
+        health = await request('/api/health', { signal: controller.signal });
+        runtimeVersion = health.version || null;
+        runtimeBackend = health.backend || runtimeBackend;
+      } catch {
+        runtimeBackend ||= base.some(status => status.name === 'LibreChat' && String(status.message || '').includes('不要')) ? 'local' : 'librechat';
+      }
     }
+    base = window.DesktopUI?.runtimeServicesForBackend?.(base, runtimeBackend)
+      || (runtimeBackend === 'local' ? base.filter(status => status.name !== 'LibreChat') : base);
     // A successful desktop startup probe is authoritative for the model.
     // Do not downgrade it to CHECKING when the browser fallback cannot probe
     // the local model endpoint directly after navigation.
@@ -503,7 +524,7 @@ async function pollRuntime() {
     }
     if (controller.signal.aborted) return;
     // Always attempt to resolve agent availability as 4th row — never conflated with service health
-    const agentEntry = await fetchAgentRuntimeEntry(controller.signal);
+    const agentEntry = await fetchAgentRuntimeEntry(controller.signal, runtimeBackend);
     if (controller.signal.aborted) return;
     const mcpEntry = await fetchMcpRuntimeEntry(controller.signal);
     if (controller.signal.aborted) return;
@@ -514,7 +535,7 @@ async function pollRuntime() {
     // If the stack has recovered while a workspace warning is visible, retry
     // that workspace snapshot immediately instead of waiting for the next
     // independent observer tick.
-    if (health.ok && currentId && document.querySelector('#app .warning-banner')) {
+    if (health?.ok && currentId && document.querySelector('#app .warning-banner')) {
       refresh(currentId).catch(() => {});
     }
     pollSucceeded = true;
@@ -525,9 +546,8 @@ async function pollRuntime() {
     if (!runtimeStatuses || !runtimeStatuses.length) {
       const fallback = [
         { name: 'モデル', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 },
-        { name: 'LibreChat', state: 'error', message: 'LibreChat に接続できません', ownership: null, attempt_id: 0 },
         { name: 'MultiContext', state: 'error', message: '確認できません', ownership: null, attempt_id: 0 },
-        { name: 'LibreChat Agent', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 },
+        { name: runtimeBackend === 'librechat' ? 'LibreChat Agent' : '利用モデル', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 },
         { name: 'MCP', state: 'checking', message: '確認中...', ownership: null, attempt_id: 0 },
       ];
       runtimeStatuses = fallback;
@@ -1301,7 +1321,9 @@ function memberCard(workspace, member) {
   const displayError = (() => {
     if (!member.lastError) return '';
     const m = String(member.lastError);
-    if (m.includes('LibreChat agentId is required')) return '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
+    if (m.includes('LibreChat agentId is required')) return runtimeBackend === 'local'
+      ? '利用可能なローカルモデルが設定されていません。ローカル推論サーバーを確認し、設定からモデルを選択してください。'
+      : '利用可能なLibreChat Agentが設定されていません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
     if (m.includes('Agentが利用不可です') || m.includes('Agentが利用不可')) return `${m} 設定を開いて利用可能なAgentを選択してください。`;
     if (m.includes('Agentが未設定です')) return `${m} 設定を開いてAgentを選択してください。`;
     if (/context size|context length|too many tokens/i.test(m)) return '会話の履歴がAgentのコンテキスト上限を超えました。キューと履歴は保持されています。履歴を整理してから、もう一度再試行してください。';
@@ -1362,6 +1384,7 @@ function memberCard(workspace, member) {
             <div class="msg ${esc(message.role)} ${message.pending ? 'pending-msg' : ''}">
               <div class="msg-head">${esc(messageRoleLabel(message.role))}${message.at ? ` · ${esc(displayTimestamp(message.at))}` : ''}${message.pending ? ' · 処理中' : ''}</div>
               ${message.role === 'assistant' ? `<div class="small">${esc(searchEvidenceLabel(message.searchEvidence))}</div>` : ''}
+              ${message.role === 'assistant' && message.toolEvidence ? `<div class="small">${esc(toolEvidenceLabel(message.toolEvidence))}</div>` : ''}
               ${renderCompileText(message.content)}
               ${message.id && !message.pending ? `${reviewNotesHtml((workspace.reviewNotes || []).filter(note => note.memberId === member.id && note.messageId === message.id), esc, { key: `${member.id}:${message.id}`, open: openReviewMessages.has(`${member.id}:${message.id}`) })}${reviewButtonHtml(member, message, esc)}` : ''}
             </div>
@@ -1427,6 +1450,9 @@ async function refresh(expectedId = currentId) {
       : (workspace.lastCompile ? [workspace.lastCompile] : []);
     selectedCompileIndex = Math.max(0, Math.min(selectedCompileIndex, Math.max(0, compileHistory.length - 1)));
     const selectedCompile = compileHistory[selectedCompileIndex] || workspace.lastCompile;
+    const selectedCompileAuditHtml = selectedCompile?.toolAudit
+      ? `<details class="compile-audit"><summary>${esc(compileToolAuditLabel(selectedCompile.toolAudit))}</summary><pre>${esc(JSON.stringify(selectedCompile.toolAudit, null, 2))}</pre></details>`
+      : '';
     const allMembersCollapsed = members.length > 1 && members.every((member) => collapsedMembers.has(String(member.id)));
     $('#app').innerHTML = `
       <datalist id="agentOptions">${agentOptions}</datalist>
@@ -1458,8 +1484,8 @@ async function refresh(expectedId = currentId) {
             <option value="auto_first" ${workspace.settings?.agentSelectionMode === 'auto_first' ? 'selected' : ''}>先頭Agentを自動選択（簡易）</option>
           </select>
           ${agents.length ? '' : agentDiscoveryState === 'error'
-            ? '<div class="hint" style="color:var(--danger)">Agent一覧を取得できません。LibreChatの接続を確認し、上部の「AIスタック状態」から「再確認」を試してください。</div>'
-            : '<div class="hint" style="color:var(--danger)">利用可能なAgentがありません。LibreChatでAgentを作成してください。</div>'}
+            ? `<div class="hint" style="color:var(--danger)">${runtimeBackend === 'local' ? 'モデル一覧を取得できません。ローカル推論サーバーを確認し' : 'Agent一覧を取得できません。LibreChatの接続を確認し'}、上部の「AIスタック状態」から「再確認」を試してください。</div>`
+            : `<div class="hint" style="color:var(--danger)">${runtimeBackend === 'local' ? '利用可能なローカルモデルがありません。ローカル推論サーバーでモデルを読み込んでください。登録は不要です。' : '利用可能なAgentがありません。LibreChatでAgentを作成してください。'}</div>`}
         </div>
       </div>
       ${blockedMembers.length ? (() => {
@@ -1520,7 +1546,7 @@ async function refresh(expectedId = currentId) {
         <label for="compilePrompt" class="field-label small">まとめ方の指示 <span class="scope-note">— レポートの作成方法（保存してから作成）</span></label>
         <textarea id="compilePrompt" placeholder="まとめ方の指示（例: 主な結論と未解決点を分けて整理）" aria-label="統合レポートのまとめ方の指示">${esc(workspace.compilePrompt || '')}</textarea>
         ${selectedCompile
-          ? `<hr><div class="compile-result-head"><div class="compile-result-meta"><strong>${selectedCompileIndex === 0 ? '最新の結果' : `過去の結果 #${selectedCompileIndex}`}</strong><span class="small">${esc(displayTimestamp(selectedCompile.at))}</span><span class="small">スナップショット: ${esc(displayTimestamp(selectedCompile.snapshotAt || selectedCompile.at))}</span><span class="small">チャット数: ${selectedCompile.sourceMemberCount ?? members.filter((member) => member.messages.some((message) => message.role === 'assistant')).length} / メッセージ数: ${selectedCompile.sourceMessageCount ?? '履歴情報なし'}</span></div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdownで保存</button></div></div><div class="compile-output" id="compileOutput" role="region" aria-label="統合レポートの結果" tabindex="0">${renderCompileText(selectedCompile.text)}</div>${compileHistory.length > 1 ? `<details class="compile-history" open><summary>Compile履歴（${compileHistory.length}件）</summary><div class="small">結果を選択すると、上の表示・コピー・Markdown保存の対象が切り替わります。</div>${compileHistory.map((item, index) => `<button type="button" class="compile-history-item${index === selectedCompileIndex ? ' selected' : ''}" data-action="select-compile" data-index="${index}" aria-pressed="${index === selectedCompileIndex}"><strong>${index === 0 ? '最新' : `#${index}`}</strong><span>${esc(displayTimestamp(item.at))}</span><span>チャット数: ${item.sourceMemberCount ?? '履歴情報なし'} / メッセージ数: ${item.sourceMessageCount ?? '履歴情報なし'}</span></button>`).join('')}</details>` : ''}`
+          ? `<hr><div class="compile-result-head"><div class="compile-result-meta"><strong>${selectedCompileIndex === 0 ? '最新の結果' : `過去の結果 #${selectedCompileIndex}`}</strong><span class="small">${esc(displayTimestamp(selectedCompile.at))}</span><span class="small">スナップショット: ${esc(displayTimestamp(selectedCompile.snapshotAt || selectedCompile.at))}</span><span class="small">チャット数: ${selectedCompile.sourceMemberCount ?? members.filter((member) => member.messages.some((message) => message.role === 'assistant')).length} / メッセージ数: ${selectedCompile.sourceMessageCount ?? '履歴情報なし'}</span></div><div class="compile-result-actions"><button id="copyCompile" class="sm" type="button">結果をコピー</button><button id="downloadCompile" class="sm" type="button">Markdownで保存</button></div></div>${selectedCompileAuditHtml}<div class="compile-model-label">モデルによる統合（未検証）</div><div class="compile-output" id="compileOutput" role="region" aria-label="モデルによる統合レポート（未検証）" tabindex="0">${renderCompileText(selectedCompile.text)}</div>${compileHistory.length > 1 ? `<details class="compile-history" open><summary>Compile履歴（${compileHistory.length}件）</summary><div class="small">結果を選択すると、上の表示・コピー・Markdown保存の対象が切り替わります。</div>${compileHistory.map((item, index) => `<button type="button" class="compile-history-item${index === selectedCompileIndex ? ' selected' : ''}" data-action="select-compile" data-index="${index}" aria-pressed="${index === selectedCompileIndex}"><strong>${index === 0 ? '最新' : `#${index}`}</strong><span>${esc(displayTimestamp(item.at))}</span><span>チャット数: ${item.sourceMemberCount ?? '履歴情報なし'} / メッセージ数: ${item.sourceMessageCount ?? '履歴情報なし'}</span></button>`).join('')}</details>` : ''}`
           : `<div class="small">手動のみ。${compileStateBlocked ? `現在は${workspace.runtimeState || '処理中'}のため待機中です。` : !compileAgentReady ? '作成担当を選択してから実行してください。' : '結果はチャット履歴に反映されません。' } ${compileDisabled ? '' : '<span style="color:var(--accent)">レポートを作成</span>を押して回答をまとめます。'}</div>`}
       </div>
     `;
@@ -1894,7 +1920,8 @@ function wire(workspace) {
   if (copyCompile) copyCompile.onclick = async (e) => {
     // Copy the source Markdown so tables and intentional line breaks survive paste.
     const history = workspace.compileHistory || (workspace.lastCompile ? [workspace.lastCompile] : []);
-    const output = history[selectedCompileIndex]?.text || workspace.lastCompile?.text || $('#compileOutput')?.textContent || '';
+    const selected = history[selectedCompileIndex] || workspace.lastCompile;
+    const output = compileRecordMarkdown(selected, $('#compileOutput')?.textContent || '');
     try {
       if (!await copyText(output)) throw new Error('copy failed');
       const previous = e.currentTarget.textContent;
@@ -1907,7 +1934,8 @@ function wire(workspace) {
   if (downloadCompile) downloadCompile.onclick = () => {
     // Keep the original Markdown for export; the rendered HTML is display-only.
     const history = workspace.compileHistory || (workspace.lastCompile ? [workspace.lastCompile] : []);
-    const output = history[selectedCompileIndex]?.text || workspace.lastCompile?.text || $('#compileOutput')?.textContent || '';
+    const selected = history[selectedCompileIndex] || workspace.lastCompile;
+    const output = compileRecordMarkdown(selected, $('#compileOutput')?.textContent || '');
     const blob = new Blob([`# ${workspace.name || 'MultiContext Compile'}\n\n${output}\n`], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');

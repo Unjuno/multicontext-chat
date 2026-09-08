@@ -38,7 +38,9 @@ fn default_false() -> bool {
     false
 }
 
-fn legacy_backend() -> String { "librechat".to_string() }
+fn legacy_backend() -> String {
+    "librechat".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -77,7 +79,7 @@ impl Default for DesktopConfig {
             llama_path: None,
             model_path: None,
             template_path: None,
-            manage_librechat: true,
+            manage_librechat: false,
             manage_model: true,
             node_path: None,
             mcp_enabled: true,
@@ -87,7 +89,11 @@ impl Default for DesktopConfig {
 
 impl DesktopConfig {
     pub fn state_filename(&self) -> &'static str {
-        if self.backend == "local" { "local-state.json" } else { "state.json" }
+        if self.backend == "local" {
+            "local-state.json"
+        } else {
+            "state.json"
+        }
     }
     pub fn validate(&self) -> Result<(), String> {
         if self.backend != "local" && self.backend != "librechat" {
@@ -95,12 +101,21 @@ impl DesktopConfig {
         }
         if self.backend == "local" {
             let url = reqwest::Url::parse(&self.model_url).map_err(|_| "モデル URL が無効です")?;
-            if url.scheme() != "http" || !matches!(url.host_str(), Some("127.0.0.1") | Some("[::1]"))
-                || !url.username().is_empty() || url.password().is_some() || url.query().is_some() || url.fragment().is_some() {
-                return Err("ローカル接続には認証情報なしの HTTP loopback IP URL を指定してください".into());
+            if url.scheme() != "http"
+                || !matches!(url.host_str(), Some("127.0.0.1") | Some("[::1]"))
+                || !url.username().is_empty()
+                || url.password().is_some()
+                || url.query().is_some()
+                || url.fragment().is_some()
+            {
+                return Err(
+                    "ローカル接続には認証情報なしの HTTP loopback IP URL を指定してください".into(),
+                );
             }
         }
-        if self.backend == "librechat" && !self.librechat_url.starts_with("http://") && !self.librechat_url.starts_with("https://")
+        if self.backend == "librechat"
+            && !self.librechat_url.starts_with("http://")
+            && !self.librechat_url.starts_with("https://")
         {
             return Err("LibreChat URL は http(s) で指定してください".to_string());
         }
@@ -154,7 +169,11 @@ mod tests {
     fn local_backend_needs_no_librechat_and_preserves_legacy_configs() {
         let old: DesktopConfig = serde_json::from_str("{}").unwrap();
         assert_eq!(old.backend, "librechat");
-        let mut local = DesktopConfig { backend: "local".into(), manage_model: false, ..Default::default() };
+        let mut local = DesktopConfig {
+            backend: "local".into(),
+            manage_model: false,
+            ..Default::default()
+        };
         assert!(local.validate().is_ok());
         local.model_url = "http://example.com/v1".into();
         assert!(local.validate().is_err());
@@ -188,8 +207,11 @@ mod tests {
     #[test]
     fn local_ignores_unused_librechat_url_but_validates_model_url() {
         let mut cfg = DesktopConfig {
-            backend: "local".into(), librechat_url: "unused-invalid".into(),
-            manage_model: false, manage_librechat: true, librechat_path: None,
+            backend: "local".into(),
+            librechat_url: "unused-invalid".into(),
+            manage_model: false,
+            manage_librechat: true,
+            librechat_path: None,
             ..Default::default()
         };
         assert!(cfg.validate().is_ok());
@@ -246,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn test_config_default_managed_true() {
+    fn test_config_defaults_to_managed_model_without_librechat() {
         let cfg = DesktopConfig::default();
         assert_eq!(cfg.backend, "local");
         assert_eq!(cfg.state_filename(), "local-state.json");
@@ -255,8 +277,8 @@ mod tests {
             "new installs must default to managed GPT-OSS"
         );
         assert!(
-            cfg.manage_librechat,
-            "new installs must default to managed LibreChat"
+            !cfg.manage_librechat,
+            "optional LibreChat management must be opt-in"
         );
     }
 

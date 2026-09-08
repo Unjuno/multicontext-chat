@@ -267,8 +267,14 @@
       const UI = window.DesktopUI || {
         labelFor: (n) => n,
         STARTUP_SERVICES: ["モデル", "LibreChat", "MultiContext"],
-        allServicesReady: (s) => (s || []).length === 3 && s.every((x) => x.state === "ready"),
-        shouldNavigate: (s, n) => !n && UI.allServicesReady(s),
+        startupServicesForBackend: (backend) => backend === "local"
+          ? ["モデル", "MultiContext"]
+          : ["モデル", "LibreChat", "MultiContext"],
+        allServicesReady: (s, services) => {
+          const required = services || UI.STARTUP_SERVICES;
+          return required.every((name) => (s || []).some((item) => item.name === name && item.state === "ready"));
+        },
+        shouldNavigate: (s, services, n) => !n && UI.allServicesReady(s, services),
         librechatConnectionText: () => "確認中...",
         ownershipText: (o) => (o === "startedbymulticontext" ? "管理 (Desktop 起動)" : o === "external" ? "外部" : ""),
       };
@@ -281,10 +287,13 @@
         document.title = "TAURI_OK";
       }
 
-      const SERVICES = UI.STARTUP_SERVICES;
       const settingsOnly = new URLSearchParams(window.location.search).get("settings") === "1";
       const state = { config: null, port: 4317, statuses: {}, attemptId: 0 };
       let navigated = false;
+
+      function requiredServices() {
+        return UI.startupServicesForBackend(state.config?.backend || "librechat");
+      }
 
       function el(tag, props = {}, children = []) {
         const e = document.createElement(tag);
@@ -303,7 +312,7 @@
       function buildCards() {
         const wrap = document.getElementById("cards");
         wrap.innerHTML = "";
-        SERVICES.forEach((name) => {
+        requiredServices().forEach((name) => {
           const dot = el("div", { class: "dot checking" });
           const msg = el("div", { class: "msg", text: "確認中..." });
           const own = el("div", { class: "own", text: "" });
@@ -328,8 +337,9 @@
         card._msg.title = status.message || "";
         card._own.textContent = UI.ownershipText(status.ownership);
         if (!navigated) {
-          const readyCount = SERVICES.filter((service) => state.statuses[service]?.state === "ready").length;
-          document.getElementById("subtitle").textContent = `サービスを確認しています（${readyCount}/${SERVICES.length}）`;
+          const required = requiredServices();
+          const readyCount = required.filter((service) => state.statuses[service]?.state === "ready").length;
+          document.getElementById("subtitle").textContent = `サービスを確認しています（${readyCount}/${required.length}）`;
         }
       }
 
@@ -347,8 +357,9 @@
       function maybeNavigate() {
         if (settingsOnly) return;
         if (navigated) return;
-        const statuses = SERVICES.map((n) => state.statuses[n]).filter(Boolean);
-        if (!UI.shouldNavigate(statuses, navigated)) return;
+        const required = requiredServices();
+        const statuses = required.map((n) => state.statuses[n]).filter(Boolean);
+        if (!UI.shouldNavigate(statuses, required, navigated)) return;
         navigated = true;
         document.getElementById("subtitle").textContent = "準備完了";
         document.getElementById("readyNote").style.display = "block";

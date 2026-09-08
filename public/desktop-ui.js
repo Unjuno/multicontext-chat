@@ -28,6 +28,14 @@
   // The full ordered set that must be READY before navigating.
   const STARTUP_SERVICES = ["モデル", "LibreChat", "MultiContext"];
 
+  // LibreChat is an opt-in compatibility backend.  A direct-local startup
+  // must neither wait for it nor manufacture a placeholder READY service.
+  function startupServicesForBackend(backend) {
+    return backend === "local"
+      ? ["モデル", "MultiContext"]
+      : [...STARTUP_SERVICES];
+  }
+
   function indexBy(statuses) {
     const map = {};
     (statuses || []).forEach((s) => {
@@ -52,6 +60,11 @@
 
   // Navigate exactly once: never re-trigger after we already navigated.
   function shouldNavigate(statuses, services, navigated) {
+    // Keep the historical two-argument form for older bundled startup pages.
+    if (typeof services === "boolean" && navigated === undefined) {
+      navigated = services;
+      services = STARTUP_SERVICES;
+    }
     if (navigated) return false;
     return allServicesReady(statuses, services);
   }
@@ -102,6 +115,7 @@
     "LibreChat": { ready: "接続済み", starting: "接続中", checking: "接続中", needs_setup: "要設定", error: "エラー" },
     "MultiContext": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
     "LibreChat Agent": { ready: "利用可能", starting: "確認中", checking: "確認中", needs_setup: "未設定", error: "未設定" },
+    "利用モデル": { ready: "利用可能", starting: "確認中", checking: "確認中", needs_setup: "未設定", error: "未設定" },
     "GPT-OSS": { ready: "準備完了", starting: "起動中", checking: "確認中", needs_setup: "要設定", error: "エラー" },
     "MCP": { ready: "有効", starting: "確認中", checking: "確認中", needs_setup: "無効", error: "無効" },
     "外部連携": { ready: "有効", starting: "確認中", checking: "確認中", needs_setup: "無効", error: "無効" },
@@ -137,7 +151,11 @@
     const list = (statuses || []).filter(s => !String(s.name || '').toLowerCase().includes('mcp') && !String(s.name || '').includes('外部'));
     if (!list.length) return { label: "確認中", cls: "checking", text: "AIスタック ● 確認中" };
     const states = list.map((s) => normalizeState(s.state));
-    const coreNames = new Set(["モデル", "LibreChat", "MultiContext"]);
+    // Local mode intentionally omits LibreChat. Compatibility mode includes it,
+    // so the required core is inferred from the rows supplied by the runtime.
+    const coreNames = new Set(list.some((s) => s.name === "LibreChat")
+      ? ["モデル", "LibreChat", "MultiContext"]
+      : ["モデル", "MultiContext"]);
     const core = list.filter((s) => coreNames.has(s.name));
     // Surface a confirmed failure immediately, even when startup has not yet
     // reported every required service. Staying at "確認中" hides a useful
@@ -145,7 +163,7 @@
     if (states.some((s) => s === "error")) return { label: "要確認", cls: "error", text: "AIスタック ● 要確認" };
     // Optional rows must never make the stack look ready while a required
     // service is missing. This matters during startup and partial API replies.
-    if (core.length < 3) return { label: "確認中", cls: "checking", text: "AIスタック ● 確認中" };
+    if (core.length < coreNames.size) return { label: "確認中", cls: "checking", text: "AIスタック ● 確認中" };
     if (core.every((s) => normalizeState(s.state) === "ready") && !states.includes("error")) {
       return { label: "準備完了", cls: "ready", text: "AIスタック ● 準備完了" };
     }
@@ -165,9 +183,19 @@
     } catch { return false; }
   }
 
+  function runtimeServicesForBackend(statuses, backend) {
+    const list = Array.isArray(statuses) ? statuses : [];
+    return backend === "local" ? list.filter((status) => status.name !== "LibreChat") : list;
+  }
+
+  function agentServiceName(backend) {
+    return backend === "local" ? "利用モデル" : "LibreChat Agent";
+  }
+
   return {
     SERVICE_LABELS,
     STARTUP_SERVICES,
+    startupServicesForBackend,
     labelFor,
     allServicesReady,
     shouldNavigate,
@@ -180,5 +208,7 @@
     aggregateStatus,
     normalizeState,
     isTauriAvailable,
+    runtimeServicesForBackend,
+    agentServiceName,
   };
 });

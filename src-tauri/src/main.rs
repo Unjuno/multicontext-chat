@@ -220,50 +220,49 @@ async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<Service
         attempt_id,
     });
 
-    // LibreChat: Remote Agents key validation (never expose key)
-    let librechat_started = state
-        .children
-        .children
-        .lock()
-        .unwrap()
-        .contains_key("LibreChat");
-    let (librechat_state, librechat_msg, librechat_healthy) = if cfg.backend == "local" {
-        (ServiceState::Ready, "不要（ローカルLMへ直接接続）".to_string(), false)
-    } else { match keychain::get_key() {
-        Some(key) if !key.is_empty() => {
-            match health::librechat_auth(&cfg.librechat_url, &key).await {
-                AuthStatus::Ok => (ServiceState::Ready, "接続済み".to_string(), true),
-                AuthStatus::Forbidden => (
-                    ServiceState::Error,
-                    "接続キーを確認してください".to_string(),
-                    false,
-                ),
-                AuthStatus::Unreachable => (
-                    ServiceState::Error,
-                    "LibreChat に接続できません".to_string(),
-                    false,
-                ),
+    // LibreChat is reported only when the compatibility backend is selected.
+    // Direct-local mode has no synthetic LibreChat row and never probes it.
+    if cfg.backend == "librechat" {
+        let librechat_started = state
+            .children
+            .children
+            .lock()
+            .unwrap()
+            .contains_key("LibreChat");
+        let (librechat_state, librechat_msg, librechat_healthy) = match keychain::get_key() {
+            Some(key) if !key.is_empty() => {
+                match health::librechat_auth(&cfg.librechat_url, &key).await {
+                    AuthStatus::Ok => (ServiceState::Ready, "接続済み".to_string(), true),
+                    AuthStatus::Forbidden => (
+                        ServiceState::Error,
+                        "接続キーを確認してください".to_string(),
+                        false,
+                    ),
+                    AuthStatus::Unreachable => (
+                        ServiceState::Error,
+                        "LibreChat に接続できません".to_string(),
+                        false,
+                    ),
+                }
             }
-        }
-        _ => {
-            let client2 = health::client();
-            let reachable = health::probe(LibreChat, &cfg.librechat_url, &client2).await;
-            if reachable {
-                (ServiceState::Ready, "準備完了".to_string(), true)
-            } else {
-                (ServiceState::NeedsSetup, "要設定".to_string(), false)
+            _ => {
+                let reachable = health::probe(LibreChat, &cfg.librechat_url, &client).await;
+                if reachable {
+                    (ServiceState::Ready, "準備完了".to_string(), true)
+                } else {
+                    (ServiceState::NeedsSetup, "要設定".to_string(), false)
+                }
             }
-        }
+        };
+        let librechat_ownership = ownership_from(librechat_started, librechat_healthy);
+        out.push(ServiceStatus {
+            name: "LibreChat".to_string(),
+            state: librechat_state,
+            message: librechat_msg,
+            ownership: librechat_ownership,
+            attempt_id,
+        });
     }
-    };
-    let librechat_ownership = ownership_from(librechat_started, librechat_healthy);
-    out.push(ServiceStatus {
-        name: "LibreChat".to_string(),
-        state: librechat_state,
-        message: librechat_msg,
-        ownership: librechat_ownership,
-        attempt_id,
-    });
 
     // MultiContext: strict ok===true, body parsed even on 503
     let mc_url = format!("http://127.0.0.1:{}", cfg.multicontext_port);
@@ -280,7 +279,7 @@ async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<Service
             librechat_ok: _,
             detail,
         } => {
-            let msg = connection_error_message(kind, None, &detail);
+            let msg = connection_error_message(kind, None, &detail, &cfg.backend);
             // Map WrongService/Generic to Error, LibreChat already handled
             (ServiceState::Error, msg, false)
         }
@@ -302,6 +301,9 @@ async fn runtime_status(state: tauri::State<'_, AppState>) -> Result<Vec<Service
     // Keep services cache reasonably current without overwriting attempt_id semantics
     {
         let mut cache = state.services.lock().unwrap();
+        if cfg.backend == "local" {
+            cache.remove("LibreChat");
+        }
         for s in &out {
             cache.insert(s.name.clone(), s.clone());
         }
@@ -432,20 +434,42 @@ fn open_data_dir(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn backup_data(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<String, String> {
+async fn backup_data(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
     let cfg = state.config.lock().unwrap().clone();
     if cfg.backend == "local" {
-        let mut request = health::client().post(format!("http://127.0.0.1:{}/api/backup", cfg.multicontext_port));
+        let mut request = health::client().post(format!(
+            "http://127.0.0.1:{}/api/backup",
+            cfg.multicontext_port
+        ));
         if let Ok(token) = std::env::var("MULTICONTEXT_APP_TOKEN") {
-            if !token.is_empty() { request = request.bearer_auth(token); }
+            if !token.is_empty() {
+                request = request.bearer_auth(token);
+            }
         }
-        let response = request.send().await.map_err(|_| "バックアップにはローカルサーバーの起動が必要です")?;
+        let response = request
+            .send()
+            .await
+            .map_err(|_| "バックアップにはローカルサーバーの起動が必要です")?;
         let status = response.status();
-        let body: serde_json::Value = response.json().await.map_err(|_| "バックアップ応答が無効です")?;
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|_| "バックアップ応答が無効です")?;
         if !status.is_success() {
-            return Err(body.get("error").and_then(|value| value.as_str()).unwrap_or("バックアップに失敗しました").to_string());
+            return Err(body
+                .get("error")
+                .and_then(|value| value.as_str())
+                .unwrap_or("バックアップに失敗しました")
+                .to_string());
         }
-        return body.get("path").and_then(|value| value.as_str()).map(str::to_string).ok_or("バックアップ保存先がありません".into());
+        return body
+            .get("path")
+            .and_then(|value| value.as_str())
+            .map(str::to_string)
+            .ok_or("バックアップ保存先がありません".into());
     }
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let source = dir.join("state.json");
@@ -462,7 +486,10 @@ async fn backup_data(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -
         let config_destination = backup_dir.join(format!("config-{}.json", timestamp));
         std::fs::copy(&config_source, config_destination).map_err(|e| e.to_string())?;
     }
-    Ok(backup_dir.join(format!("backup-{}", timestamp)).to_string_lossy().into_owned())
+    Ok(backup_dir
+        .join(format!("backup-{}", timestamp))
+        .to_string_lossy()
+        .into_owned())
 }
 
 fn resolve_node(state: &tauri::State<AppState>) -> Option<String> {
@@ -555,38 +582,38 @@ fn start_multicontext(
         "MULTICONTEXT_DATA_FILE".into(),
         data_file.to_string_lossy().to_string(),
     );
-    envs.insert("MULTICONTEXT_LIBRECHAT_MODE".into(), "native".into());
     envs.insert("MULTICONTEXT_BACKEND".into(), cfg.backend.clone());
     envs.insert("MULTICONTEXT_LOCAL_MODEL_URL".into(), cfg.model_url.clone());
-    envs.insert("LIBRECHAT_BASE_URL".into(), cfg.librechat_url.clone());
-    // LibreChat API key: prefer the Keychain value the user saved in Settings
-    // (preferred, since it survives Finder launches without `launchctl`), then
-    // fall back to the app environment (e.g. `launchctl setenv`). The desktop
-    // app never stores the secret in config.json and never logs it.
-    let keychain_key = keychain::get_key();
-    if let Some(v) = &keychain_key {
-        if !v.is_empty() {
-            envs.insert("LIBRECHAT_API_KEY".into(), v.clone());
-        }
-    }
-    // Pass through LibreChat credentials/proxy from the app environment.
-    for key in [
-        "LIBRECHAT_API_KEY_B",
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "NO_PROXY",
-    ] {
-        if let Ok(v) = std::env::var(key) {
+    if cfg.backend == "librechat" {
+        envs.insert("MULTICONTEXT_LIBRECHAT_MODE".into(), "native".into());
+        envs.insert("LIBRECHAT_BASE_URL".into(), cfg.librechat_url.clone());
+        // LibreChat API key: prefer the Keychain value the user saved in
+        // Settings, then fall back to the app environment. Direct-local mode
+        // deliberately never forwards this unrelated secret to the child.
+        let keychain_key = keychain::get_key();
+        if let Some(v) = &keychain_key {
             if !v.is_empty() {
-                envs.insert(key.to_string(), v);
+                envs.insert("LIBRECHAT_API_KEY".into(), v.clone());
+            }
+        }
+        if keychain_key.is_none() {
+            if let Ok(v) = std::env::var("LIBRECHAT_API_KEY") {
+                if !v.is_empty() {
+                    envs.insert("LIBRECHAT_API_KEY".into(), v);
+                }
+            }
+        }
+        if let Ok(v) = std::env::var("LIBRECHAT_API_KEY_B") {
+            if !v.is_empty() {
+                envs.insert("LIBRECHAT_API_KEY_B".into(), v);
             }
         }
     }
-    // Env var can override the keychain value if explicitly provided.
-    if keychain_key.is_none() {
-        if let Ok(v) = std::env::var("LIBRECHAT_API_KEY") {
+    // Preserve the user's process-level proxy configuration for either backend.
+    for key in ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"] {
+        if let Ok(v) = std::env::var(key) {
             if !v.is_empty() {
-                envs.insert("LIBRECHAT_API_KEY".into(), v);
+                envs.insert(key.to_string(), v);
             }
         }
     }
@@ -963,6 +990,7 @@ fn connection_error_message(
     kind: McFailureKind,
     _librechat_ok: Option<bool>,
     detail: &str,
+    backend: &str,
 ) -> String {
     match kind {
         McFailureKind::WrongService => {
@@ -977,7 +1005,7 @@ fn connection_error_message(
             }
         }
         McFailureKind::Generic => {
-            if keychain::has_key() {
+            if backend == "local" || keychain::has_key() {
                 format!("MultiContext が利用できません: {}", detail)
             } else {
                 "LibreChat 接続キーを設定してください".to_string()
@@ -1086,11 +1114,7 @@ async fn ensure_librechat(
     node: &str,
     attempt_id: u64,
 ) -> Result<(), String> {
-    if cfg.backend == "local" {
-        emit_service(app, state, "LibreChat", ServiceState::Ready,
-            "不要（ローカルLMへ直接接続）", false, attempt_id);
-        return Ok(());
-    }
+    debug_assert_eq!(cfg.backend, "librechat");
     emit_service(
         app,
         state,
@@ -1213,7 +1237,7 @@ async fn ensure_multicontext(
         } => {
             // Already running but not usable (e.g. missing/wrong key). Do NOT
             // restart onto the occupied port; surface the real cause instead.
-            let msg = connection_error_message(kind, librechat_ok, &detail);
+            let msg = connection_error_message(kind, librechat_ok, &detail, &cfg.backend);
             emit_service(
                 app,
                 state,
@@ -1283,7 +1307,7 @@ async fn ensure_multicontext(
             detail,
         } => {
             process::terminate(&state.children, "MultiContext");
-            let msg = connection_error_message(kind, librechat_ok, &detail);
+            let msg = connection_error_message(kind, librechat_ok, &detail, &cfg.backend);
             emit_service(
                 app,
                 state,
@@ -1345,8 +1369,8 @@ async fn startup(
     trace(
         &app,
         &format!(
-            "startup begin: manage_model={} manage_librechat={} port={}",
-            cfg.manage_model, cfg.manage_librechat, cfg.multicontext_port
+            "startup begin: backend={} manage_model={} manage_librechat={} port={}",
+            cfg.backend, cfg.manage_model, cfg.manage_librechat, cfg.multicontext_port
         ),
     );
     cfg.validate()?;
@@ -1365,14 +1389,23 @@ async fn startup(
         })?;
     trace(&app, "startup: model ready");
 
-    trace(&app, "startup: checking LibreChat");
-    ensure_librechat(&app, &state, &cfg, &client, &node, run_attempt)
-        .await
-        .map_err(|e| {
-            trace(&app, &format!("startup: LibreChat failed: {}", e));
-            e
-        })?;
-    trace(&app, "startup: LibreChat ready");
+    if cfg.backend == "librechat" {
+        trace(&app, "startup: checking LibreChat compatibility backend");
+        ensure_librechat(&app, &state, &cfg, &client, &node, run_attempt)
+            .await
+            .map_err(|e| {
+                trace(&app, &format!("startup: LibreChat failed: {}", e));
+                e
+            })?;
+        trace(&app, "startup: LibreChat ready");
+    } else {
+        // If the user switches an app-owned compatibility process to the
+        // direct-local backend in this same app session, stop only that owned
+        // process and remove its stale status. External processes are untouched.
+        process::terminate(&state.children, "LibreChat");
+        state.services.lock().unwrap().remove("LibreChat");
+        trace(&app, "startup: direct-local backend; LibreChat omitted");
+    }
 
     trace(&app, "startup: checking MultiContext");
     ensure_multicontext(&app, &state, &cfg, &client, &node, run_attempt)
@@ -1502,5 +1535,20 @@ mod tests {
         assert_eq!(s.state, ServiceState::Ready);
         s.state = ServiceState::Error;
         assert_eq!(s.state, ServiceState::Error);
+    }
+
+    #[test]
+    fn local_generic_error_never_asks_for_a_librechat_key() {
+        let message = connection_error_message(
+            McFailureKind::Generic,
+            None,
+            "ローカルモデル接続を確認してください",
+            "local",
+        );
+        assert_eq!(
+            message,
+            "MultiContext が利用できません: ローカルモデル接続を確認してください"
+        );
+        assert!(!message.contains("LibreChat"));
     }
 }

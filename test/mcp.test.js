@@ -58,7 +58,9 @@ test('MCP research handoffs retain rejected assessments, source IDs and search e
     const ws = store.createWorkspace({});
     const member = store.addMember(ws.id, { name: 'Researcher' });
     member.messages.push({ id: 'claim', role: 'assistant', content: 'Unproved claim '.repeat(100),
-      searchEvidence: { scope: 'MULTICONTEXT_SEARCH_THIS_ATTEMPT', attempted: 0, succeeded: 0 } });
+      searchEvidence: { scope: 'MULTICONTEXT_SEARCH_THIS_ATTEMPT', attempted: 0, succeeded: 0 },
+      toolEvidence: { scope: 'MULTICONTEXT_TOOLS_THIS_ATTEMPT', attempted: 1, succeeded: 1, failed: 0, replayed: 0,
+        calls: [{ callId: 'calc-source', tool: 'calculate', status: 'succeeded', calculation: { expression: '1+1', value: 2, proofVerified: false } }], omittedCalls: 0 } });
     const note = store.addReviewNote(ws.id, { memberId: member.id, messageId: 'claim', verdict: 'rejected', rationale: 'Exponent is incorrect.', reviewer: 'Auditor' });
     const before = JSON.stringify(store.state);
     for (const [name, args] of [
@@ -74,6 +76,7 @@ test('MCP research handoffs retain rejected assessments, source IDs and search e
       assert.match(response.content[0].text, /Exponent is incorrect/);
       assert.match(response.content[0].text, /claim/);
       assert.match(response.content[0].text, /MULTICONTEXT_SEARCH_THIS_ATTEMPT/);
+      assert.match(response.content[0].text, /calc-source/);
       if (name.endsWith('distill_context')) assert.ok(response.content[0].text.length <= 8000);
     }
     assert.equal(JSON.stringify(store.state), before);

@@ -581,7 +581,8 @@ export class StateStore {
     const orchestratorRunId = member.current.item.orchestratorRunId;
     const pending = member.messages.find((m) => m.id === member.current.pendingMessageId); if (pending) delete pending.pending;
     member.messages.push({ id: randomUUID(), at: now(), role: 'assistant', content: String(result.text || ''), responseId: result.id || null, usage: result.usage ?? null,
-      ...(result.searchEvidence ? { searchEvidence: structuredClone(result.searchEvidence) } : {}) });
+      ...(result.searchEvidence ? { searchEvidence: structuredClone(result.searchEvidence) } : {}),
+      ...(result.toolEvidence ? { toolEvidence: structuredClone(result.toolEvidence) } : {}) });
     if (result.conversationId) member.conversationId = result.conversationId;
     member.current = null; member.status = 'idle'; member.lastError = null; member.lastRun = { ...member.lastRun, finishedAt: now(), responseId: result.id || null };
     workspace.stats.executions += 1; member.updatedAt = now(); workspace.updatedAt = now(); this.save();
@@ -699,7 +700,11 @@ export function searchMemberMessages(member, query, limit = 8) {
     return { message, score };
   });
   const filtered = tokens.length ? scored.filter((x) => x.score >= 3) : scored.slice(-limit);
-  return filtered.sort((a, b) => b.score - a.score).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20))).map(({ message }) => ({ id: message.id, role: message.role, at: message.at, content: String(message.content || '').slice(0, 4000) }));
+  return filtered.sort((a, b) => b.score - a.score).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20))).map(({ message }) => ({
+    id: message.id, role: message.role, at: message.at, content: String(message.content || '').slice(0, 4000),
+    ...(message.searchEvidence ? { searchEvidence: structuredClone(message.searchEvidence) } : {}),
+    ...(message.toolEvidence ? { toolEvidence: structuredClone(message.toolEvidence) } : {}),
+  }));
 }
 
 export function defaultCompilePrompt() {

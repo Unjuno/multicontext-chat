@@ -273,3 +273,18 @@ test('no secrets returned in runtime status', async () => {
     assert.equal(ser2.includes('bearer'), false);
   });
 });
+
+test('direct-local health uses a backend-neutral model field', async () => {
+  const client = {
+    listAgents: async () => [{ id:'local-model', name:'Local Model' }],
+    health: async () => ({ ok:true, agents:1, mode:'native', provider:'local', latencyMs:2 }),
+    runAgent: async () => ({ id:'r', text:'ok' }),
+  };
+  await withServer(client, async ({ base }) => {
+    const health = await jfetch(base, '/api/health');
+    assert.equal(health.res.status, 200);
+    assert.equal(health.data.backend, 'local');
+    assert.equal(health.data.modelBackend.provider, 'local');
+    assert.equal(health.data.librechat, undefined);
+  }, { backend:'local' });
+});

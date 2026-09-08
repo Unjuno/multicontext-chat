@@ -212,21 +212,41 @@ pub async fn multicontext_health(client: &Client, base: &str) -> McHealth {
 }
 
 pub fn backend_matches(body: &serde_json::Value, expected: &str) -> bool {
-    body.get("backend").and_then(|v| v.as_str()).unwrap_or("librechat") == expected
+    body.get("backend")
+        .and_then(|v| v.as_str())
+        .unwrap_or("librechat")
+        == expected
 }
 
 #[test]
 fn backend_reuse_is_explicit_and_legacy_is_not_local() {
-    assert!(backend_matches(&serde_json::json!({"backend":"local"}), "local"));
-    assert!(!backend_matches(&serde_json::json!({"backend":"librechat"}), "local"));
+    assert!(backend_matches(
+        &serde_json::json!({"backend":"local"}),
+        "local"
+    ));
+    assert!(!backend_matches(
+        &serde_json::json!({"backend":"librechat"}),
+        "local"
+    ));
     assert!(!backend_matches(&serde_json::json!({"ok":true}), "local"));
-    assert!(backend_matches(&serde_json::json!({"ok":true}), "librechat"));
+    assert!(backend_matches(
+        &serde_json::json!({"ok":true}),
+        "librechat"
+    ));
 }
 
 /// Refuse to reuse a running server with another backend. Never stop external
 /// services just because the user changed settings; ask for a separate port.
-pub async fn require_backend_match(client: &Client, base: &str, expected: &str) -> Result<(), String> {
-    if let Ok(response) = client.get(format!("{}/api/health", base.trim_end_matches('/'))).send().await {
+pub async fn require_backend_match(
+    client: &Client,
+    base: &str,
+    expected: &str,
+) -> Result<(), String> {
+    if let Ok(response) = client
+        .get(format!("{}/api/health", base.trim_end_matches('/')))
+        .send()
+        .await
+    {
         if let Ok(body) = response.json::<serde_json::Value>().await {
             if !backend_matches(&body, expected) {
                 return Err("別の接続方式のサーバーが起動中です。別ポートを設定するか、既存サーバーを終了して再起動してください。".into());

@@ -154,6 +154,36 @@ test("aggregate status is READY only when all required services are READY", () =
   assert.equal(agg.text, "AIスタック ● 準備完了");
 });
 
+test("direct-local runtime omits LibreChat without losing READY state", () => {
+  const raw = [
+    status("モデル", "ready"),
+    status("LibreChat", "ready", { message: "不要（ローカルLMへ直接接続）" }),
+    status("MultiContext", "ready"),
+  ];
+  const local = UI.runtimeServicesForBackend(raw, "local");
+  assert.deepEqual(local.map(item => item.name), ["モデル", "MultiContext"]);
+  assert.equal(UI.agentServiceName("local"), "利用モデル");
+  assert.equal(UI.agentServiceName("librechat"), "LibreChat Agent");
+  assert.equal(UI.aggregateStatus([...local, status("利用モデル", "ready")]).cls, "ready");
+});
+
+test("direct-local startup requires only the model and MultiContext", () => {
+  const localServices = UI.startupServicesForBackend("local");
+  assert.deepEqual(localServices, ["モデル", "MultiContext"]);
+  assert.equal(
+    UI.shouldNavigate(
+      [status("モデル", "ready"), status("MultiContext", "ready")],
+      localServices,
+      false
+    ),
+    true
+  );
+  assert.deepEqual(
+    UI.startupServicesForBackend("librechat"),
+    ["モデル", "LibreChat", "MultiContext"]
+  );
+});
+
 test("one failed service makes aggregate non-READY", () => {
   const oneError = [
     status("モデル", "ready"),
@@ -242,9 +272,16 @@ test("workspace runtime HTML has no localhost:9999 and no secrets", () => {
   assert.equal(js.includes("127.0.0.1:9999"), false);
   // app.js runtime poll must use Tauri runtime_status (not raw key handling)
   assert.equal(js.includes("runtime_status"), true, "should poll runtime_status");
+  assert.equal(js.includes("if (health.ok && currentId"), false, "runtime poll must not reference block-scoped health");
   // Ensure no hardcoded Remote Agents key appears in public js
   const hasHardcodedKey = /sk-[a-z0-9]{20,}/i.test(js);
   assert.equal(hasHardcodedKey, false, "should not contain hardcoded API key");
+});
+
+test("local startup derives its required services from the selected backend", () => {
+  const html = readFileSync(fileURLToPath(new URL("../public/desktop-startup.html", import.meta.url)), "utf8");
+  assert.match(html, /startupServicesForBackend\(state\.config\?\.backend/);
+  assert.match(html, /UI\.shouldNavigate\(statuses, required, navigated\)/);
 });
 
 test("browser mode degrade: missing Tauri should not throw", () => {

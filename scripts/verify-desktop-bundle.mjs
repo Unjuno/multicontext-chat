@@ -18,6 +18,7 @@ const markers = [
   ['index.html', 'id="desktopSettings"'],
   ['index.html', 'ショートカットと使い方'],
   ['app.js', 'compileHistory'],
+  ['tool-evidence.js', 'compileToolAuditLabel'],
   ['desktop-startup.html', 'データ保存場所を開く'],
 ];
 

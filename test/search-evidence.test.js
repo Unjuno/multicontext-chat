@@ -38,7 +38,7 @@ test('scheduler records search separately from model claims and retains it for s
     const member = store.addMember(w.id, { name: 'Researcher', agentId: 'model' });
     const client = { mode: 'native', listAgents: async () => [{ id: 'model' }],
       runAgent: async ({ prompt }) => prompt === 'search' ? { raw: { output: [{ type: 'function_call', name: 'search_sources', call_id: 'search1', arguments: '{"query":"test","source":"papers"}' }] } }
-        : { text: 'I verified the paper with a fresh search.', searchEvidence: { succeeded: 99 } },
+        : { text: 'I verified the paper with a fresh search.', searchEvidence: { succeeded: 99 }, toolEvidence: { attempted: 99 } },
       continueAgent: async () => ({ text: 'I found source metadata.' }) };
     const scheduler = new Scheduler({ store, client });
     const app = createApplication({ config: {}, store, client, scheduler });
@@ -51,8 +51,12 @@ test('scheduler records search separately from model claims and retains it for s
     const messages = new StateStore(file).getMember(w.id, member.id).messages.filter(m => m.role === 'assistant');
     assert.equal(messages[0].searchEvidence.succeeded, 1);
     assert.equal(messages[0].searchEvidence.calls[0].callId, 'search1');
+    assert.equal(messages[0].toolEvidence.attempted, 1);
+    assert.equal(messages[0].toolEvidence.calls[0].tool, 'search_sources');
     assert.equal(messages[1].searchEvidence.attempted, 0, 'model prose and supplied metadata must not forge runtime evidence');
+    assert.equal(messages[1].toolEvidence.attempted, 0, 'model-supplied tool evidence must not be trusted');
     const snapshot = researchSnapshots(store.getWorkspace(w.id))[0];
     assert.deepEqual(snapshot.messages.filter(m => m.role === 'assistant').map(m => m.searchEvidence.succeeded), [1, 0]);
+    assert.deepEqual(snapshot.messages.filter(m => m.role === 'assistant').map(m => m.toolEvidence.attempted), [1, 0]);
   } finally { fs.rmSync(dir, { recursive: true }); }
 });

@@ -8,10 +8,14 @@ must not block local release acceptance or require the user to register. This
 does not promote unverified LibreChat behavior to verified, and does not remove
 the signed macOS distribution gates below.
 
-- [x] `npm run check` after the native backup-message correction: 350 total, 347 passed, 0 failed, 3 skipped. The three skipped cases are obsolete MCP Stop/differential Stop tests under the GUI-only Stop policy, not the optional stress scripts. See `docs/DESKTOP_RESEARCH_AUDIT.md` for scope and subsequent evidence.
+- [x] Latest `npm run check`: 366 total, 363 passed, 0 failed, 3 skipped.
+  The three skipped cases are obsolete MCP Stop/differential Stop tests under
+  the GUI-only Stop policy, not optional stress scripts. See
+  `docs/DESKTOP_RESEARCH_AUDIT.md` for the native direct-local and Compile audit.
 - [x] Real MCP user flow: 4-chat Navier–Stokes stress completed with 4 answers-bearing chats, empty queues, and confirmed cleanup.
-- [x] `cargo check` and macOS production `.app`/`.dmg` build.
-- [x] `verify:desktop` and `verify:bundle` (bundled MCP initialize/list workspaces).
+- [x] All 50 Rust tests and the macOS production `.app`/`.dmg` build.
+- [x] `verify:desktop` matched all 11 public files; `verify:bundle` passed its
+  bundled MCP initialize/list-workspaces smoke.
 - [ ] Final release checkout and packaged artifacts match the intended release commit. Local `logs/` remains untracked and must not be published. Resource freshness is checked during development; a designated release commit and signed artifacts remain required. Earlier runtime evidence in `docs/PRODUCT_RUNTIME_CHECK.md` is historical, not a current clean-worktree assertion.
 - [x] Registration-free direct-local search → peer delivery → exact DOI metadata audit passed on real GPT-OSS (`research-flywheel-1788826035714`). This is not mathematical verification.
 - [x] Native direct-local review-note save and authenticated MCP readback, with unchanged source/queue state (`DESKTOP_RESEARCH_AUDIT.md`).

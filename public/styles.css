@@ -985,6 +985,10 @@ aside h3 {
 .md-table td { background: var(--surface); }
 .compile-result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .compile-result-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.compile-audit { margin: 8px 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--idle-bg); }
+.compile-audit summary { cursor: pointer; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.compile-audit pre { max-height: 220px; overflow: auto; margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 10px/1.45 var(--mono); color: var(--text-muted); }
+.compile-model-label { margin: 8px 0 4px; color: var(--text-secondary); font-size: 11px; font-weight: 700; }
 .compile-history { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
 .compile-history summary { cursor: pointer; color: var(--text-secondary); font-size: 11px; }
 .compile-history > .small { margin: 6px 0; }

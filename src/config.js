@@ -7,6 +7,8 @@ const int = (value, fallback) => {
 
 const mode = process.env.MULTICONTEXT_LIBRECHAT_MODE || 'native';
 if (!['compat', 'native'].includes(mode)) throw new Error('MULTICONTEXT_LIBRECHAT_MODE must be compat or native');
+const backend = process.env.MULTICONTEXT_BACKEND || 'local';
+const defaultDataFile = backend === 'local' ? './data/local-state.json' : './data/state.json';
 
 export function isLoopback(host) {
   const h = String(host || '').trim().toLowerCase();
@@ -14,11 +16,11 @@ export function isLoopback(host) {
 }
 
 export const config = {
-  backend: process.env.MULTICONTEXT_BACKEND || 'librechat',
+  backend,
   localModelUrl: process.env.MULTICONTEXT_LOCAL_MODEL_URL || 'http://127.0.0.1:8080',
   host: process.env.MULTICONTEXT_HOST || '127.0.0.1',
   port: int(process.env.MULTICONTEXT_PORT, 4317),
-  dataFile: path.resolve(process.env.MULTICONTEXT_DATA_FILE || './data/state.json'),
+  dataFile: path.resolve(process.env.MULTICONTEXT_DATA_FILE || defaultDataFile),
   appToken: process.env.MULTICONTEXT_APP_TOKEN || '',
   toolSecret: process.env.MULTICONTEXT_TOOL_SECRET || '',
   publicUrl: (process.env.MULTICONTEXT_PUBLIC_URL || '').replace(/\/$/, ''),

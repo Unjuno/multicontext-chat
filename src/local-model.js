@@ -16,6 +16,7 @@ export class LocalModelClient {
     this.timeoutMs = timeoutMs;
     this.fetchImpl = fetchImpl;
     this.mode = 'native';
+    this.provider = 'local';
   }
   async request(route, body, signal) {
     signal?.throwIfAborted();

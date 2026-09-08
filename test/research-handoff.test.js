@@ -15,4 +15,5 @@ test('handoff scopes reviews and explicitly records omitted/truncated evidence',
   assert.equal(review.reviewNotes[0].rationale.length, 450);
   assert.equal(messageHandoff({ id: 'm', role: 'user', pending: true, content: '12345' }, 3).pending, true);
   assert.deepEqual(messageHandoff({ role: 'assistant', content: '12345' }, 3).searchEvidence, { scope: 'UNRECORDED' });
+  assert.deepEqual(messageHandoff({ role: 'assistant', content: '12345' }, 3).toolEvidence, { scope: 'UNRECORDED' });
 });

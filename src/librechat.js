@@ -5,6 +5,7 @@ export const REMOTE_AGENTS_MODELS_PATH = "/api/agents/v1/responses/models";
 export class LibreChatClient {
   constructor({ baseUrl, apiKey, mode = 'compat', timeoutMs = 900000, fetchImpl = fetch, searchEnabled = process.env.MULTICONTEXT_SEARCH_ENABLED !== 'false' }) {
     this.baseUrl = baseUrl.replace(/\/$/, ''); this.apiKey = apiKey; this.mode = mode; this.timeoutMs = timeoutMs; this.fetchImpl = fetchImpl;
+    this.provider = 'librechat';
     this.tools = EXTERNAL_TOOLS.filter(tool => searchEnabled || tool.function.name !== 'search_sources');
   }
   headers() { return { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' }; }

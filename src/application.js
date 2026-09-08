@@ -1,6 +1,6 @@
 import { StateStore, publicMember, searchMemberMessages } from './store.js';
 import { createRunEngine, targetFromArgs } from './orchestrator-engine.js';
-import { researchSnapshots, researchSummaryPrompt, assertCompleteSynthesis } from './research-summary.js';
+import { researchSnapshots, compileToolAudit, researchSummaryPrompt, assertCompleteSynthesis } from './research-summary.js';
 
 const AGENT_SELECTION_REQUIRED = 'AGENT_SELECTION_REQUIRED';
 const AGENT_NOT_AVAILABLE = 'AGENT_NOT_AVAILABLE';
@@ -57,9 +57,17 @@ function sanitizeWorkspace(workspace, runtimeState, runningMemberIds, includeMes
 }
 
 export function createApplication({ config, store, client, scheduler } = {}) {
-  const noAgentsMessage = config?.backend === 'local'
+  const localBackend = config?.backend === 'local';
+  const agentSource = localBackend ? 'ローカルモデル' : 'LibreChat Agent';
+  const noAgentsMessage = localBackend
     ? '利用可能なローカルモデルがありません。ローカル推論サーバーを起動してモデルを読み込み、設定の接続先URLを確認してください。LibreChatへの登録は不要です。'
     : '利用可能なLibreChat Agentがありません。LibreChatでAgentを作成するか、設定からAgentを選択してください。';
+  const discoveryFailure = error => `${agentSource}の一覧取得に失敗しました: ${error}`;
+  const isRecoverableAgentError = error => {
+    const message = String(error || '');
+    return message.includes('利用可能なLibreChat Agent') || message.includes('利用可能なローカルモデル') ||
+      message.includes('LibreChat agentId is required') || message.includes('Agentが利用不可');
+  };
   if (!store || !client || !scheduler) throw new Error('store/client/scheduler required');
   let cachedDefaultAgentId = null;
   let cachedDefaultFetchedAt = 0;
@@ -109,7 +117,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   async function requireFreshAgents() {
     const status = await getAvailableAgentsWithStatus(true);
     if (!status.ok) {
-      throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+      throw problem(discoveryFailure(status.error), 503, 'DISCOVERY_FAILED');
     }
     return status.agents;
   }
@@ -429,7 +437,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
   async function listAgents() {
     const status = await getAvailableAgentsWithStatus(true);
     if (!status.ok) {
-      throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+      throw problem(discoveryFailure(status.error), 503, 'DISCOVERY_FAILED');
     }
     return status.agents.map(a => ({ id: String(a.id), name: String(a.name || a.id), provider: a.provider || null, model: a.model || null }));
   }
@@ -507,7 +515,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     // Validate discovery before any mutation
     const agentsStatus = await getAvailableAgentsWithStatus(true);
     if (!agentsStatus.ok) {
-      throw problem(`LibreChat Agentの取得に失敗しました: ${agentsStatus.error}`, 503, 'DISCOVERY_FAILED');
+      throw problem(discoveryFailure(agentsStatus.error), 503, 'DISCOVERY_FAILED');
     }
     const agents = agentsStatus.agents;
     // Ensure workspace default if needed and single agent case
@@ -536,7 +544,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     // Auto-recover BLOCKED config errors
     for (const m of activeMembers) {
       const fresh = updatedWs.members[m.id];
-      if (fresh.status === 'error' && fresh.lastError && (String(fresh.lastError).includes('利用可能なLibreChat Agent') || String(fresh.lastError).includes('LibreChat agentId is required') || String(fresh.lastError).includes('Agentが利用不可'))) {
+      if (fresh.status === 'error' && fresh.lastError && isRecoverableAgentError(fresh.lastError)) {
         if (effectiveAgentIdForMember(updatedWs, fresh)) {
           try { store.retryMember(workspaceId, m.id); } catch {}
         }
@@ -560,7 +568,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (!member.active) throw problem('Target member is inactive', 409);
     const agentsStatus = await getAvailableAgentsWithStatus(true);
     if (!agentsStatus.ok) {
-      throw problem(`LibreChat Agentの取得に失敗しました: ${agentsStatus.error}`, 503, 'DISCOVERY_FAILED');
+      throw problem(discoveryFailure(agentsStatus.error), 503, 'DISCOVERY_FAILED');
     }
     const agents = agentsStatus.agents;
     let effective = effectiveAgentIdForMember(workspace, member);
@@ -579,7 +587,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     if (!agents.some(a => String(a.id) === String(effective))) throw problem(`Agentが利用不可です: ${effective}`, 400, AGENT_NOT_AVAILABLE);
     // auto-recover if blocked due to config
     const fresh = store.requireWorkspace(workspaceId).members[chatId];
-    if (fresh.status === 'error' && fresh.lastError && (String(fresh.lastError).includes('利用可能なLibreChat Agent') || String(fresh.lastError).includes('LibreChat agentId is required') || String(fresh.lastError).includes('Agentが利用不可'))) {
+    if (fresh.status === 'error' && fresh.lastError && isRecoverableAgentError(fresh.lastError)) {
       try { store.retryMember(workspaceId, chatId); } catch {}
     }
     const item = store.enqueue(workspaceId, chatId, text, { source: orchestratorRunId ? 'orchestrator' : 'user', orchestratorRunId, orchestratorQId });
@@ -646,7 +654,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     // For atomic path, enqueueCrossChatAtomic will re-validate; for non-atomic we validate here
     // Agent validation must happen before mutation in both paths
     const status = await getAvailableAgentsWithStatus(true);
-    if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+    if (!status.ok) throw problem(discoveryFailure(status.error), 503, 'DISCOVERY_FAILED');
     const agents = status.agents;
     // Pre-resolve targets for validation (without mutation)
     const preTargets = refs.map(ref => store.resolveMember(workspaceId, ref, { activeOnly: true }));
@@ -728,13 +736,17 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const agentsStatusFull = await getAvailableAgentsWithStatus();
     const agents = agentsStatusFull.agents;
     const agentsStatus = { ok: agentsStatusFull.ok, error: agentsStatusFull.error, fromCache: agentsStatusFull.fromCache };
+    const modelBackend = { type: localBackend ? 'local' : 'librechat', ok: Boolean(health.ok), latencyMs: health.latencyMs || 0,
+      mode: health.mode || 'unknown', provider: health.provider || (localBackend ? 'local' : 'librechat'), error: health.error || null };
     const infrastructure = {
-      librechat: { ok: Boolean(health.ok), latencyMs: health.latencyMs || 0, mode: health.mode || 'unknown', error: health.error || null },
+      modelBackend,
+      ...(localBackend ? {} : { librechat: modelBackend }),
       multicontext: { ok: true, status: 'ok', message: 'Node API running' },
       gptoss: { status: 'unknown', ok: null, source: 'desktop-runtime', message: 'Desktop runtimeでのみ確認可能' },
     };
     const application = {
-      remoteAgentsAuthOk: Boolean(health.ok),
+      agentDiscoveryOk: agentsStatus.ok,
+      remoteAgentsAuthOk: localBackend ? null : Boolean(health.ok),
       availableAgents: agents.length,
       agents: agents.map(a => ({ id: String(a.id), name: String(a.name || a.id), provider: a.provider || null })),
       agentsOk: agentsStatus.ok,
@@ -765,14 +777,14 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     }
     if (!agentId) {
       const status = await getAvailableAgentsWithStatus(true);
-      if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+      if (!status.ok) throw problem(discoveryFailure(status.error), 503, 'DISCOVERY_FAILED');
       const agents = status.agents;
       if (agents.length === 0) throw problem(noAgentsMessage, 400, AGENT_SELECTION_REQUIRED);
       if (agents.length > 1) throw problem('Compileに使用するAgentが未設定です。compile_agent_id またはワークスペース既定Agentを設定してください。', 400, AGENT_SELECTION_REQUIRED);
     }
     // Validate stale
     const status = await getAvailableAgentsWithStatus(true);
-    if (!status.ok) throw problem(`LibreChat Agentの取得に失敗しました: ${status.error}`, 503, 'DISCOVERY_FAILED');
+    if (!status.ok) throw problem(discoveryFailure(status.error), 503, 'DISCOVERY_FAILED');
     if (!status.agents.some(a => String(a.id) === String(agentId))) throw problem(`Compile Agentが利用不可です: ${agentId}`, 400, AGENT_NOT_AVAILABLE);
     compilingWorkspaces.add(workspaceId);
     try { store.appendEvent(workspaceId, { type: 'compile.started', origin: 'human', detail: { agentId } }); } catch {}
@@ -781,11 +793,13 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       // Long cross-chat tool loops can otherwise exceed the model context window
       // even when each member has only a modest number of messages.
       const snapshots = researchSnapshots(workspace);
+      const toolAudit = compileToolAudit(snapshots);
       const snapshotAt = new Date().toISOString();
       const snapshotMessageCount = snapshots.reduce((sum, snapshot) => sum + snapshot.messages.length, 0);
-      const result = await client.runAgent({ agentId, globalPrompt: workspace.compilePrompt, developerPrompt: '', history: [], prompt: researchSummaryPrompt(snapshots), metadata: { workspace_id: workspaceId, purpose: 'compile' } });
+      const result = await client.runAgent({ agentId, globalPrompt: workspace.compilePrompt, developerPrompt: '', history: [], prompt: researchSummaryPrompt(snapshots, toolAudit), metadata: { workspace_id: workspaceId, purpose: 'compile' } });
       assertCompleteSynthesis(result);
       store.setCompile(workspaceId, { text: result.text, responseId: result.id, usage: result.usage, snapshotAt, sourceMemberCount: snapshots.length, sourceMessageCount: snapshotMessageCount,
+        toolAudit,
         verificationStatus: 'UNREVIEWED', sourceManifest: snapshots.map(snapshot => ({ member: snapshot.member, omittedMessages: snapshot.omittedMessages,
           messages: snapshot.messages.map(({ id, role, at, truncated, originalCharacters }) => ({ id, role, at, truncated, originalCharacters })) })) });
       try { store.appendEvent(workspaceId, { type: 'compile.completed', origin: 'system', detail: { agentId } }); } catch {}
@@ -860,7 +874,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     msgs = msgs.slice(-bounded);
     // Strip pending internal fields
     return msgs.map(m => ({ id: m.id, role: m.role, content: String(m.content || ''), at: m.at,
-      ...(m.searchEvidence ? { searchEvidence: structuredClone(m.searchEvidence) } : {}) }));
+      ...(m.searchEvidence ? { searchEvidence: structuredClone(m.searchEvidence) } : {}),
+      ...(m.toolEvidence ? { toolEvidence: structuredClone(m.toolEvidence) } : {}) }));
   }
 
   async function getCompileResult(workspaceId) {

@@ -15,5 +15,6 @@ export function messageHandoff(message, limit) {
   const content = String(message.content ?? '');
   return { id: message.id ?? null, role: message.role, pending: Boolean(message.pending),
     content: content.slice(0, limit), truncated: content.length > limit,
-    searchEvidence: message.searchEvidence || { scope: 'UNRECORDED' } };
+    searchEvidence: message.searchEvidence || { scope: 'UNRECORDED' },
+    toolEvidence: message.toolEvidence || { scope: 'UNRECORDED' } };
 }

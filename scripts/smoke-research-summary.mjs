@@ -8,6 +8,9 @@ import { Scheduler } from '../src/scheduler.js';
 import { createApplication } from '../src/application.js';
 const source = process.argv[2];
 if (!source) throw new Error('Specify recorded experiment state.json');
+const workspaceFlag = process.argv.indexOf('--workspace-id');
+const requestedWorkspaceId = workspaceFlag >= 0 ? process.argv[workspaceFlag + 1] : '';
+if (workspaceFlag >= 0 && !requestedWorkspaceId) throw new Error('--workspace-id requires a value');
 const directory = path.resolve('data/experiments', `research-summary-${Date.now()}`);
 fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 const statePath = path.join(directory, 'state.json');
@@ -17,7 +20,10 @@ const client = new LocalModelClient({ directory: `${statePath}.local-conversatio
 const scheduler = new Scheduler({ store, client });
 const app = createApplication({ config: { ...config, backend: 'local' }, store, client, scheduler });
 scheduler.setApp(app);
-const workspace = Object.values(store.state.workspaces)[0];
+const workspace = requestedWorkspaceId
+  ? store.requireWorkspace(requestedWorkspaceId)
+  : Object.values(store.state.workspaces)[0];
+if (!workspace) throw new Error('Recorded state has no workspace');
 const agentId = (await client.listAgents())[0].id;
 store.updateWorkspace(workspace.id, { compileAgentId: agentId });
 const before = JSON.stringify(workspace.members);
@@ -32,7 +38,10 @@ console.log(JSON.stringify({ directory, workspaceId: workspace.id }));
 try {
   await app.compile(workspace.id);
   assert.equal(JSON.stringify(store.getWorkspace(workspace.id).members), before);
-  console.log(JSON.stringify({ directory, runtime: 'PASS', content: 'REQUIRES_REVIEW' }));
+  const compile = store.getWorkspace(workspace.id).lastCompile;
+  fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify({ runtime: 'PASS', content: 'REQUIRES_REVIEW',
+    source: path.resolve(source), workspaceId: workspace.id, compile }, null, 2), { mode: 0o600 });
+  console.log(JSON.stringify({ directory, runtime: 'PASS', content: 'REQUIRES_REVIEW', toolAudit: compile.toolAudit }));
 } catch (error) {
   fs.writeFileSync(path.join(directory, 'failure.json'), JSON.stringify({ error: error.message }), { mode: 0o600 });
   throw error;

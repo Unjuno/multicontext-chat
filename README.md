@@ -2,10 +2,10 @@
 
 Parallel isolated local LLM chats with per-chat personas, queued cross-chat messaging, built-in source search and calculation, and optional response synthesis. The primary workflow connects directly to a local model server: no LibreChat account, API key, or saved Agent is required. LibreChat integration is optional legacy compatibility, not a prerequisite.
 
-> Release status: macOS internal verification build. Core workspace, queue,
-> Agent selection, retry/stop, Compile, and external MCP flows are usable, but
-> one locked-screen UI pass remains in the runtime record. Do not distribute
-> the unsigned local DMG; Developer ID signing and notarization are required.
+> Release status: the registration-free direct-local core has passed native
+> macOS, MCP, Compile, test, and packaged-bundle verification. Do not distribute
+> the unsigned local DMG; Developer ID signing, notarization/stapling, and a
+> final pass on that signed artifact are still required for general distribution.
 
 ## Core behavior
 
@@ -27,12 +27,16 @@ Start a tool-capable local model server on `http://127.0.0.1:8080`, then run:
 
 ```bash
 npm run check
-MULTICONTEXT_BACKEND=local MULTICONTEXT_LOCAL_MODEL_URL=http://127.0.0.1:8080 MULTICONTEXT_DATA_FILE=./data/local-state.json npm start
+npm start
 ```
 
 Open `http://127.0.0.1:4317` and select the discovered model. Personas are configured
 in MultiContext chats. Search requires internet access but no search-service account;
 retrieved metadata is not proof. See [local setup](docs/LOCAL_BACKEND.md).
+
+The Node server defaults to `local`, `http://127.0.0.1:8080`, and
+`./data/local-state.json`. Environment variables are needed only to override those
+values or explicitly select the optional `librechat` backend.
 
 The separate local state file avoids reusing LibreChat conversation identifiers.
 New desktop configurations default to local mode; existing saved desktop settings
@@ -75,7 +79,8 @@ npm start
 
 Open `http://127.0.0.1:4317`.
 
-Docker:
+Optional legacy LibreChat container path (the direct-local adapter intentionally
+accepts only a host loopback endpoint):
 
 ```bash
 docker compose up --build
@@ -175,11 +180,22 @@ Each member exposes an OpenAPI Action URL. The Action contains:
 - `inspect_chat(target, query, limit)`
 - `send_to_chat(targets, prompt)` where `targets` contains one or two chat ids/exact names
 
-Tool availability is controlled in MultiContext and in LibreChat Agent configuration. Message interpretation and tool-use policy remain prompt/model responsibilities.
+In the default direct-local path, MultiContext exposes and executes these tools.
+The optional LibreChat path also has its own Agent tool configuration. Message
+interpretation and tool-use policy remain prompt/model responsibilities.
 
 ## Compile
 
-Compile is available only when the workspace is `SETTLED` and only runs when the user presses Compile. `compilePrompt` is editable. The compiler receives bounded recent visible records from active chats and returns one compressed response. No compile output is written into member histories.
+Compile is available only when the workspace is `SETTLED` and only runs when the user presses Compile. `compilePrompt` is editable. The compiler receives bounded recent visible records from active chats and returns one compressed response. Scheduler-observed tool calls are also stored as a deterministic, attributable audit beside the model-written synthesis and included when the report is copied or downloaded. This records execution, not correctness or proof. No compile output is written into member histories.
+
+## Research-method A/B
+
+`npm run experiment:research-ab` compares independent parallel personas with a
+staged source → revision → independent-audit flywheel on the same bounded task and
+local model. Reverse the arm order with
+`MULTICONTEXT_RESEARCH_AB_ORDER=BA`. See
+[`docs/RESEARCH_METHOD_AB.md`](docs/RESEARCH_METHOD_AB.md) for the acceptance
+criteria, retained evidence, observed results, and limitations.
 
 ## Validation
 
