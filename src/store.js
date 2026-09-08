@@ -67,6 +67,7 @@ export class StateStore {
       workspace.orchestratorRuns ??= {};
       workspace.orchestratorEvents ??= [];
       workspace.orchestratorPaused ??= false;
+      for (const member of Object.values(workspace.members || {})) member.requiredToolSuccesses ??= {};
       for (const run of Object.values(workspace.orchestratorRuns)) {
         if (run.status === 'running' || run.status === 'queued') {
           run.status = 'failed';
@@ -442,6 +443,7 @@ export class StateStore {
     const member = {
       id, name: String(input.name || `Agent ${Object.keys(workspace.members).length + 1}`), agentId: String(input.agentId || ''), developerPrompt: String(input.developerPrompt || ''),
       active: input.active !== false, canInspectOthers: input.canInspectOthers !== false, canSendOthers: input.canSendOthers !== false,
+      requiredToolSuccesses: structuredClone(input.requiredToolSuccesses || {}),
       status: 'idle', queue: [], current: null, messages: [], conversationId: null, lastError: null, lastRun: null, createdAt: now(), updatedAt: now(),
     };
     workspace.members[id] = member; workspace.updatedAt = now(); this.save(); return member;

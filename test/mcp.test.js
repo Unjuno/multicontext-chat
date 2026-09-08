@@ -91,6 +91,7 @@ test('evidence-obligation preset creates four bounded roles without generation',
     assert.match(queued[0].prompt, /Phase 1 only/);
     assert.ok(Object.values(workspace.members).every(m => m.messages.length === 0 && m.queue.length === 0));
     assert.ok(Object.values(workspace.members).every(m => !m.canInspectOthers && !m.canSendOthers));
+    assert.deepEqual(Object.values(workspace.members).find(m => m.name === 'C — Falsification Checker').requiredToolSuccesses, { calculate: 2 });
   });
 });
 

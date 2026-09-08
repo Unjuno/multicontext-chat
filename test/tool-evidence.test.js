@@ -3,7 +3,21 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createToolEvidence, recordToolEvidence } from '../src/tool-evidence.js';
+import { createToolEvidence, recordToolEvidence, evaluateToolRequirements } from '../src/tool-evidence.js';
+
+test('tool requirements deterministically mark missing successful calls', () => {
+  const evidence = createToolEvidence();
+  recordToolEvidence(evidence,
+    [{ call_id: 'a', name: 'calculate', arguments: '{"expression":"2"}' }],
+    [{ call_id: 'a', output: '{"ok":true,"value":2}' }]);
+  assert.deepEqual(evaluateToolRequirements(evidence, { calculate: 2 }), {
+    status: 'NEEDS_CHECK', required: { calculate: 2 }, observed: { calculate: 1 }, missing: { calculate: 1 },
+  });
+  assert.equal(evaluateToolRequirements(evidence, { calculate: 1 }).status, 'SATISFIED');
+  const empty = createToolEvidence();
+  empty.requirements = evaluateToolRequirements(empty, { calculate: 2 });
+  assert.match(toolEvidenceLabel(empty), /要確認: 必須ツール不足（calculate×2）/);
+});
 import { toolEvidenceLabel, compileToolAuditLabel, compileRecordMarkdown } from '../public/tool-evidence.js';
 import { StateStore } from '../src/store.js';
 import { Scheduler } from '../src/scheduler.js';
@@ -73,7 +87,7 @@ test('scheduler persists calculator attribution for the correct member and Compi
     const store = new StateStore(path.join(dir, 'state.json'));
     const workspace = store.createWorkspace({ defaultAgentId: 'model', compileAgentId: 'model' });
     store.addMember(workspace.id, { name: 'Metadata verifier', agentId: 'model' });
-    const algebra = store.addMember(workspace.id, { name: 'Algebra reviser', agentId: 'model' });
+    const algebra = store.addMember(workspace.id, { name: 'Algebra reviser', agentId: 'model', requiredToolSuccesses: { calculate: 2 } });
     let compilePrompt = '';
     const client = {
       mode: 'native', listAgents: async () => [{ id: 'model', name: 'Model' }],
@@ -93,6 +107,7 @@ test('scheduler persists calculator attribution for the correct member and Compi
     const message = store.getMember(workspace.id, algebra.id).messages.filter(item => item.role === 'assistant').at(-1);
     assert.equal(message.toolEvidence.calls[0].callId, 'calc-b2');
     assert.equal(message.toolEvidence.calls[0].calculation.value, 4);
+    assert.deepEqual(message.toolEvidence.requirements, { status: 'NEEDS_CHECK', required: { calculate: 2 }, observed: { calculate: 1 }, missing: { calculate: 1 } });
     const before = JSON.stringify(store.getWorkspace(workspace.id).members);
     await app.compile(workspace.id);
     assert.equal(JSON.stringify(store.getWorkspace(workspace.id).members), before);

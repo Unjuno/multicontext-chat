@@ -10,6 +10,17 @@ const CHAT_COUNT_CONFLICT = 'CHAT_COUNT_CONFLICT';
 const WORKSPACE_NOT_FOUND = 'WORKSPACE_NOT_FOUND';
 const CHAT_NOT_FOUND = 'CHAT_NOT_FOUND';
 const NO_ACTIVE_CHATS = 'NO_ACTIVE_CHATS';
+const TOOL_REQUIREMENT_NAMES = new Set(['search_sources', 'calculate', 'list_chats', 'inspect_chat', 'send_to_chat']);
+function normalizeToolRequirements(value) {
+  if (value == null) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length > 5) throw problem('Invalid tool requirements', 400, 'INVALID_TOOL_REQUIREMENTS');
+  const result = {};
+  for (const [name, count] of Object.entries(value)) {
+    if (!TOOL_REQUIREMENT_NAMES.has(name) || !Number.isInteger(count) || count < 1 || count > 8) throw problem('Invalid tool requirements', 400, 'INVALID_TOOL_REQUIREMENTS');
+    result[name] = count;
+  }
+  return result;
+}
 const WORKSPACE_NOT_SETTLED = 'WORKSPACE_NOT_SETTLED';
 const WORKSPACE_BLOCKED = 'WORKSPACE_BLOCKED';
 const TIMEOUT = 'TIMEOUT';
@@ -461,6 +472,7 @@ export function createApplication({ config, store, client, scheduler } = {}) {
       active: input.active,
       canInspectOthers: input.canInspectOthers,
       canSendOthers: input.canSendOthers,
+      requiredToolSuccesses: normalizeToolRequirements(input.requiredToolSuccesses),
     };
     if (memberInput.agentId) {
       const agents = await requireFreshAgents();

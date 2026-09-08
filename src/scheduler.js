@@ -1,6 +1,6 @@
 import { CrossChatToolExecutor, extractToolCalls, extractProviderToolResults, isCrossChatToolCall, buildOrderedContinuation, assertProviderResultsComplete } from './cross-chat-executor.js';
 import { createSearchEvidence, recordSearchEvidence } from './search-evidence.js';
-import { createToolEvidence, recordToolEvidence } from './tool-evidence.js';
+import { createToolEvidence, recordToolEvidence, evaluateToolRequirements } from './tool-evidence.js';
 export class Scheduler {
   constructor({ store, client, app, maxHistoryMessages = 120, maxNativeToolIterations = 10, maxConcurrentRequests = Number.POSITIVE_INFINITY }) {
     this.store = store; this.client = client; this.app = app; this.maxHistoryMessages = maxHistoryMessages; this.maxNativeToolIterations = maxNativeToolIterations; this.maxConcurrentRequests = Math.max(1, Number(maxConcurrentRequests) || 4); this.activeRequests = 0; this.requestWaiters = []; this.running = new Map(); this.executor = null;
@@ -300,6 +300,7 @@ export class Scheduler {
               crossToolCalls.splice(0, crossToolCalls.length, ...nextCrossToolCalls);
             }
           }
+          toolEvidence.requirements = evaluateToolRequirements(toolEvidence, current.requiredToolSuccesses);
           this.store.completeRun(workspaceId, memberId, item.id, { ...currentResult, searchEvidence, toolEvidence });
           try { this.store.appendEvent(workspaceId, { type: 'member.completed', origin: 'system', memberId, qId: item.id }); } catch {}
           this.store.trimMessages(workspaceId, memberId, this.maxHistoryMessages);

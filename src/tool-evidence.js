@@ -58,3 +58,12 @@ export function recordToolEvidence(evidence, calls, results) {
     else evidence.omittedCalls += 1;
   }
 }
+
+export function evaluateToolRequirements(evidence, required = {}) {
+  const requirements = Object.fromEntries(Object.entries(required || {}).filter(([, count]) => Number.isInteger(count) && count > 0));
+  const observed = {};
+  for (const call of evidence.calls || []) if (call.status === 'succeeded') observed[call.tool] = (observed[call.tool] || 0) + 1;
+  const missing = Object.fromEntries(Object.entries(requirements).filter(([tool, count]) => (observed[tool] || 0) < count)
+    .map(([tool, count]) => [tool, count - (observed[tool] || 0)]));
+  return { status: Object.keys(missing).length ? 'NEEDS_CHECK' : 'SATISFIED', required: requirements, observed, missing };
+}

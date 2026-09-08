@@ -151,6 +151,11 @@ Phase 1 isolation beyond prompt wording. Before the later audit, explicitly
 enable inspection only for the Integration Auditor; sending can remain disabled.
 Do not combine the phases into one broadcast: a peer answer, review label,
 successful search, calculator output, or Compile result is not proof.
+The Falsification Checker also carries a deterministic requirement for two
+successful `calculate` calls. Scheduler evidence records `SATISFIED` or
+`NEEDS_CHECK` with observed and missing counts, and the GUI surfaces missing
+requirements even when the model made no tool call. This checks workflow
+compliance only; two successful calculations can still support a false argument.
 
 **Manual minimal:**
 

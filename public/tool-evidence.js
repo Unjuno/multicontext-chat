@@ -1,11 +1,15 @@
 export function toolEvidenceLabel(evidence) {
   if (evidence?.scope !== 'MULTICONTEXT_TOOLS_THIS_ATTEMPT') return 'ツール実行記録なし（旧履歴・未記録を含む）';
-  if (evidence.attempted === 0) return '今回の処理: MultiContext外部ツールの実行なし';
+  const requirement = evidence.requirements;
+  const missing = requirement?.status === 'NEEDS_CHECK'
+    ? `要確認: 必須ツール不足（${Object.entries(requirement.missing || {}).map(([name, count]) => `${name}×${Number(count)}`).join('、') || '詳細不明'}）。`
+    : '';
+  if (evidence.attempted === 0) return `${missing}今回の処理: MultiContext外部ツールの実行なし`;
   const counts = new Map();
   for (const call of evidence.calls || []) counts.set(call.tool, (counts.get(call.tool) || 0) + 1);
   const names = [...counts].map(([name, count]) => `${name}×${count}`).join('、') || '詳細省略';
   const omitted = evidence.omittedCalls ? `、ほか${Number(evidence.omittedCalls)}件` : '';
-  return `今回の外部ツール: ${names}${omitted} — 成功 ${Number(evidence.succeeded) || 0} / 失敗 ${Number(evidence.failed) || 0} / 再利用 ${Number(evidence.replayed) || 0}。実行記録であり、内容の正しさや証明を保証しません`;
+  return `${missing}今回の外部ツール: ${names}${omitted} — 成功 ${Number(evidence.succeeded) || 0} / 失敗 ${Number(evidence.failed) || 0} / 再利用 ${Number(evidence.replayed) || 0}。実行記録であり、内容の正しさや証明を保証しません`;
 }
 
 export function compileToolAuditLabel(audit) {
