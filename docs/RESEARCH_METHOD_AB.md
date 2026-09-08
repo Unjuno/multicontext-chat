@@ -17,6 +17,46 @@ tool output and that denied inspection stays denied. This closes an evidence
 propagation gap discovered after the real-model failures below; whether a model
 correctly follows the supplied review still requires a separate real-model test.
 
+Real follow-up `reviewed-peer-KMe0zl` used
+`scripts/experiment-reviewed-peer.mjs data/experiments/ns-critique-vzeAtX/A-result.json`.
+It copied the archived assistant message into a fresh workspace, attached an
+attributable rejection requesting an independent matrix check, and asked a fresh
+reader to inspect the author by UUID. No archived source file was modified.
+The saved native continuation was checked to contain the exact review ID,
+source message ID, rejected verdict and assessment-not-proof flag. The reader
+actually called `inspect_chat`, then `calculate` twice (4 and 2), and finished
+idle with an empty queue. The author-message prefix remained unchanged.
+
+The resulting rotation-field counterexample correctly refutes the proposed
+identity: its gradient has squared norm 2, strain zero and curl squared norm 4.
+Unlike the prior broad reviews, its conclusion agrees with its actual tool
+values. This is partial task success: it omitted the requested general identity
+and confused the archived answer with the rejecting review in its wording.
+It also chose a different valid test matrix from the one suggested by the note.
+No result on PDE continuation follows. This was one guided intervention with a
+bounded obligation, not an unbiased accuracy comparison or evidence that the
+transport fix alone caused recovery. Setup, model trace, state and result are
+retained for independent analysis.
+
+Matched-instruction control `reviewed-peer-pdAXw0` used the same script and
+archived source with `MULTICONTEXT_PEER_REVIEW=absent`. Its actual inspection
+continuation was asserted to contain an empty review-note array. The reader
+still rejected the identity with the same valid rotation-field counterexample,
+using three real calculator outputs (0, 2, 4). It finished idle and preserved
+the archived author. Like the review-present run, it omitted the general
+identity. It referred to a review despite no attached note; the deliberately
+unchanged prompt presupposed an attached review, so this wording is confounded
+by the instruction rather than evidence of a transport failure.
+
+These two runs do not demonstrate an accuracy benefit from review attachment.
+Both support bounded checking of one obligation under explicit numeric-comparison
+instructions, but both remain partial task successes. Neither establishes the
+best research strategy statistically: one run per condition, fixed order,
+stochastic defaults, different UUIDs, and prompt presupposition are limitations.
+The application fix remains justified independently: an authorized inspector
+must not silently lose existing assessments. Do not market that fix as proven
+to improve mathematical correctness.
+
 ## Reverse-order substantive review (latest follow-up)
 
 Preset follow-up invocation: set `MULTICONTEXT_NS_PRESET_REVIEW=1` when running
