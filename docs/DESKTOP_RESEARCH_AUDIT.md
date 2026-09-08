@@ -60,6 +60,20 @@ early-return branch has a passing regression test; full Node checks also passed
 before that test was added. The correction still requires rebuilt native GUI
 verification; model success does not prove the observer fix.
 
+The rebuilt `49eb3d3` bundle then passed actual empty-list observer verification
+in an isolated browser: served its packaged server and public resources on
+49617 with a fresh temp store and a client that rejects any model execution.
+The initial UI showed zero workspaces and selection guidance (not loading).
+After creation through HTTP MCP, workspace
+`63deb048-a281-4e60-91df-69c3deeab40c` appeared as the first sidebar item without
+reload, click, or changing selection. Browser verification skill workflow used
+Computer Use because its dedicated CLI was unavailable. This is browser rendering
+of actual packaged assets, not yet a fresh native-window verification of this fix.
+The test tab was closed and its dedicated server PID 63718 stopped; state remains
+at `/var/folders/pz/8_nc5kp109z8f36jl0172xzw0000gn/T/mcc-empty-observer-tMiRMJ`.
+Other app/server data was untouched. Full check: 348 total / 345 passed / 0 failed /
+3 skipped; macOS build and all ten packaged public-file checks passed.
+
 Application code audited: `f8e0971`, including source-linked GUI reviews, observed
 search evidence, registration-free local model orchestration, and reviewed MCP
 handoff. The subsequent changes in this audit affect verification scripts/tests.
