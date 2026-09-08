@@ -1,6 +1,7 @@
 import { StateStore, publicMember, searchMemberMessages } from './store.js';
 import { createRunEngine, targetFromArgs } from './orchestrator-engine.js';
 import { researchSnapshots, compileToolAudit, researchSummaryPrompt, assertCompleteSynthesis } from './research-summary.js';
+import { reviewContext } from './research-handoff.js';
 
 const AGENT_SELECTION_REQUIRED = 'AGENT_SELECTION_REQUIRED';
 const AGENT_NOT_AVAILABLE = 'AGENT_NOT_AVAILABLE';
@@ -619,7 +620,8 @@ export function createApplication({ config, store, client, scheduler } = {}) {
     const results = searchMemberMessages(target, query, limit);
     workspace.stats.inspections += 1;
     store.save();
-    return { target: { id: target.id, name: target.name }, results };
+    return { target: { id: target.id, name: target.name }, results,
+      ...reviewContext(workspace, target.id), assessmentNotProof: true };
   }
 
   async function sendToChats(workspaceId, sourceMemberId, targetRefs, prompt, { sourceQueueItemId = null, toolCallId = null, idempotencyKey = null } = {}) {

@@ -1,5 +1,22 @@
 # Research orchestration A/B record
 
+## Review propagation correction
+
+The canonical `inspectPeerChat` path previously returned excerpts and tool
+evidence without the stored review notes, unlike external-orchestrator handoffs.
+Native `inspect_chat` now includes the target member's last eight review notes,
+the omitted-note count, `verificationStatus: UNREVIEWED` and
+`assessmentNotProof: true`. Notes retain source message IDs and provenance;
+they are self-reported assessments, not proof certificates. Existing inspection
+permission checks run before retrieval. This does not broadcast private reviews
+from other members, change source messages, or enqueue work.
+
+Regression coverage invokes both the canonical operation and the native tool
+executor, checking that a rejected claim carries its review through the serialized
+tool output and that denied inspection stays denied. This closes an evidence
+propagation gap discovered after the real-model failures below; whether a model
+correctly follows the supplied review still requires a separate real-model test.
+
 ## Reverse-order substantive review (latest follow-up)
 
 Preset follow-up invocation: set `MULTICONTEXT_NS_PRESET_REVIEW=1` when running
