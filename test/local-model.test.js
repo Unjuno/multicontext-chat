@@ -5,6 +5,21 @@ import os from 'node:os';
 import path from 'node:path';
 import { LocalModelClient } from '../src/local-model.js';
 
+test('local adapter does not advertise unauthorized peer tools', async () => {
+  let body;
+  const client = new LocalModelClient({ directory: await fs.mkdtemp(path.join(os.tmpdir(), 'mcc-local-perms-')), fetchImpl: async (_, options) => {
+    body = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ id: 'r', choices: [{ message: { role: 'assistant', content: 'done' } }] }) };
+  } });
+  await client.runAgent({ agentId: 'model', prompt: 'independent', toolPermissions: { canInspectOthers: false, canSendOthers: false } });
+  const names = body.tools.map(tool => tool.function.name);
+  assert.ok(names.includes('search_sources'));
+  assert.ok(names.includes('calculate'));
+  assert.ok(!names.includes('list_chats'));
+  assert.ok(!names.includes('inspect_chat'));
+  assert.ok(!names.includes('send_to_chat'));
+});
+
 test('local adapter persists tool history across instances without account or key', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mcc-local-test-'));
   const requests = [];

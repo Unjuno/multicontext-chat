@@ -45,13 +45,21 @@ export class LocalModelClient {
     if (record.agentId !== agentId) throw new Error('Local conversation model mismatch');
     return record;
   }
-  async generate({ agentId, globalPrompt, developerPrompt, signal }, messages) {
+  async generate({ agentId, globalPrompt, developerPrompt, signal, toolPermissions }, messages) {
     const instructions = [];
     if (globalPrompt) instructions.push({ role: 'system', content: globalPrompt });
     if (developerPrompt) instructions.push({ role: 'developer', content: developerPrompt });
     const data = await this.request('chat/completions', {
       model: agentId, messages: [...instructions, ...messages], stream: false,
-      tools: EXTERNAL_TOOLS.filter(tool => process.env.MULTICONTEXT_SEARCH_ENABLED !== 'false' || tool.function.name !== 'search_sources'),
+      tools: EXTERNAL_TOOLS.filter(tool => {
+        const name = tool.function.name;
+        if (process.env.MULTICONTEXT_SEARCH_ENABLED === 'false' && name === 'search_sources') return false;
+        if (!toolPermissions) return true;
+        if (name === 'send_to_chat') return toolPermissions.canSendOthers !== false;
+        if (name === 'inspect_chat') return toolPermissions.canInspectOthers !== false;
+        if (name === 'list_chats') return toolPermissions.canInspectOthers !== false || toolPermissions.canSendOthers !== false;
+        return true;
+      }),
       tool_choice: 'auto', parallel_tool_calls: false,
     }, signal);
     signal?.throwIfAborted();

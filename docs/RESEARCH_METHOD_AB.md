@@ -62,6 +62,41 @@ values and NEEDS_CHECK if either is absent or failed. This enforcement change ha
 unit/MCP coverage but still needs a real Phase 1 run through the actual preset
 creation path before claiming deployed behavioral verification.
 
+The first source-server MCP attempt at that verification used the synchronous
+`multicontext_orchestrate_run` wrapper with a 300-second server timeout, but the
+MCP client request reached its own 60-second default timeout while all four local
+model calls were still running. The isolated process then exited; its incomplete
+state remains in `obligation-mcp-p2Qoun` and is not scored as a model result.
+This demonstrates why the tool description recommends the non-blocking path for
+long work. The experiment script now uses `create_session`, `start_run`, and
+bounded `get_run` polling, so each MCP operation remains short and the actual run
+has an explicit terminal status. It does not silently restart or reinterpret the
+failed attempt.
+
+The corrected asynchronous source-server/MCP run `obligation-mcp-NmeTgX`
+completed the same run ID as `settled` after 91,496 ms with seven model requests.
+All four members were idle, queues empty, and persisted `canInspectOthers` /
+`canSendOthers` were false. The candidate-only task was the false gradient/strain/
+curl identity. The formalizer produced a useful shear counterexample and a mostly
+correct final decomposition, though one intermediate Levi-Civita sum had a factor
+error and it unexpectedly used search. The source auditor stayed within two
+searches and disclosed no full-text verification, but its claimed `1/4` curl
+coefficient is wrong for the stated Frobenius norm. The falsification checker
+gave a valid divergence-free rotation counterexample (2 versus 4) but made zero
+calculator calls and therefore violated its acceptance instruction. The Phase 1
+integration auditor used no tools but nevertheless derived and REJECTED the claim;
+its `1/4` coefficient was also wrong. Thus the run validates asynchronous MCP,
+parallel execution, persisted isolation and useful falsification, not a fully
+correct mathematical audit.
+
+The run also showed that permission-denied peer tools were still advertised to
+the local model even when execution would reject them. The direct-local adapter
+now receives each member's live inspect/send permissions on initial and continued
+turns and omits `list_chats`, `inspect_chat`, and `send_to_chat` as appropriate.
+Search and calculation remain available. This reduces futile calls and makes the
+model-visible capability boundary match enforcement; it does not force a model
+to use an allowed calculator or make its algebra correct.
+
 ## Review propagation correction
 
 The canonical `inspectPeerChat` path previously returned excerpts and tool
