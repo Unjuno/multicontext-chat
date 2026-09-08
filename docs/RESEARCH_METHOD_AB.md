@@ -1,5 +1,38 @@
 # Research orchestration A/B record
 
+## Reverse-order substantive review (latest follow-up)
+
+`ns-critique-IUIhTE` ran the unchanged candidate-only/peer-exposed prompts in
+BA order against the deployed direct-local model. Reproduce with
+`MULTICONTEXT_NS_REVIEW_ORDER=BA node scripts/experiment-ns-critique.mjs`
+and the saved continuation-probe result path. The script records order in setup
+and rejects unsupported order values or combination with single-arm variants.
+This comparison is distinct from the simpler DOI/calculation A/B below.
+
+Both members finished idle without application errors. B performed four real
+searches and no calculation, endorsed the incorrect identity despite deriving
+a conflicting identity, and again called the elementary negative-eigenvalue
+bound open. A performed two real searches and no calculation; its concrete
+diagonal-matrix counterexample to candidate B was valid, but its replacement
+general identity was wrong, its middle-eigenvalue ordering was wrong, and it
+also called the elementary bound open. Its steady shear example is not a
+counterexample to continuation (and its claim of unbounded velocity gradient
+is false). Neither arm passed substantive review. Search telemetry reports
+metadata/snippets, not verified full text. No model-generated literature claim
+in these answers is accepted as independently verified evidence.
+
+Together with the earlier AB run, this is negative evidence for simply feeding
+a confident peer narrative into another reviewer. It does not establish a
+statistically reliable ranking: only one run per order, stochastic provider
+defaults, and varying search results remain confounders. Definition-first and
+atomic-obligation interventions show partial recovery under additional guidance,
+not autonomous novel discovery. Preserve those as separate conditions.
+
+Repository verification after this experiment: `npm run check` completed with
+366 tests, 363 pass, zero failures and three skips. Experiment scripts were also
+syntax-checked separately. This does not certify model conclusions or signed
+desktop release readiness.
+
 This experiment compares orchestration methods. It does not test whether a local
 model can solve the three-dimensional Navier-Stokes regularity problem, and no
 output in these records is a proof.
@@ -106,6 +139,25 @@ instead of permanently hard-coding one strategy from two runs.
 ## Additional checkpoint
 
 ### Decomposed obligations, corrected runtime
+
+Definition-first follow-up `ns-scaling-intervention-9RDc4a` copied
+`ns-scaling-intervention-wpaE80` and continued the same member with both failed
+answers retained. Run with `MULTICONTEXT_NS_DEFINITION_FIRST=1` using
+`scripts/intervene-ns-scaling.mjs`. The intervention explicitly defined
+`S(u)=(Du+Du^T)/2` and distinguished `S(u_L)` from `u_L`; it did not supply the
+target exponent or p. The deployed role-template verifier passed before scoring.
+The member returned idle without error, and its original message prefix was
+asserted unchanged. Two actual calculator calls returned 4 and 0 for
+`2*2/(2*2-3)` and `(2*2-3)/2-2/4`. The answer retracted the velocity/strain
+confusion and gave the correct final exponent `2-3/q-2/p`.
+This is partial recovery, NOT a fully correct derivation: its temporal-integral
+line incorrectly writes `L^(p-2)` instead of `L^(p*(2-3/q)-2)`, inconsistent with
+its own spatial-integral and final-norm lines. It also uses whole-time integrals
+rather than the requested transformed finite intervals. No regularity result or
+new Navier-Stokes insight was established. This single targeted repair is not an
+unbiased A/B win: the orchestrator supplied the diagnosed conceptual distinction.
+Setup, full model trace, state, conversations and result remain in the ignored
+experiment directory for later analysis.
 
 Follow-up `ns-scaling-intervention-wpaE80` copied that experiment and continued
 the original scaling chat using `intervene-ns-scaling.mjs`. The prompt asked for

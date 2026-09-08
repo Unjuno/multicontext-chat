@@ -33,8 +33,12 @@ for (const method of ['runAgent', 'continueAgent']) {
 const scheduler = new Scheduler({ store, client });
 const app = createApplication({ config: { ...config, backend: 'local' }, store, client, scheduler });
 scheduler.setApp(app);
-const prompt = 'Your prior scaling derivation contains sign errors. Correct it from definitions, without copying your previous exponent. Start with u_L(x,t)=L*u(L*x,L^2*t). (1) Apply the chain rule to one x derivative, retaining both factors of L. (2) In the spatial integral set y=L*x and write dx in terms of dy. (3) In the time integral set s=L^2*t and write dt in terms of ds. Combine the resulting powers for the Lt^p Lx^q norm of S_L. (4) Set the exponent to zero, solve p at q=2 using an actual calculate call, then substitute the returned p into the exponent with another calculate call. Report the corrected formula, exact tool values, and which prior claims you retract. Work on transformed time intervals; do not claim this proves regularity. No new search is required for this algebra-only correction.';
-await save('setup.json', { source, workspaceId: workspace.id, memberId: member.id, prompt });
+const definitionFirst = process.env.MULTICONTEXT_NS_DEFINITION_FIRST === '1';
+const clarification = definitionFirst
+  ? 'Definition checkpoint: S(u)=(Du+(Du)^T)/2 is the strain tensor, not the velocity u. S_L means S(u_L), NOT u_L. Your previous answer replaced strain by velocity. First write componentwise partial_j (u_L)_i and then S(u_L), before doing any norm calculation. Derive each exponent independently rather than reusing the previous answer. '
+  : '';
+const prompt = clarification + 'Your prior scaling derivation contains sign errors. Correct it from definitions, without copying your previous exponent. Start with u_L(x,t)=L*u(L*x,L^2*t). (1) Apply the chain rule to one x derivative, retaining both factors of L. (2) In the spatial integral set y=L*x and write dx in terms of dy. (3) In the time integral set s=L^2*t and write dt in terms of ds. Combine the resulting powers for the Lt^p Lx^q norm of S_L. (4) Set the exponent to zero, solve p at q=2 using an actual calculate call, then substitute the returned p into the exponent with another calculate call. Report the corrected formula, exact tool values, and which prior claims you retract. Work on transformed time intervals; do not claim this proves regularity. No new search is required for this algebra-only correction.';
+await save('setup.json', { source, workspaceId: workspace.id, memberId: member.id, variant: definitionFirst ? 'definition-first' : 'chain-rule', prompt });
 console.log(JSON.stringify({ directory }));
 await app.send(workspace.id, member.id, prompt);
 while (scheduler.running.size) await new Promise(resolve => setTimeout(resolve, 250));
