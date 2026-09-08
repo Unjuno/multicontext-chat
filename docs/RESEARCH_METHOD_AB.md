@@ -105,6 +105,136 @@ instead of permanently hard-coding one strategy from two runs.
 
 ## Additional checkpoint
 
+### Candidate review versus flawed-peer exposure (2026-09-09 JST)
+
+Follow-up `ns-critique-uRGNP1` used `MULTICONTEXT_NS_BLIND_FIRST=1` to save an
+independent ledger before exposing the peer report. Its two calculator calls
+returned 1 and 2 but did not test the requested candidate RHS. It again accepted
+the false identity and called the elementary bound open. After peer exposure it
+promoted the unverified continuation claim to verified without any new tool call.
+Original message prefixes remained unchanged. This variant failed too.
+
+**Confound discovered during investigation:** the configured GPT-OSS template
+rendered its system message before collecting input system messages. A real Jinja
+render with separate system/developer/user sentinels confirmed counts 0/1/1 in
+HEAD, versus 1/1/1 after moving system rendering below collection; the repaired
+role order also passed. Thus shared instructions were omitted by this template.
+The source template is now fixed, but the running external llama-server must load
+the updated template before fresh experiments can evaluate instruction fidelity.
+Do not attribute all failures to this defect: the user/developer instructions
+were present, and arithmetic errors remain observed failures. Do not use these
+runs to establish method superiority without rerunning after deployment.
+
+Deployment verification: the original 8080 server's `/apply-template` response
+omitted the system sentinel. A separately launched server on 8082 loaded the
+repaired template and passed `node scripts/verify-model-roles.mjs
+http://127.0.0.1:8082`, checking exact marker counts, role boundaries and order.
+The original external server was not restarted.
+
+Repaired-template blind-first run `ns-critique-dwhUGd` completed both turns.
+The independent response correctly rejects the candidate matrix identity using
+2 versus 4, but performed only the LHS calculation and no required search; its
+eigenvalue ordering and integrated-bound conclusions are still incorrect. Peer
+exposure retained the matrix rejection but promoted the incorrect continuation
+criterion to verified without any new tools. The original message prefix was
+unchanged. This is partial numerical correction, not a passing research result.
+The source-template fix is independently established; it does not explain away
+model errors or certify this protocol. Saved setup/trace/results preserve both
+responses for subsequent targeted intervention.
+
+Actual local-model comparison: `data/experiments/ns-critique-pI2F7T`, produced by
+`caffeinate -i node scripts/experiment-ns-critique.mjs PATH_TO_PROBE_RESULT`.
+Both arms used the same candidate claims and reviewer instruction; B additionally
+received the complete flawed prior answer. A ran before B with one concurrent
+model request. This is one exploratory pair, not a balanced benchmark.
+
+- A finished with one calculator call and no search. Its final verdict rejects
+  the false matrix identity, but earlier prose accepts it, misorders the strain
+  eigenvalues, and calls an elementary eigenvalue norm bound an open conjecture.
+  Its recorded calculation `(1/3)^2+(1/3)^2+(1/3)^2` does not match the diagonal
+  matrix described in its answer. Required computation/source alignment fails.
+- B finished with three successful Crossref searches and no calculator call.
+  It adopts the flawed report's verdicts, falsely claims numerical verification,
+  and treats its own unequal values 13 and 26 as equal. Its displayed squared
+  entries actually sum to 12. Metadata retrieval did not correct these errors.
+- Both workspaces' member turns settled without runtime errors; neither report
+  passes substantive acceptance. Source state was not changed. Setup, model
+  calls/outputs, member reports, timings, and Scheduler tool evidence are saved.
+
+This pair contradicts any blanket recommendation that giving a critic the full
+prior answer improves correctness. Next compare a blind-first protocol: preserve
+independent verdicts and explicit tool-backed counterexamples before exposing
+peer conclusions, then request a targeted revision. Require calculation inputs
+to match the matrix in the claim; tool counts alone cannot score that requirement.
+No speed/cost advantage or new mathematical result follows from this pair.
+
+### Completion audit: remaining insight-comparison requirement
+
+First challenge execution: `ns-structure-1788854466728`, using
+`MULTICONTEXT_BACKEND=local MULTICONTEXT_NS_CHALLENGE=1 node scripts/experiment-ns-structure.mjs`.
+Two initial roles each issued two search calls, then their model continuations
+timed out after about 905 seconds. Both remained BLOCKED with one retained queue
+item; the critic was never dispatched. Six model requests, setup, state, and
+failure records are preserved. There is no completed research answer or A/B score
+from this run. Investigate model continuation latency before retrying the saved
+work; restarting the full experiment would lose the relevant failure context.
+
+The timeout investigation found a matching OS suspension: `pmset -g log` records
+Idle Sleep at 2026-09-08 17:01:19 JST for 902 seconds, followed by DarkWake at
+17:16:21. The failed requests started at 17:01:14 and 17:01:17; llama-server
+logged only 230 and 114 generated tokens before cancellation after wake. All four
+slots were idle on inspection. This supports sleep interruption, not evidence of
+an endless model reasoning loop. Exclude this run from latency comparisons.
+For macOS unattended reproduction, scope sleep prevention to the command using
+`caffeinate -i node scripts/experiment-ns-structure.mjs` with the challenge/local
+environment variables above; do not change global power settings. Resume the
+saved failed continuation first and preserve its original timeout record.
+
+Saved-request probe completed under `caffeinate -i` in
+`ns-structure-1788854466728/continuation-probe-9z1Cto`. It copied conversation
+snapshots and replayed only the two failed model calls, without dispatching tools
+or changing the source workspace. Responses took 34,373 ms and 1,214 ms. The
+second response requests another search and is not a completed role report.
+This sequential diagnostic supports the sleep explanation but is not a completed
+parallel experiment or an A/B timing comparison.
+
+The first response is rejected: it endorses both supplied false candidates,
+attributes the squared-L2-time condition to Miller, and even writes the correct
+matrix decomposition before an invalid rearrangement and acceptance of the
+incompatible candidate identity. A symmetric trace-free gradient diag(1,-1,0)
+has squared norm 2, strain squared norm 2, and zero curl, so the candidate's RHS
+is 4. The response's proposed open question about bounding the negative middle
+eigenvalue by the full gradient is also already settled by the elementary
+pointwise norm bound. Preserve this as an overclaiming failure for the next
+independent-critic intervention; it cannot be promoted to knowledge by Compile.
+
+Independent scoring-source check: the live arXiv version of Miller's paper
+(`https://arxiv.org/html/1710.05569`, Theorem 1.1) states
+`2/p + 3/q = 2`, `3/2 < q <= infinity`; thus q=2 requires p=4.
+Its definitions of the symmetric and antisymmetric gradient parts also allow
+an independent matrix check. These source checks were not supplied as corrected
+answers to the challenge roles.
+
+The current A/B results establish tool-use and handoff compliance on a supplied
+equation. They do not establish which orchestration method discovers useful
+Navier-Stokes insights more reliably. The broader research-method objective
+therefore remains open even though the direct-local application checks passed.
+
+The next comparison should use the rejected candidate retained in
+`NS_STRUCTURE_REVIEW.md`: assess the claimed squared-L2-in-time middle-strain
+criterion and the pointwise strain/vorticity identity. Give both arms identical
+candidate statements and source access, without supplying the correction. Compare
+independent parallel review against proposal, challenge, and revision with an
+independent final auditor. Preserve both original answers and interventions.
+
+Score substantive error detection, an explicit corrected condition with its
+assumptions, attributable source support, unresolved analytic gaps, and unsupported
+claims separately from tool counts. Check source passages independently before
+using them as scoring ground truth. Run both arm orders and report all failures,
+model requests, reported tokens, and elapsed time. A correct arithmetic response
+alone cannot pass this insight-comparison gate. Existing native GUI and build
+checks need not be repeated unless this work changes the application.
+
 After the deterministic Compile audit was added, the saved B workspace from
 `research-ab-1788832732994` was copied and compiled again with the real local
 model. The new record is

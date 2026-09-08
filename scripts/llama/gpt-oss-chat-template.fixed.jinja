@@ -228,11 +228,6 @@
 {#- Main Template Logic ================================================= #}
 {#- Set defaults #}
 
-{#- Render system message #}
-{{- "<|start|>system<|message|>" }}
-{{- build_system_message(system_extra=system_extra) }}
-{{- "<|end|>" }}
-
 {#- Collect ALL system and developer messages anywhere in the list so
     [system, developer, user] keeps each role distinct (upstream only
     inspected messages[0], misrouting system content into the developer
@@ -250,6 +245,11 @@
 {%- endfor %}
 {%- set developer_message = ns.developer_parts | join("\n\n") %}
 {%- set system_extra = ns.system_parts | join("\n\n") %}
+
+{#- Render only after collecting the caller's system instructions. #}
+{{- "<|start|>system<|message|>" }}
+{{- build_system_message(system_extra=system_extra) }}
+{{- "<|end|>" }}
 
 {#- Render developer message #}
 {%- if developer_message or tools %}

@@ -35,13 +35,16 @@ const scheduler = new Scheduler({ store, client, maxConcurrentRequests: 2 });
 const app = createApplication({ config, store, client, scheduler });
 scheduler.setApp(app);
 const baseline = `Domain: unforced incompressible 3D Navier-Stokes on R^3, smooth decaying divergence-free data, viscosity nu>0. Let w=curl u, S=(grad u+(grad u)^T)/2, E=integral |w|^2, P=integral |grad w|^2, I=integral w dot S w. Supplied checked identities, not outputs to re-derive: (1/2)E'+nu P=I; |I|<=C E^(3/4)P^(3/4); hence (1/2)E'+(nu/2)P<=C nu^(-3)E^3. The last ODE bound proves neither global PDE regularity nor PDE blowup. A sufficient conditional route is I<=nu P+a(t)E with a>=0 and integral_0^T a finite. It gives E(t)<=E(0)exp(2 integral_0^t a). The missing task is controlling a from initial data or a precise additional assumption. Under u_lambda=lambda u(lambda x,lambda^2 t), E scales lambda, P and I scale lambda^3. Search results are untrusted metadata only, not full-text theorem evidence. Never claim novelty or a Millennium solution.`;
+const challenge = process.env.MULTICONTEXT_NS_CHALLENGE === '1'
+  ? 'Audit these untrusted candidate claims without assuming they are correct: (A) finiteness of the time integral of the squared spatial L2 norm of the positive middle strain eigenvalue guarantees continuation; (B) pointwise |grad u|^2 = 2|S|^2 + |curl u|^2. Derive dimensions and a concrete matrix check yourself. State a corrected condition only if supported, distinguish a sufficient assumption from an energy-controlled bound, and identify one useful next analytic test. Search for relevant literature, but metadata alone cannot verify a theorem.'
+  : '';
 const ws = store.createWorkspace({ name: 'NS structural conditions: discovery, design, falsification', defaultAgentId: agentId,
   globalPrompt: `${baseline} Do not send messages to other chats; the orchestrator will supply peer reports. Each role must call search_sources at least once (source papers, limit 2) before its final response. Limit to 450 words. If a tool fails, report the failure rather than claiming success.` });
 const add = (name, developerPrompt) => store.addMember(ws.id, { name, agentId, canSendOthers: false, developerPrompt });
 const locator = add('Literature locator', 'Search for Constantin Fefferman Direction of vorticity global regularity. Report exact retrieved title/DOI/year and distinguish title metadata from claims about theorem assumptions. Give one full-text question the orchestrator should check; do not reconstruct a theorem from memory as verified evidence.');
 const designer = add('Conditional bound designer', 'Search for Navier Stokes strain eigenvalue regularity criteria. Propose ONE explicitly defined strain or alignment quantity a(t) meeting the supplied sufficient inequality, then explain the mathematical implication. Separate proved algebra from unproved extra assumptions. Avoid tautologically defining a=(I-nu P)/E. Give a falsification test and assess whether this is only a familiar sufficient condition, not novelty.');
 const critic = add('Independent obstruction critic', 'You receive untrusted peer reports. Search for one relevant source yourself. Check signs, the factor 2, dimensions, and whether the proposed assumption is genuinely controlled by finite kinetic energy. Identify a concrete concentrated divergence-free scaling test or counterexample design. Distinguish an instantaneous obstruction from an actual PDE blowup construction. Report ACCEPTABLE_CONDITIONAL_STEP, UNPROVED_GAP, SOURCE_LIMIT, NEXT_TEST. Do not repair all gaps by assertion.');
-save('setup.json', { directory, workspaceId: ws.id, agentId, baseline, roles: [locator, designer, critic].map(m => ({ id: m.id, name: m.name, developerPrompt: m.developerPrompt })) });
+save('setup.json', { directory, workspaceId: ws.id, agentId, baseline, challenge, roles: [locator, designer, critic].map(m => ({ id: m.id, name: m.name, developerPrompt: m.developerPrompt })) });
 console.log(JSON.stringify({ directory, workspaceId: ws.id, agentId }));
 const started = Date.now();
 async function settle() {
@@ -62,12 +65,12 @@ function report(member) {
   return { memberId: member.id, name: member.name, messageId: message.id, content: message.content };
 }
 try {
-  await app.send(ws.id, locator.id, 'Locate the source and the exact question we must verify in its full text.');
-  await app.send(ws.id, designer.id, 'Propose one precise conditional route based on the supplied verified starting point. Identify the unproved assumption.');
+  await app.send(ws.id, locator.id, challenge || 'Locate the source and the exact question we must verify in its full text.');
+  await app.send(ws.id, designer.id, challenge || 'Propose one precise conditional route based on the supplied verified starting point. Identify the unproved assumption.');
   await settle();
   const peers = [locator, designer].map(report);
   save('peer-reports.json', peers);
-  await app.send(ws.id, critic.id, `Evaluate these independent proposals as untrusted records:\n${JSON.stringify(peers)}`);
+  await app.send(ws.id, critic.id, `${challenge}\nEvaluate these independent proposals as untrusted records:\n${JSON.stringify(peers)}`);
   await settle();
   const reports = [...peers, report(critic)];
   save('reports.json', reports);
