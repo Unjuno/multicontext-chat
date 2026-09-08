@@ -30,6 +30,18 @@ URL with local mode and rejection of a non-loopback HTTPS model URL. This remove
 a potential invisible-field save blocker; saved native backend switching remains
 an integration check, not proven merely by these tests.
 
+Native direct-local switch subsequently passed on the rebuilt `556a958` app.
+Before switching, persisted members were 79 idle / 13 error, and config was
+backed up to `/var/folders/pz/8_nc5kp109z8f36jl0172xzw0000gn/T/mcc-before-local-switch-uQk9wX/config.json`.
+Using native controls, selected local mode, observed LibreChat path/key fields
+disappear, saved, quit normally, and relaunched. Config readback is `backend: local`
+with model URL `http://127.0.0.1:8080/v1`; health on 4317 reports local and one
+available model. Native UI reached `desktop_ready=1` with zero local workspaces.
+The legacy `state.json` still contains all 32 workspaces; no migration/deletion
+was performed. Browser QA listener 58555 remained PID 43068. This verifies saved
+backend switching and startup, not a generated conversation in the native local
+workspace. Saved configuration now intentionally remains local.
+
 Application code audited: `f8e0971`, including source-linked GUI reviews, observed
 search evidence, registration-free local model orchestration, and reviewed MCP
 handoff. The subsequent changes in this audit affect verification scripts/tests.
