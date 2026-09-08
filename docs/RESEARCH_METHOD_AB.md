@@ -105,6 +105,33 @@ instead of permanently hard-coding one strategy from two runs.
 
 ## Additional checkpoint
 
+### Decomposed obligations, corrected runtime
+
+`ns-critique-7VT5Q5` used `MULTICONTEXT_NS_ATOMIC=1` with three separate
+members covering the same matrix, scaling, and eigenvalue-bound claims. The
+prompts supplied more scaffolding (a matrix and proof route), so improvement
+cannot be attributed to context separation alone. This is an exploratory
+intervention, not a matched randomized comparison.
+
+- Matrix: two real calculate calls returned 2 and 4 for the exact claimed
+  sides. The answer rejected the false identity and correctly derived the
+  half-curl-squared formula. This obligation passed manual content review.
+- Scaling: one successful Crossref search, no calculator. The response used
+  incorrect derivative/Jacobian powers and concluded p=4/5 instead of p=4.
+  This obligation failed. Its statement that dimensional analysis alone does
+  not prove regularity does not rescue the incorrect derivation.
+- Norm bound: correctly used orthogonal diagonalization and symmetric/skew
+  orthogonality to prove the universal pointwise bound and its integrated
+  consequence. Its phrase "inequality remains pointwise" after integration
+  is imprecise; the displayed pointwise proof and integrated conclusion are
+  valid. It correctly rejects the purported open conjecture. This obligation
+  passed manual content review, not formal proof checking.
+
+Two of three substantive obligations were recovered with explicit scaffolding.
+All three turns settled; setup, raw model trace, per-member results and tool
+evidence are preserved. The next intervention should isolate chain-rule and
+change-of-variable steps for the remaining scaling error before synthesis.
+
 ### Candidate review versus flawed-peer exposure (2026-09-09 JST)
 
 Follow-up `ns-critique-uRGNP1` used `MULTICONTEXT_NS_BLIND_FIRST=1` to save an
