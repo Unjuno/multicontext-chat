@@ -1,5 +1,34 @@
 # Desktop research build audit — 2026-09-08
 
+## Native review-note save and authenticated MCP readback (2026-09-08)
+
+- Rebuilt `b7a463d` with `npm run desktop:build -- --bundles app` and passed
+  `npm run verify:desktop` (all 10 packaged public files matched).
+- Gracefully quit the idle native app and launched the new bundle from
+  `src-tauri/target/release/bundle/macos/MultiContext.app`. It reopened the
+  direct-local workspace and its persisted calculation answer without login.
+- In the native UI, scrolled the chat into view, opened the assistant answer's
+  source-specific review button, entered a reason and self-reported reviewer,
+  and clicked `メモを保存`. The UI confirmed saving and displayed one review.
+  An initial offscreen AX click failed; scrolling into view resolved it.
+- Workspace: `7cd95a05-3fc6-45b6-8b1a-3cc5cd030424`.
+  Message: `49b7e59b-8126-4bca-8d48-5cb04e92c86c`.
+  Review: `845be8b4-825a-4d79-8eec-e9d85d98fa86`, saved at
+  `2026-09-08T01:26:56.142Z`, verdict `needs_check`.
+- Authenticated `multicontext_get_workspace` on the native server's port 4317
+  returned the exact persisted review array, including source hash,
+  `SELF_REPORTED`, and `assessmentNotProof: true`. No credential was logged.
+- SHA-256 of the workspace JSON excluding only `reviewNotes` and `updatedAt`
+  was identical before and after the native save:
+  `3708715d92f17521023ac3aac19622ffd2553ebc406ea47bcd89bc4e3250b798`.
+  This covers unchanged messages, queues, receipts, settings, and execution stats.
+- This verifies native review entry and GUI-to-MCP persistence, not a new
+  mathematical result. The note explicitly distinguishes arithmetic from a
+  Navier–Stokes regularity proof. Developer ID/notarization remains a separate
+  public-distribution gate; this bundle is not claimed signed for distribution.
+- Corrected contradictory README desktop instructions that still made
+  LibreChat credentials sound mandatory despite the direct-local default.
+
 ## Current product scope (supersedes earlier blocking conclusions below)
 
 The user explicitly removed LibreChat from the required workflow. Acceptance now

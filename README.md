@@ -87,7 +87,8 @@ If LibreChat must call the generated cross-chat Actions, configure `MULTICONTEXT
 
 Native launcher you can double-click from Finder/Dock. It bundles the
 MultiContext Node server (no dependency on the Git checkout) and can start
-LibreChat and your model backend for you.
+your local model backend for you. LibreChat is optional compatibility, not a
+desktop prerequisite.
 
 ```bash
 npm run desktop:dev   # Tauri dev
@@ -100,11 +101,12 @@ open src-tauri/target/release/bundle/macos/MultiContext.app
 
 ### Product usage and recovery
 
-1. Launch `MultiContext.app`; it reuses healthy external services or starts the
-   configured managed LibreChat/model services.
-2. On first launch, save the LibreChat Remote Agents connection key in Settings.
-   It is validated against the Remote Agents API and stored only in macOS
-   Keychain, never in `config.json` or logs.
+1. Launch `MultiContext.app`; it reuses a healthy local model server or starts
+   the configured managed model service.
+2. On first launch, use the local backend and configure your model server URL,
+   or the managed llama-server and model paths. No LibreChat registration,
+   connection key, or saved LibreChat Agent is required. Existing installations
+   preserve their backend selection; switch it to local in Settings if needed.
 3. Choose an Agent explicitly in safe mode, or use `auto_first` when first-Agent
    selection is acceptable. Safe mode rejects an unconfigured broadcast with
    `AGENT_SELECTION_REQUIRED`.
@@ -140,17 +142,16 @@ MULTICONTEXT_MCP_TOKEN=$(openssl rand -hex 32) npm start
 
 See `docs/MCP.md` for tool list, agent selection, SETTLED/Compile semantics, and security.
 
-After the first launch, just open `MultiContext.app` — it detects healthy
-external GPT-OSS/LibreChat or starts managed ones (new installs default to
-managed) and opens the existing UI automatically once everything is ready. On
-first run, open Settings and set your LibreChat directory, llama-server, GPT-OSS
-model, chat template, and the LibreChat Remote Agents connection key (validated
-against the Remote Agents API, not normal user auth — saved once in macOS
-Keychain via the `LibreChat 接続` section — no Terminal, no `config.json`, empty
-field preserves the stored key, deletion requires explicit `保存済みキーを削除`,
-and the key is never shown back). `保存して開始` saves a newly entered key
-together with config in one step; `Retry` always performs a fresh readiness
-attempt. See `docs/DESKTOP.md` for first-run setup (external vs managed
+After the first launch, just open `MultiContext.app` — it detects a healthy
+local model server or starts the configured managed model and opens the UI
+once ready. Configure the model URL or llama-server, GPT-OSS model, and chat
+template in Settings. `Retry` performs a fresh readiness attempt.
+
+Only if you select the optional LibreChat backend do you need its directory
+and Remote Agents connection key. That key is validated against the Remote
+Agents API and saved in macOS Keychain, never shown back or stored in
+`config.json` or logs. An empty key field preserves the stored key; deletion
+requires explicit `保存済みキーを削除`. See `docs/DESKTOP.md` for first-run setup (external vs managed
 services, Keychain credential storage, logs at
 `~/Library/Logs/com.unjuno.multicontext/`, and Gatekeeper notes for unsigned
 builds).
