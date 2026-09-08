@@ -2,6 +2,23 @@
 
 ## Reverse-order substantive review (latest follow-up)
 
+Product follow-up: the default `navier-stokes-4` persona text previously required
+analysis "before using any tool", conflicting with its search protocol. It now
+requires independent analysis before peer inspection/delegation while explicitly
+allowing search and calculation during that analysis. This is a prompt-policy
+correction, not an enforced tool permission or a guarantee of improved reasoning.
+Regression coverage checks all four persona definitions and creates the preset
+through real HTTP MCP, checking persisted developer instructions and absence of
+unrequested generation. Model effectiveness of this revised preset remains to
+be measured separately from the candidate-review experiments below.
+Verification of this product follow-up: `npm run check` passed 365 of 368 tests
+with zero failures and three declared skips; `npm run verify:bundle` passed
+its isolated bundled-server MCP smoke; `npm run desktop:build` produced both
+the app and DMG; `npm run verify:desktop` matched the server, GPT-OSS template
+and all 11 public resources. The currently running user's app was not replaced
+or restarted, and no fresh native GUI interaction or signing/notarization
+claim is implied by these build checks.
+
 `ns-critique-IUIhTE` ran the unchanged candidate-only/peer-exposed prompts in
 BA order against the deployed direct-local model. Reproduce with
 `MULTICONTEXT_NS_REVIEW_ORDER=BA node scripts/experiment-ns-critique.mjs`

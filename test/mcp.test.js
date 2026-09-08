@@ -7,6 +7,7 @@ import { StateStore } from '../src/store.js';
 import { Scheduler } from '../src/scheduler.js';
 import { createApp } from '../src/server.js';
 import { createApplication } from '../src/application.js';
+import { PRESETS } from '../src/mcp/orchestrator.js';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
 const makeStore = () => new StateStore(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mcc-mcp-')), 'state.json'));
@@ -52,6 +53,30 @@ async function jsonRequest(base, route, opts = {}) {
 
 const mockAgents = [{ id: 'agent-1', name: 'ChatA', provider: 'gpt-oss' }, { id: 'agent-2', name: 'ChatB', provider: 'gpt-oss' }];
 const singleAgent = [{ id: 'solo', name: 'Solo', provider: 'gpt-oss' }];
+
+test('independent research permits search and calculation before peer exposure', () => {
+  for (const member of PRESETS['navier-stokes-4'].members) {
+    assert.match(member.developerPrompt, /search and calculation tools are allowed during independent analysis/);
+    assert.match(member.developerPrompt, /before inspecting peer chats/);
+    assert.doesNotMatch(member.developerPrompt, /before using any tool/);
+  }
+});
+
+test('MCP preset creation persists independent tool access and search evidence guidance', async () => {
+  await withMcpServer({ listAgents: async () => singleAgent }, async ({ store, client: mcp }) => {
+    const response = await mcp.callTool({ name: 'multicontext_orchestrate_create_session', arguments: { preset: 'navier-stokes-4' } });
+    assert.ok(!response.isError);
+    const workspaces = Object.values(store.state.workspaces);
+    assert.equal(workspaces.length, 1);
+    const members = Object.values(workspaces[0].members);
+    assert.equal(members.length, 4);
+    for (const member of members) {
+      assert.match(member.developerPrompt, /search and calculation tools are allowed during independent analysis/);
+      assert.match(member.developerPrompt, /Never treat a search snippet or numerical result as a proof/);
+      assert.equal(member.messages.length, 0);
+    }
+  });
+});
 
 test('MCP research handoffs retain rejected assessments, source IDs and search evidence without mutation', async () => {
   await withMcpServer({ listAgents: async () => singleAgent }, async ({ store, client: mcp }) => {
