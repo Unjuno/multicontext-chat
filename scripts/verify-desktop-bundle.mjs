@@ -35,6 +35,13 @@ for (const [file, marker] of markers) {
 
 const resourceCount = verifyResourceTree(path.join(root, 'public'), resourceRoot);
 
+const templateSource = path.join(root, 'scripts/llama/gpt-oss-chat-template.fixed.jinja');
+const templatePackaged = path.join(app, 'Contents/Resources/multicontext/templates/gpt-oss-chat-template.fixed.jinja');
+if (!fs.existsSync(templatePackaged) || digest(templateSource) !== digest(templatePackaged)) {
+  console.error('desktop bundle GPT-OSS template is missing or stale');
+  process.exit(1);
+}
+
 const serverSource = path.join(root, 'dist/server.bundle.mjs');
 const serverPackaged = path.join(app, 'Contents/Resources/multicontext/dist/server.bundle.mjs');
 if (!fs.existsSync(serverPackaged) || digest(serverSource) !== digest(serverPackaged)) {

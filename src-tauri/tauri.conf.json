@@ -34,6 +34,7 @@
       "../src": "multicontext/src",
       "../public": "multicontext/public",
       "../dist": "multicontext/dist",
+      "../scripts/llama/gpt-oss-chat-template.fixed.jinja": "multicontext/templates/gpt-oss-chat-template.fixed.jinja",
       "../package.json": "multicontext/package.json"
     },
     "icon": [

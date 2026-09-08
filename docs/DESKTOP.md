@@ -34,6 +34,13 @@ Existing `npm start` continues to work without Tauri.
 
 ## First-time Setup
 
+The corrected GPT-OSS template is bundled at
+`MultiContext.app/Contents/Resources/multicontext/templates/gpt-oss-chat-template.fixed.jinja`.
+It can be selected in the model settings. Existing explicit template paths are
+preserved. An already-running external model server must reload its template
+before a template fix takes effect. Check its deployed role handling with
+`node scripts/verify-model-roles.mjs http://127.0.0.1:8080` from the repository.
+
 The desktop app is self-contained: it bundles the MultiContext Node server into
 `MultiContext.app/Contents/Resources/multicontext/` and starts it from there, so
 it does **not** depend on the Git checkout remaining at a development path.
