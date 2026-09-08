@@ -146,6 +146,9 @@ calculation/falsification, and integration audit. Session creation only queues
 its Phase 1 instructions; it does not generate automatically. Run Phase 1,
 wait for `SETTLED`, inspect the actual evidence, attach rejected or needs-check
 reviews, and explicitly send a later audit prompt to the Integration Auditor.
+All four members start with peer inspection and sending disabled, enforcing
+Phase 1 isolation beyond prompt wording. Before the later audit, explicitly
+enable inspection only for the Integration Auditor; sending can remain disabled.
 Do not combine the phases into one broadcast: a peer answer, review label,
 successful search, calculator output, or Compile result is not proof.
 

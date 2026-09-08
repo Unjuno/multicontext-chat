@@ -41,6 +41,27 @@ instructions, not hard capability enforcement. Their behavioral effect remains
 unverified until a fresh matched run; do not overwrite or reinterpret the failed
 trial.
 
+Second Phase 1 trial `ns-critique-Kw8ylk` used the strengthened prompts. All four
+roles finished idle with empty queues. Improvements were narrow but observable:
+the source auditor used two searches rather than nine and explicitly disclosed
+that no full-text passage was verified; the integration auditor used no tools
+and marked all three claims NEEDS_CHECK. Remaining failures are material. The
+formalizer treated the disputed identity as a hypothesis, invented an unsupported
+logical implication, and attempted a disabled `send_to_chat` call. The source
+auditor still inferred “open” from absence in two searches. The falsification
+checker tested the elementary eigenvalue bound but made no calculator call and
+could not establish literature status. Thus the revised method is safer, not
+research-quality complete.
+
+Because prompt-only isolation was violated, `evidence-obligation-4` now creates
+all Phase 1 members with both peer inspection and peer sending disabled. This is
+an enforced capability boundary. A human must explicitly enable inspection only
+for the Integration Auditor before Phase 2. Search and calculation remain
+available. The checker instruction now requires at least two compared calculator
+values and NEEDS_CHECK if either is absent or failed. This enforcement change has
+unit/MCP coverage but still needs a real Phase 1 run through the actual preset
+creation path before claiming deployed behavioral verification.
+
 ## Review propagation correction
 
 The canonical `inspectPeerChat` path previously returned excerpts and tool
