@@ -140,3 +140,28 @@ native code is loaded, even though its executable path matches the new bundle.
 The selected workspace's idle state does not establish that all 32 workspaces
 are idle. No app quit/relaunch was performed. Fresh native verification remains
 pending a safe restart; do not count this observation as final-artifact GUI QA.
+
+### Fresh native launch after user closed the old GUI
+
+After the user reported closing the native GUI, the process check found no
+`multicontext-desktop` process and no listener on 4317. The isolated browser QA
+server on 58555 remained PID 43068. Computer Use opened the rebuilt bundle:
+new native PID 55886 started at 09:02:21, and new server PID 55908 listened on
+4317, while 58555 retained its original PID. No server was killed or installation
+replaced by this launch.
+
+The startup view progressed to the native workspace view (`desktop_ready=1`),
+showing the existing 32 workspaces and selected `DesktopApp E2E`. The new
+unverified-summary warning appeared beside its existing Compile result. This
+establishes fresh native startup and observation of that control, not all native
+interaction paths, signed distribution readiness, or mixed-model E2E. No prompts
+were submitted and no workspace settings were edited during the check.
+
+The native server on 4317 reports the `librechat` backend and two discovered
+Agents. An unauthenticated MCP handshake was rejected with `AUTH_REQUIRED`.
+Using the existing Keychain MCP credential in-memory (not logged or regenerated),
+the actual HTTP MCP client connected and listed 33 tools and 32 workspaces:
+26 SETTLED, six BLOCKED. `DesktopApp E2E` was SETTLED with two active chats,
+matching the native GUI observation. This proves authenticated readback and
+unauthenticated rejection on the native listener, not successful execution of
+all tools. No generation, queue, or workspace mutation was requested.
