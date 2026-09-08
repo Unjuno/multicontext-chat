@@ -165,3 +165,24 @@ the actual HTTP MCP client connected and listed 33 tools and 32 workspaces:
 matching the native GUI observation. This proves authenticated readback and
 unauthenticated rejection on the native listener, not successful execution of
 all tools. No generation, queue, or workspace mutation was requested.
+
+### Stored BLOCKED-state triage via native MCP
+
+Read all six BLOCKED workspaces through authenticated `get_workspace` calls:
+
+- Four workspaces contain `LibreChat agentId is required` member errors and
+  retained queued work (three named `新しいワークスペース`, plus
+  `DESKTOP_SANITY_1788014121173`).
+- `Navier-Stokes 5ペルソナ` has five stored provider errors: requests of
+  2053–2080 tokens exceeded a reported 2048-token context limit.
+- `NS audit sequential research 2026-09-08` has two stored ten-round tool-budget
+  exhaustion errors, explicitly retaining already-made deliveries and queued work.
+
+These are persisted error observations, not six newly reproduced defects, and
+the context error's reported capacity is not a probe of current model capacity.
+No retries, Stop operations, queue deletion, or automatic Agent substitutions
+were performed. `test/agentResolution.test.js` and `test/scheduler.test.js` were
+rerun successfully; output is `/tmp/mcc-blocked-audit-tests.log`. Their fixture
+coverage does not prove recovery of these real conversations. Actual recovery
+would need an explicit choice of Agent/context handling or continued research;
+do not erase the blocked records merely to make the status panel green.
