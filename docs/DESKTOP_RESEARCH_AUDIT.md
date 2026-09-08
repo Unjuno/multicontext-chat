@@ -199,3 +199,26 @@ rejection and verifies the whole workspace stays unchanged; the focused Agent
 resolution suite passes 30/30. This change addresses empty-discovery guidance,
 not every transport-error translation or legacy scheduler message. Running and
 packaged builds have not yet been refreshed for this wording change.
+
+### Real registration-free flywheel rerun on `72cb077`
+
+Executed `smoke-research-flywheel.mjs` with `MULTICONTEXT_BACKEND=local` and
+the actual local GPT-OSS 20B model, without loading a LibreChat env file. Evidence:
+`data/experiments/research-flywheel-1788826035714/{state,trace,result}.json`;
+console log `/tmp/mcc-final-local-flywheel.log`. The isolated workspace ID is
+`4d7f2163-feee-4e77-a671-930eaa61a12e`; existing native/browser workspaces were
+not used for this experiment.
+
+Runtime acceptance passed: two completed members, one cross-chat delivery,
+one successful observed Crossref query per member, and an exact DOI lookup by
+the auditor matching the reported DOI. Five actual model requests reported
+5097 total tokens (including repeated/cached prompt usage; not a cost comparison).
+Both outputs retain `fullTextVerified: false` search evidence.
+
+The retrieved record concerned DOI `10.1142/9789814623414_0006`. The auditor
+matched title/year/DOI and absent author metadata and explicitly declined to
+infer proof status from that metadata. The researcher's final text was only
+“Done.”; its useful contribution is the recorded peer delivery and tool trace.
+This establishes a working bibliographic discovery/handoff/check cycle, not
+full-text research, a new Navier–Stokes result, mathematical correctness of the
+referenced work, or the separate LibreChat-owned mixed-tool acceptance gate.
