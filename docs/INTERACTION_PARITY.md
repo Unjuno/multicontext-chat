@@ -55,7 +55,9 @@ cancellation (no rollback of completed external effects) were preserved.
 
 Status labels: **VERIFIED** (differential test), **PARTIAL** (shared code path by
 inspection, no differential test yet), **GUI ONLY** / **MCP ONLY** (single
-surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op).
+surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op),
+**CAPABILITY_BOUNDARY** (intentionally unavailable on one surface; not a passed
+differential test).
 
 | Operation | GUI surface | MCP surface | Canonical op | State | Events | Provenance | Status | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -67,8 +69,8 @@ surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op)
 | delete member | `DELETE …/members/:id` | `multicontext_delete_chat` | `app.deleteChat` | = | = | n/a | VERIFIED | |
 | broadcast | `POST …/broadcast` | `multicontext_broadcast` | `app.broadcast` (+`origin`) | = | = | = | VERIFIED | queue/events compared |
 | direct enqueue | `POST …/members/:id/enqueue` | `multicontext_send` | `app.send` (+`origin`) | = | = | = | VERIFIED | |
-| stop member | `POST …/members/:id/stop` | GUI only (MCP intentionally unavailable) | `app.stopChat` | GUI only | n/a | n/a | VERIFIED | user-controlled cancellation |
-| stop workspace | `POST …/stop` | GUI only (MCP intentionally unavailable) | `app.stopWorkspace` | GUI only | n/a | n/a | VERIFIED | user-controlled cancellation |
+| stop member | `POST …/members/:id/stop` | GUI only (MCP intentionally unavailable) | `app.stopChat` | GUI only | n/a | n/a | CAPABILITY_BOUNDARY | user-controlled cancellation; former differential test is skipped |
+| stop workspace | `POST …/stop` | GUI only (MCP intentionally unavailable) | `app.stopWorkspace` | GUI only | n/a | n/a | CAPABILITY_BOUNDARY | user-controlled cancellation; former differential test is skipped |
 | retry blocked member | `POST …/members/:id/retry` | `multicontext_retry_chat` | `app.retryChat` | = | = | n/a | VERIFIED | same requeue semantics |
 | compile | `POST …/compile` | `multicontext_compile` | `app.compile` | = | = | n/a | VERIFIED | same preconditions; isolation asserted on both |
 | start run | — | `multicontext_orchestrate_start_run` | `app.startRun` → engine | = | = | = | MCP ONLY | no GUI start-run route by design; engine shared + spy-verified |
@@ -90,12 +92,18 @@ surface by design), **TRANSPORT-ONLY** (presentation difference, same domain op)
 | focus hints | `GET /api/focus/pending` (consume) | emitted on experiment-start tools | none (metadata) | n/a | n/a | n/a | TRANSPORT-ONLY | consume-once, in-memory, never alters domain |
 | toasts / dialogs / dirty guard / navigation | GUI rendering | MCP envelope | none (presentation) | n/a | n/a | n/a | TRANSPORT-ONLY | |
 
-Summary: **VERIFIED 21** (incl. 4 cross-cutting: permission-denied, invalid
-input/ids, recursive provenance, tool-budget block), **PARTIAL 3**,
-**MCP ONLY 3**, **GUI ONLY 0** (visual-only operations intentionally unexposed),
-**TRANSPORT-ONLY 2**.
+The matrix mixes operation rows and cross-cutting tests; its former aggregate
+counts were not a reliable executed-test count. In particular, the two Stop rows
+are **CAPABILITY_BOUNDARY**, not VERIFIED differential parity. Obtain execution
+counts from `node --test test/interaction-parity.test.js`; do not count skipped
+tests as verification. Run-scoped orchestrator cancellation is a distinct,
+tested capability and does not imply exposure of the GUI Stop operations.
 
 ## Differential tests (`test/interaction-parity.test.js`, 21 tests)
+
+Latest accounting recheck: 21 total / 20 passed / 0 failed / 1 skipped
+(`/tmp/mcc-parity-accounting.log`). The skipped entry is the former member +
+workspace Stop differential case; it is not covered by supplying stress credentials.
 
 Each test builds equivalent fixtures A (GUI/HTTP) and B (MCP), normalizes only
 transport-only fields (uuids, timestamps, envelopes, caller origin), and

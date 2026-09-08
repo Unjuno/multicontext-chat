@@ -2,11 +2,13 @@
 
 ## Current gate
 
-- [x] `node --test`: 266 passed, 0 failed. The 3 long-running stress entries are skipped unless an explicit MCP URL and token are supplied.
+- [x] `npm run check` on application commit `72cb077`: 345 total, 342 passed, 0 failed, 3 skipped. The three skipped cases are obsolete MCP Stop/differential Stop tests under the GUI-only Stop policy, not the optional stress scripts. See `docs/DESKTOP_RESEARCH_AUDIT.md` for scope and subsequent evidence.
 - [x] Real MCP user flow: 4-chat Navier–Stokes stress completed with 4 answers-bearing chats, empty queues, and confirmed cleanup.
 - [x] `cargo check` and macOS production `.app`/`.dmg` build.
 - [x] `verify:desktop` and `verify:bundle` (bundled MCP initialize/list workspaces).
-- [x] Worktree is clean and release evidence is recorded in `docs/PRODUCT_RUNTIME_CHECK.md`.
+- [ ] Final release checkout and packaged artifacts match the intended release commit. Local `logs/` remains untracked and must not be published; the latest wording change has not been rebuilt into the desktop artifact. Earlier runtime evidence in `docs/PRODUCT_RUNTIME_CHECK.md` is historical, not a current clean-worktree assertion.
+- [x] Registration-free direct-local search → peer delivery → exact DOI metadata audit passed on real GPT-OSS (`research-flywheel-1788826035714`). This is not mathematical verification.
+- [ ] Real LibreChat-owned provider tool + external cross-chat execution acceptance, including provider wire and continuation evidence. Direct-local success does not satisfy this gate; saved Agent management access remains required.
 - [ ] Developer ID Application signing.
 - [ ] Apple notarization and stapler validation.
 - [ ] Final GUI pass on the signed artifact.
