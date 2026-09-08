@@ -144,7 +144,7 @@
           </select>
           <div class="hint">方式ごとに会話の保存先を分離します。切り替え後はアプリを再起動してください。</div>
         </div>
-        <p class="lead">通常は以下のパスを設定して保存するだけで、あとは自動で起動します。</p>
+        <p class="lead" id="backendHelp">通常は以下のパスを設定して保存するだけで、あとは自動で起動します。</p>
 
         <div class="field">
           <label>LibreChat ディレクトリ / 管理</label>
@@ -401,6 +401,17 @@
         });
       }
 
+      function updateBackendFields() {
+        const local = document.getElementById("backend").value === "local";
+        for (const id of ["librechatPath", "apiKey", "librechatUrl"]) {
+          document.getElementById(id).closest(".field").hidden = local;
+        }
+        document.getElementById("backendHelp").textContent = local
+          ? "登録・LibreChat接続キーは不要です。起動済みのローカルモデルを使う場合は、詳細設定のモデルURLを確認してください。既存のLibreChat設定は保持されます。"
+          : "LibreChat連携を使う場合のみ、以下のパスと接続キーを設定してください。";
+      }
+      document.getElementById("backend").addEventListener("change", updateBackendFields);
+
       async function refreshConnState() {
         const badge = document.getElementById("connState");
         if (!invoke) return;
@@ -468,6 +479,7 @@
       async function openSettings() {
         const c = state.config || {};
         document.getElementById("backend").value = c.backend || "librechat";
+        updateBackendFields();
         document.getElementById("manageLibrechat").checked = !!c.manage_librechat;
         document.getElementById("librechatPath").value = c.librechat_path || "";
         document.getElementById("manageModel").checked = !!c.manage_model;

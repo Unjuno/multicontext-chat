@@ -12,6 +12,15 @@ signed distribution requirements must still be judged on their own evidence.
 Earlier login-wait conclusions are historical and no longer a reason to halt
 the local product audit. See `RELEASE_CHECKLIST.md` for the current gates.
 
+Native settings inspection found that selecting local mode left LibreChat path,
+key, and URL fields visible. The startup page now hides those three field groups
+on load and backend changes, preserves their values, and explains registration-free
+local setup. The focused desktop suites pass 20/20, including a VM-backed test
+of the actual visibility function and return-to-LibreChat behavior. Native
+selection was closed without saving; actual backend remains unchanged. The new
+visibility code still needs a rebuilt native GUI check and the local saved-setting
+startup test; do not count this as completed local onboarding.
+
 Application code audited: `f8e0971`, including source-linked GUI reviews, observed
 search evidence, registration-free local model orchestration, and reviewed MCP
 handoff. The subsequent changes in this audit affect verification scripts/tests.
