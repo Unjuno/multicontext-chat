@@ -3,6 +3,24 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
+test('native backup success does not promise local startup settings are included', async () => {
+  const html = fs.readFileSync(new URL('../public/desktop-startup.html', import.meta.url), 'utf8');
+  const start = html.indexOf('document.getElementById("backupDataBtn").onclick');
+  const end = html.indexOf('document.getElementById("dataDirBtn").onclick', start);
+  assert.ok(start >= 0 && end > start);
+  const fields = { backupDataBtn: {}, settingsErr: {} };
+  const ctx = vm.createContext({
+    document: { getElementById: id => fields[id] },
+    invoke: async command => { assert.equal(command, 'backup_data'); return '/private/backup'; },
+  });
+  vm.runInContext(html.slice(start, end), ctx);
+  await fields.backupDataBtn.onclick();
+  assert.match(fields.settingsErr.textContent, /状態と会話履歴/);
+  assert.match(fields.settingsErr.textContent, /起動設定は含みません/);
+  assert.equal(fields.backupDataBtn.title, '/private/backup');
+  assert.equal(fields.backupDataBtn.disabled, false);
+});
+
 test('local settings ignore unused LibreChat URL without weakening model URL checks', () => {
   const html = fs.readFileSync(new URL('../public/desktop-startup.html', import.meta.url), 'utf8');
   const start = html.indexOf('function validateSettings(cfg)');

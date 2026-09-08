@@ -30,6 +30,25 @@ manually, include both the state file and its adjacent conversation directory.
 
 ## Evidence and remaining product work
 
+Latest native backup checkpoint (2026-09-08): with the direct-local workspace
+idle, the actual Tauri Settings `バックアップを作成` button created
+`backups/local-1788831310435-d0e78a39-6c87-4c47-b8b3-1ab3e3e40d31` under the
+app data directory. Its manifest lists state.json and two conversation files;
+all three matched the live originals byte-for-byte, including the persisted
+review note. No config.json was present. The misleading success message claiming
+startup settings were saved has been corrected, with a handler regression test.
+This closes native backup-button verification, not restoration through a GUI.
+Historical pending statements below describe earlier checkpoints.
+
+Post-correction checks: 350 Node tests (347 passed, 0 failed, 3 policy skips),
+49 Rust tests passed, production `.app` build passed, all 10 packaged public files
+and bundled server matched. The bundled HTTP MCP smoke passed before the wording
+change; server code did not change. The new message was handler-tested and
+verified packaged, not re-clicked in a freshly restarted native process.
+Signing verification failed (adhoc/no TeamIdentifier); `security find-identity`
+reported zero valid code-signing identities. This remains an internal build,
+not a Developer-ID-signed/notarized public artifact.
+
 Direct GPT-OSS real run `research-flywheel-1788816693082` passed source search,
 canonical cross-chat delivery, and exact DOI lookup without LibreChat login or
 API-key use. State and transcripts are under ignored `data/experiments/`.
