@@ -96,4 +96,12 @@ in an escaped accessible label while retaining the short visible text and existi
 `data-review-message` target. Tests cover distinct source IDs, role labels,
 attribute escaping, and exclusion of pending/id-less messages. This improves
 target identification; it does not itself prove native focus/scroll behavior or
-a completed native note submission. A rebuilt native interaction remains needed.
+a completed native note submission. A subsequent rebuilt native interaction
+passed: note `845be8b4-825a-4d79-8eec-e9d85d98fa86` was saved through the native
+dialog and read back exactly through authenticated MCP, with all non-review
+workspace data unchanged. See `DESKTOP_RESEARCH_AUDIT.md` for evidence and scope.
+
+For actual reuse of a rejected finding by two local-model roles, including a
+recorded tool-omission failure and targeted recovery, see
+`REVIEWED_RESEARCH_CYCLE.md`. Extraction correctness alone is not evidence of
+model compliance.
