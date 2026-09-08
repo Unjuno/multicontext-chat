@@ -74,6 +74,17 @@ at `/var/folders/pz/8_nc5kp109z8f36jl0172xzw0000gn/T/mcc-empty-observer-tMiRMJ`.
 Other app/server data was untouched. Full check: 348 total / 345 passed / 0 failed /
 3 skipped; macOS build and all ten packaged public-file checks passed.
 
+Fresh native process PID 64029 (09:27:31) subsequently loaded the local backend
+and restored `Native local calculation audit` with one workspace, one answer,
+idle member, and empty queue. Native AX inspection after scrolling exposed the
+saved answer value 4 and its explicit arithmetic-not-NS-proof disclaimer, plus
+the honest no-search-this-attempt indicator. No new model request was made.
+This closes native display/reload for that persisted generation, not every
+review-note interaction: clicking the repeated review button hit a stale/ambiguous
+AX target, and subsequent scroll/latest controls did not establish a successful
+dialog interaction. No review note was saved during this check. Existing browser
+review tests remain separate evidence, not a substitute for this native gap.
+
 Application code audited: `f8e0971`, including source-linked GUI reviews, observed
 search evidence, registration-free local model orchestration, and reviewed MCP
 handoff. The subsequent changes in this audit affect verification scripts/tests.
