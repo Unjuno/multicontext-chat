@@ -142,6 +142,23 @@ The source-template fix is independently established; it does not explain away
 model errors or certify this protocol. Saved setup/trace/results preserve both
 responses for subsequent targeted intervention.
 
+Normal-server deployment completed: all four 8080 slots were confirmed idle,
+the old external process was terminated gracefully, and the same model, 65536
+context and four-slot command was restarted with the corrected template.
+`verify-model-roles.mjs http://127.0.0.1:8080` passed and health returned OK.
+
+Post-deployment A/B repeat `ns-critique-TdPaJg` completed both arms. A made one
+search and two unrelated calculations; it rejected the matrix candidate but
+invented a 1/4 curl coefficient, supplied a non-trace-free matrix labelled
+trace-free, and asserted an unsupported blowup counterexample. B made two
+searches and no calculation, endorsing the false identity and erroneous
+continuation criterion after exposure to the peer answer. Both fail content
+acceptance. This confirms that correcting role delivery alone does not repair
+the mathematical reasoning at the present model/settings. Neither this nor
+the blind-first variant establishes a useful autonomous verification method;
+future exploration should test smaller individually checked obligations and
+source-backed interventions, retaining this negative result.
+
 Actual local-model comparison: `data/experiments/ns-critique-pI2F7T`, produced by
 `caffeinate -i node scripts/experiment-ns-critique.mjs PATH_TO_PROBE_RESULT`.
 Both arms used the same candidate claims and reviewer instruction; B additionally
