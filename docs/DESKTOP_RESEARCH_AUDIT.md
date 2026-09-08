@@ -21,6 +21,15 @@ selection was closed without saving; actual backend remains unchanged. The new
 visibility code still needs a rebuilt native GUI check and the local saved-setting
 startup test; do not count this as completed local onboarding.
 
+Follow-up found that both GUI validation and Rust config validation still required
+a valid LibreChat URL in local mode. Both now ignore that unused URL only when
+the backend is local; its saved value is preserved. LibreChat mode still validates
+it, and local model URL restrictions remain enforced. Two settings-function tests
+pass, and Rust reports 49 passed / 0 failed, including an invalid retained LibreChat
+URL with local mode and rejection of a non-loopback HTTPS model URL. This removes
+a potential invisible-field save blocker; saved native backend switching remains
+an integration check, not proven merely by these tests.
+
 Application code audited: `f8e0971`, including source-linked GUI reviews, observed
 search evidence, registration-free local model orchestration, and reviewed MCP
 handoff. The subsequent changes in this audit affect verification scripts/tests.

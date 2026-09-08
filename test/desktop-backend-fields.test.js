@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
+test('local settings ignore unused LibreChat URL without weakening model URL checks', () => {
+  const html = fs.readFileSync(new URL('../public/desktop-startup.html', import.meta.url), 'utf8');
+  const start = html.indexOf('function validateSettings(cfg)');
+  const end = html.indexOf('\n      function errorMessage', start);
+  assert.ok(start >= 0 && end > start);
+  const fields = {};
+  const ctx = vm.createContext({ URL, document: { getElementById: id => fields[id] ||= { focus() {} } } });
+  vm.runInContext(html.slice(start, end), ctx);
+  ctx.cfg = { backend: 'local', librechat_url: 'unused-invalid', model_url: 'http://127.0.0.1:8080', manage_model: false, multicontext_port: 4317 };
+  assert.equal(vm.runInContext('validateSettings(cfg)', ctx), true);
+  ctx.cfg.backend = 'librechat';
+  assert.equal(vm.runInContext('validateSettings(cfg)', ctx), false);
+  ctx.cfg.backend = 'local'; ctx.cfg.model_url = 'not-a-url';
+  assert.equal(vm.runInContext('validateSettings(cfg)', ctx), false);
+});
+
 test('native settings hide only LibreChat fields in local mode and preserve their values', () => {
   const html = fs.readFileSync(new URL('../public/desktop-startup.html', import.meta.url), 'utf8');
   const start = html.indexOf('function updateBackendFields()');

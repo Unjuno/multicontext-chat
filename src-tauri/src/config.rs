@@ -100,7 +100,7 @@ impl DesktopConfig {
                 return Err("ローカル接続には認証情報なしの HTTP loopback IP URL を指定してください".into());
             }
         }
-        if !self.librechat_url.starts_with("http://") && !self.librechat_url.starts_with("https://")
+        if self.backend == "librechat" && !self.librechat_url.starts_with("http://") && !self.librechat_url.starts_with("https://")
         {
             return Err("LibreChat URL は http(s) で指定してください".to_string());
         }
@@ -178,9 +178,23 @@ mod tests {
     #[test]
     fn test_config_validation_bad_url() {
         let cfg = DesktopConfig {
+            backend: "librechat".into(),
             librechat_url: "not-a-url".to_string(),
             ..Default::default()
         };
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn local_ignores_unused_librechat_url_but_validates_model_url() {
+        let mut cfg = DesktopConfig {
+            backend: "local".into(), librechat_url: "unused-invalid".into(),
+            manage_model: false, manage_librechat: true, librechat_path: None,
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_ok());
+        assert_eq!(cfg.librechat_url, "unused-invalid");
+        cfg.model_url = "https://example.com".into();
         assert!(cfg.validate().is_err());
     }
 

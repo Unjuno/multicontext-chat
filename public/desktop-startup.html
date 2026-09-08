@@ -537,7 +537,7 @@
           }
         };
         const checks = [
-          [!isHttpUrl(cfg.librechat_url), "librechatUrl", "LibreChat URLはhttp://またはhttps://で指定してください。"],
+          [cfg.backend !== "local" && !isHttpUrl(cfg.librechat_url), "librechatUrl", "LibreChat URLはhttp://またはhttps://で指定してください。"],
           [!isHttpUrl(cfg.model_url), "modelUrl", "モデル URLはhttp://またはhttps://で指定してください。"],
           [cfg.backend !== "local" && cfg.manage_librechat && !cfg.librechat_path, "librechatPath", "LibreChatをDesktopで管理する場合は、LibreChatディレクトリを選択してください。"],
           [cfg.manage_model && !cfg.llama_path, "llamaPath", "モデルをDesktopで管理する場合は、llama-server実行ファイルを選択してください。"],
