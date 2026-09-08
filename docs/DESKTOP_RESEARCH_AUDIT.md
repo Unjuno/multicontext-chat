@@ -42,6 +42,24 @@ was performed. Browser QA listener 58555 remained PID 43068. This verifies saved
 backend switching and startup, not a generated conversation in the native local
 workspace. Saved configuration now intentionally remains local.
 
+Native-local MCP generation then completed in workspace
+`7cd95a05-3fc6-45b6-8b1a-3cc5cd030424` (`Native local calculation audit`). The
+actual persisted transcript contains `calculate(1/(1-3/4))`, real value 4 with
+`proofVerified: false`, and a Japanese answer distinguishing arithmetic from an
+NS regularity proof. Workspace ended SETTLED with an empty queue; MCP evidence
+is `/tmp/mcc-native-local-generation.jsonl`, with native local-state/transcripts
+retained. No other workspace was changed by this experiment.
+
+This exposed an observer defect: a native window launched with zero workspaces
+remained at zero after MCP creation, with its initial loading text still visible.
+Polling was only scheduled by selecting a workspace, and `refresh(null)` returned
+without discovering the list. Startup now schedules the observer even without a
+selection; that branch refreshes the sidebar and a successful empty-list read
+shows selection guidance instead of a perpetual loading message. The production
+early-return branch has a passing regression test; full Node checks also passed
+before that test was added. The correction still requires rebuilt native GUI
+verification; model success does not prove the observer fix.
+
 Application code audited: `f8e0971`, including source-linked GUI reviews, observed
 search evidence, registration-free local model orchestration, and reviewed MCP
 handoff. The subsequent changes in this audit affect verification scripts/tests.

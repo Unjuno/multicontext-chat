@@ -732,7 +732,11 @@ async function refreshList(expectedId = currentId) {
   const data = await request('/api/workspaces?include_archived=true');
   if (expectedId !== currentId) return;
   const workspaces = data.workspaces || [];
-  if (!currentId) $('#app')?.setAttribute('aria-busy', 'false');
+  if (!currentId) {
+    const app = $('#app');
+    app?.setAttribute('aria-busy', 'false');
+    if (app) app.innerHTML = '<div class="empty"><p><strong>ワークスペースを選択してください</strong></p><p class="small">左の一覧から選択するか、「+ 新規ワークスペース」で作成してください。MCPで作成したワークスペースも一覧に表示されます。</p></div>';
+  }
   const workspaceIds = new Set(workspaces.map((workspace) => String(workspace.id)));
   const validPinnedIds = [...pinnedWorkspaceIds].filter((id) => workspaceIds.has(String(id)));
   if (validPinnedIds.length !== pinnedWorkspaceIds.size) {
@@ -1376,7 +1380,7 @@ function memberCard(workspace, member) {
 }
 
 async function refresh(expectedId = currentId) {
-  if (!expectedId) return;
+  if (!expectedId) { await refreshList(expectedId); return; }
   refreshController?.abort();
   const controller = new AbortController();
   refreshController = controller;
@@ -2267,6 +2271,8 @@ $('#newWorkspaceForm')?.addEventListener('submit', async (event) => {
 $('#saveToken').onclick = () => { localStorage.setItem('mcc_token', $('#tokenInput').value); toast('トークンを保存しました', 'success'); setTimeout(() => { refreshHealth(); refreshList(); }, 0); };
 
 initRuntimeStatus();
+// Keep discovering MCP-created workspaces even before any workspace is selected.
+scheduleNext();
 await Promise.all([refreshHealth(), refreshAgents(), refreshList().catch((error) => {
   const app = $('#app');
   app?.setAttribute('aria-busy', 'false');
