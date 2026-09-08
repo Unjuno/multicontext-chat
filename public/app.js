@@ -2,7 +2,7 @@ import { workspaceStatusLabel as sharedWorkspaceLabel, memberStatusLabel as shar
 import { pickDisplayedRun, followedRunState } from './follow-run.js';
 import { selectActivityEvents } from './activity-feed.js';
 import { searchEvidenceLabel } from './search-evidence.js';
-import { reviewNotesHtml, openReviewDialog } from './review-notes.js';
+import { reviewNotesHtml, reviewButtonHtml, openReviewDialog } from './review-notes.js';
 
 let currentId = null;
 let timer = null;
@@ -1363,7 +1363,7 @@ function memberCard(workspace, member) {
               <div class="msg-head">${esc(messageRoleLabel(message.role))}${message.at ? ` · ${esc(displayTimestamp(message.at))}` : ''}${message.pending ? ' · 処理中' : ''}</div>
               ${message.role === 'assistant' ? `<div class="small">${esc(searchEvidenceLabel(message.searchEvidence))}</div>` : ''}
               ${renderCompileText(message.content)}
-              ${message.id && !message.pending ? `${reviewNotesHtml((workspace.reviewNotes || []).filter(note => note.memberId === member.id && note.messageId === message.id), esc, { key: `${member.id}:${message.id}`, open: openReviewMessages.has(`${member.id}:${message.id}`) })}<button type="button" class="sm" data-review-message="${esc(message.id)}">検証メモを追加</button>` : ''}
+              ${message.id && !message.pending ? `${reviewNotesHtml((workspace.reviewNotes || []).filter(note => note.memberId === member.id && note.messageId === message.id), esc, { key: `${member.id}:${message.id}`, open: openReviewMessages.has(`${member.id}:${message.id}`) })}${reviewButtonHtml(member, message, esc)}` : ''}
             </div>
           `).join('')}
         </div>

@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reviewSubmission, reviewNotesHtml } from '../public/review-notes.js';
+import { reviewSubmission, reviewNotesHtml, reviewButtonHtml } from '../public/review-notes.js';
+
+test('review buttons expose stable source-specific names and escape attribute content', () => {
+  const esc = value => String(value).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const member = { name: 'Researcher "<x>"' };
+  const a = reviewButtonHtml(member, { id: 'source-a', role: 'assistant' }, esc);
+  const b = reviewButtonHtml(member, { id: 'source-b', role: 'assistant' }, esc);
+  assert.match(a, /aria-label="Researcher &quot;&lt;x&gt;&quot;のAgentの回答（発言ID: source-a）に検証メモを追加"/);
+  assert.match(b, /発言ID: source-b/);
+  assert.match(a, /data-review-message="source-a"/);
+  assert.match(reviewButtonHtml(member, { id: 'u', role: 'user' }, esc), /の入力/);
+  assert.equal(reviewButtonHtml(member, { id: 'p', pending: true }, esc), '');
+  assert.equal(reviewButtonHtml(member, {}, esc), '');
+});
 
 test('GUI review submission retains exact source identity and server validation limits', () => {
   const target = { memberId: 'member', messageId: 'source' };

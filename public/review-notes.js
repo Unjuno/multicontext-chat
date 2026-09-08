@@ -1,5 +1,12 @@
 const verdictLabels = { needs_check: '要確認', rejected: '棄却', supported: '支持（証明の認定ではない）' };
 
+export function reviewButtonHtml(member, message, escape) {
+  if (!message.id || message.pending) return '';
+  const role = message.role === 'assistant' ? 'Agentの回答' : '入力';
+  const label = `${member.name}の${role}（発言ID: ${message.id}）に検証メモを追加`;
+  return `<button type="button" class="sm" data-review-message="${escape(message.id)}" aria-label="${escape(label)}">検証メモを追加</button>`;
+}
+
 export function reviewNotesHtml(notes, escape, { key = '', open = false } = {}) {
   if (!notes.length) return '';
   return `<details class="message-reviews" data-review-key="${escape(key)}"${open ? ' open' : ''}><summary>検証メモ ${notes.length}件（評価の原文）</summary>

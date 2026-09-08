@@ -88,3 +88,12 @@ three rejection notes survived workspace extraction/distillation, and the select
 chat retained its one scoped note. Source and copied state bytes stayed unchanged;
 model requests were zero. This is extraction verification, not new mathematical
 verification or an updated running desktop installation.
+# Source-specific accessible button names
+
+Native QA encountered ambiguous repeated `検証メモを追加` buttons after observer
+updates. Buttons now expose chat name, input/assistant role, and full message ID
+in an escaped accessible label while retaining the short visible text and existing
+`data-review-message` target. Tests cover distinct source IDs, role labels,
+attribute escaping, and exclusion of pending/id-less messages. This improves
+target identification; it does not itself prove native focus/scroll behavior or
+a completed native note submission. A rebuilt native interaction remains needed.
