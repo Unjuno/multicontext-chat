@@ -65,8 +65,11 @@ export function compileToolAudit(snapshots, { maxCallDetails = 64 } = {}) {
   let recordedCalls = 0;
   let sourceOmittedCalls = 0;
   let detailOmittedCalls = 0;
+  let omittedSourceMessages = 0;
+  const requirements = { evaluatedMessages: 0, needsCheckMessages: 0, missingByTool: {}, entries: [], omittedEntries: 0 };
   const detailLimit = Math.max(1, Math.min(boundedCount(maxCallDetails) || 64, 256));
   for (const snapshot of snapshots || []) {
+    omittedSourceMessages += boundedCount(snapshot?.omittedMessages);
     for (const message of snapshot?.messages || []) {
       if (message?.role !== 'assistant') continue;
       const evidence = message.toolEvidence;
@@ -75,6 +78,23 @@ export function compileToolAudit(snapshots, { maxCallDetails = 64 } = {}) {
         continue;
       }
       evidenceMessages += 1;
+      if (evidence.requirements && typeof evidence.requirements === 'object') {
+        requirements.evaluatedMessages += 1;
+        if (evidence.requirements.status === 'NEEDS_CHECK') {
+          requirements.needsCheckMessages += 1;
+          const missing = Object.fromEntries(Object.entries(evidence.requirements.missing || {})
+            .map(([tool, count]) => [boundedText(tool, 80), boundedCount(count)]).filter(([, count]) => count > 0));
+          for (const [tool, count] of Object.entries(missing)) {
+            requirements.missingByTool[tool] = (requirements.missingByTool[tool] || 0) + count;
+          }
+          const entry = {
+            memberId: boundedText(snapshot?.member?.id, 160), memberName: boundedText(snapshot?.member?.name, 160),
+            messageId: boundedText(message?.id, 160), missing,
+          };
+          if (requirements.entries.length < detailLimit) requirements.entries.push(entry);
+          else requirements.omittedEntries += 1;
+        }
+      }
       for (const key of Object.keys(totals)) totals[key] += boundedCount(evidence[key]);
       sourceOmittedCalls += boundedCount(evidence.omittedCalls);
       for (const sourceCall of Array.isArray(evidence.calls) ? evidence.calls : []) {
@@ -96,9 +116,10 @@ export function compileToolAudit(snapshots, { maxCallDetails = 64 } = {}) {
     calls,
     coverage: {
       evidenceMessages, unrecordedAssistantMessages, recordedCalls,
-      sourceOmittedCalls, detailOmittedCalls,
+      sourceOmittedCalls, detailOmittedCalls, omittedSourceMessages,
       byToolCountsComplete: sourceOmittedCalls === 0,
     },
+    requirements,
     verification: 'EXECUTION_TELEMETRY_NOT_CONTENT_CORRECTNESS_OR_PROOF',
   };
 }

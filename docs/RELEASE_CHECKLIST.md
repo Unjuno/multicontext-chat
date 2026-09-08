@@ -8,8 +8,8 @@ must not block local release acceptance or require the user to register. This
 does not promote unverified LibreChat behavior to verified, and does not remove
 the signed macOS distribution gates below.
 
-- [x] Latest local `npm run check` after native review propagation: 369 total,
-  366 passed, 0 failed, 3 skipped. Latest public `main` checkpoint is
+- [x] Latest local `npm run check` after Compile requirement-audit propagation:
+  373 total, 370 passed, 0 failed, 3 skipped. Earlier CI-backed public checkpoint is
   `73aced07f0dfce67913819e4549f94838872aebc`; GitHub Actions run
   `34251475745` completed `test`, `rust`, and `app` successfully.
   The three skipped cases are obsolete MCP Stop/differential Stop tests under

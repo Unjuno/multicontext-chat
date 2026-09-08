@@ -18,11 +18,15 @@ export function compileToolAuditLabel(audit) {
   const tools = entries.map(([name, counts]) => `${name}×${Number(counts?.attempted) || 0}`).join('、') || '実行なし';
   const totals = audit.totals || {};
   const coverage = audit.coverage || {};
-  const incomplete = Number(coverage.sourceOmittedCalls) > 0 || Number(coverage.unrecordedAssistantMessages) > 0;
+  const incomplete = Number(coverage.sourceOmittedCalls) > 0 || Number(coverage.unrecordedAssistantMessages) > 0 || Number(coverage.omittedSourceMessages) > 0;
   const scope = incomplete
-    ? `保存範囲のみ（省略 ${Number(coverage.sourceOmittedCalls) || 0}件 / 未記録メッセージ ${Number(coverage.unrecordedAssistantMessages) || 0}件）`
+    ? `保存範囲のみ（ツール詳細省略 ${Number(coverage.sourceOmittedCalls) || 0}件 / 旧未記録 ${Number(coverage.unrecordedAssistantMessages) || 0}件 / スナップショット外 ${Number(coverage.omittedSourceMessages) || 0}件）`
     : 'スナップショット内の全記録';
-  return `MultiContext確定ツール集計: ${tools} — 実行 ${Number(totals.attempted) || 0} / 成功 ${Number(totals.succeeded) || 0} / 失敗 ${Number(totals.failed) || 0} / 再利用 ${Number(totals.replayed) || 0}（${scope}）。実行記録であり、内容の正しさや証明を保証しません`;
+  const requirements = audit.requirements || {};
+  const missing = Number(requirements.needsCheckMessages) > 0
+    ? `要確認: スナップショット内の必須ツール不足 ${Number(requirements.needsCheckMessages)}回答（${Object.entries(requirements.missingByTool || {}).map(([name, count]) => `${name}×${Number(count)}`).join('、') || '詳細不明'}）。`
+    : '';
+  return `${missing}MultiContext確定ツール集計: ${tools} — 実行 ${Number(totals.attempted) || 0} / 成功 ${Number(totals.succeeded) || 0} / 失敗 ${Number(totals.failed) || 0} / 再利用 ${Number(totals.replayed) || 0}（${scope}）。実行記録であり、内容の正しさや証明を保証しません`;
 }
 
 export function compileRecordMarkdown(compile, fallbackText = '') {

@@ -97,6 +97,23 @@ Search and calculation remain available. This reduces futile calls and makes the
 model-visible capability boundary match enforcement; it does not force a model
 to use an allowed calculator or make its algebra correct.
 
+A fresh asynchronous source-server/MCP run after deterministic tool requirements,
+`obligation-mcp-H63vLu`, settled in 85,531 ms with nine model requests. All four
+members were idle with empty queues and retained Phase 1 peer isolation. The
+Falsification Checker again produced the valid rotation counterexample (2 versus
+4) but made zero calculator calls. Scheduler-owned evidence therefore marked the
+answer `NEEDS_CHECK`, with `calculate: 2` both required and missing, independently
+of the answer's confident `VERDICT`. The Source Auditor used four searches but
+verified no full text; both it and the Claim Formalizer stated the wrong `1/4`
+coefficient for the Frobenius convention. The Integration Auditor rejected the
+candidate using a valid shear counterexample, but its preceding algebra also
+contained a false intermediate equality. This is positive evidence for failure
+detection and negative evidence for autonomous mathematical reliability. Compile
+audits now aggregate these missing-tool warnings from their bounded snapshots
+with member/message attribution and disclose messages outside the snapshot;
+they remain warnings rather than proof certificates or an automatic correctness
+gate.
+
 ## Review propagation correction
 
 The canonical `inspectPeerChat` path previously returned excerpts and tool

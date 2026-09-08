@@ -156,6 +156,11 @@ successful `calculate` calls. Scheduler evidence records `SATISFIED` or
 `NEEDS_CHECK` with observed and missing counts, and the GUI surfaces missing
 requirements even when the model made no tool call. This checks workflow
 compliance only; two successful calculations can still support a false argument.
+Compile remains a manual unverified synthesis, but its deterministic audit and
+Markdown export also aggregate any missing requirements with member/message
+attribution from the bounded Compile snapshot so the warning is not silently
+rewritten by model synthesis. The audit reports messages outside that snapshot
+as a coverage limit rather than implying a complete-history check.
 
 **Manual minimal:**
 

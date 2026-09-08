@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { researchSnapshots, compileToolAudit, researchSummaryPrompt, assertCompleteSynthesis } from '../src/research-summary.js';
+import { compileToolAuditLabel, compileRecordMarkdown } from '../public/tool-evidence.js';
 
 test('synthesis retains provenance and explicitly reports omitted content', () => {
   const workspace = { members: { a: { id: 'a', name: 'Researcher', active: true,
@@ -56,9 +57,27 @@ test('Compile tool audit deterministically counts and attributes recorded calls'
   ]);
   assert.equal(audit.calls[1].calculation.proofVerified, false);
   assert.equal(audit.coverage.unrecordedAssistantMessages, 1);
+  assert.equal(audit.coverage.omittedSourceMessages, 0);
+  assert.deepEqual(audit.requirements, { evaluatedMessages: 0, needsCheckMessages: 0, missingByTool: {}, entries: [], omittedEntries: 0 });
   assert.equal(audit.verification, 'EXECUTION_TELEMETRY_NOT_CONTENT_CORRECTNESS_OR_PROOF');
   const prompt = researchSummaryPrompt(snapshots, audit);
   assert.match(prompt, /DETERMINISTIC_TOOL_AUDIT/);
   assert.match(prompt, /rendered separately by MultiContext/);
   assert.match(prompt, /tool-evidence coverage is incomplete/);
+});
+
+test('Compile tool audit preserves deterministic missing-tool warnings with attribution', () => {
+  const snapshots = [{ member: { id: 'checker', name: 'Falsification Checker' }, messages: [{
+    id: 'answer', role: 'assistant', toolEvidence: {
+      scope: 'MULTICONTEXT_TOOLS_THIS_ATTEMPT', attempted: 0, succeeded: 0, failed: 0, replayed: 0, calls: [], omittedCalls: 0,
+      requirements: { status: 'NEEDS_CHECK', required: { calculate: 2 }, observed: {}, missing: { calculate: 2 } },
+    },
+  }] }];
+  const audit = compileToolAudit(snapshots);
+  assert.deepEqual(audit.requirements, {
+    evaluatedMessages: 1, needsCheckMessages: 1, missingByTool: { calculate: 2 },
+    entries: [{ memberId: 'checker', memberName: 'Falsification Checker', messageId: 'answer', missing: { calculate: 2 } }], omittedEntries: 0,
+  });
+  assert.match(compileToolAuditLabel(audit), /要確認: スナップショット内の必須ツール不足 1回答（calculate×2）/);
+  assert.match(compileRecordMarkdown({ text: 'UNVERIFIED', toolAudit: audit }), /"needsCheckMessages": 1/);
 });
