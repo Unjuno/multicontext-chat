@@ -107,6 +107,17 @@ instead of permanently hard-coding one strategy from two runs.
 
 ### Decomposed obligations, corrected runtime
 
+Follow-up `ns-scaling-intervention-wpaE80` copied that experiment and continued
+the original scaling chat using `intervene-ns-scaling.mjs`. The prompt asked for
+chain-rule and change-of-variable steps, actual calculator evaluation and
+substitution, and explicit retractions. Original message prefixes were verified
+unchanged. Two actual calculations returned -4 and 0, but the model had redefined
+the strain S_L as u_L. It therefore computed a velocity exponent instead of a
+strain exponent. This intervention failed semantic review despite internally
+consistent calculator outputs. Next verification must establish the quantity's
+definition before checking its numerical exponent; a zero residual alone is not
+evidence for the intended claim. The failure and real tool results remain saved.
+
 `ns-critique-7VT5Q5` used `MULTICONTEXT_NS_ATOMIC=1` with three separate
 members covering the same matrix, scaling, and eigenvalue-bound claims. The
 prompts supplied more scaffolding (a matrix and proof route), so improvement
