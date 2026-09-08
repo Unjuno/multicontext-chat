@@ -6,9 +6,14 @@ import { Scheduler } from '../src/scheduler.js';
 import { createApplication } from '../src/application.js';
 import { LocalModelClient } from '../src/local-model.js';
 import { config } from '../src/config.js';
+import { PRESETS } from '../src/mcp/orchestrator.js';
 
 if (!process.argv[2]) throw new Error('Pass saved continuation-probe result.json');
 const order = process.env.MULTICONTEXT_NS_REVIEW_ORDER || 'AB';
+const presetReview = process.env.MULTICONTEXT_NS_PRESET_REVIEW === '1';
+if (presetReview && (order !== 'AB' || process.env.MULTICONTEXT_NS_BLIND_FIRST === '1' || process.env.MULTICONTEXT_NS_ATOMIC === '1')) {
+  throw new Error('Preset review cannot be combined with another experiment variant');
+}
 if (!['AB', 'BA'].includes(order)) throw new Error('MULTICONTEXT_NS_REVIEW_ORDER must be AB or BA');
 if (order === 'BA' && (process.env.MULTICONTEXT_NS_BLIND_FIRST === '1' || process.env.MULTICONTEXT_NS_ATOMIC === '1')) {
   throw new Error('Review order applies only to the candidate-only/peer-exposed comparison');
@@ -55,8 +60,15 @@ if (process.env.MULTICONTEXT_NS_ATOMIC === '1') {
     { name: 'E scaling obligation', instruction: 'Only derive scaling. At most 200 words. Search for the middle strain eigenvalue regularity paper, but do not infer a theorem from metadata.', prompt: 'For u_L(x,t)=L u(Lx,L^2 t), derive S_L and the factor for ||S_L||_(Lt^p Lx^q). Set that factor to one. At q=2 solve for p using calculate. Does squared spatial L2 norm integrated in time meet this scaling condition? Explain why dimensional analysis alone cannot prove a regularity theorem or a blowup example.' },
     { name: 'F norm obligation', instruction: 'Only prove or refute the bound using symmetric matrix linear algebra. At most 180 words. No literature-status claims.', prompt: 'S=(G+G transpose)/2 for a real 3x3 velocity gradient G. Its eigenvalues are ordered lambda1<=lambda2<=lambda3. Define lambda2minus=max(-lambda2,0). Decide whether (lambda2minus)^2 <= |S|_F^2 <= |G|_F^2 holds for every G. Derive your conclusion from orthogonal diagonalization and symmetric/skew orthogonality. If true, integrate in space and time and decide whether this integrated bound requires a new conjecture. Do not infer regularity from it.' });
 }
+if (presetReview) {
+  arms.splice(0, arms.length, ...PRESETS['navier-stokes-4'].members.map(member => ({
+    name: member.name,
+    instruction: `${member.developerPrompt} ${instruction}`,
+    prompt: candidates,
+  })));
+}
 if (order === 'BA') arms.reverse();
-await save('setup.json', { model, instruction, candidates, source: path.resolve(process.argv[2]), order, arms });
+await save('setup.json', { model, instruction, candidates, source: path.resolve(process.argv[2]), order, variant: presetReview ? 'preset-independent-review' : 'review', arms });
 console.log(JSON.stringify({ directory }));
 for (const arm of arms) {
   const member = store.addMember(workspace.id, { name: arm.name, agentId: model, developerPrompt: arm.instruction || instruction, canSendOthers: false });

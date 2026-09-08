@@ -2,6 +2,44 @@
 
 ## Reverse-order substantive review (latest follow-up)
 
+Preset follow-up invocation: set `MULTICONTEXT_NS_PRESET_REVIEW=1` when running
+`scripts/experiment-ns-critique.mjs` with the saved probe path. This uses the
+current four default preset developer prompts plus the same review instruction
+and candidates, one fresh context per role. It deliberately disables peer
+messaging and runs sequentially to isolate independent review, not full preset
+orchestration. Setup records the exact prompts and variant. It cannot be
+combined with the atomic, blind-first or BA variants. The first such run is
+`ns-critique-vzeAtX`; do not infer completion from the existence of this directory.
+Inspect each saved result and the live process before scoring the full run.
+
+This run subsequently completed (process exit 0): all four members idle with
+empty queues, 13 model requests, no recorded request errors, provider-reported
+21,409 prompt tokens plus 8,256 completion tokens (29,665 total). Per-role elapsed
+times were 27,620 / 40,414 / 47,937 / 28,872 ms. Replayed prompt tokens are included;
+these are not unique-context counts or a monetary cost estimate.
+
+| Role | Real searches / calculations | Independent review outcome |
+| --- | --- | --- |
+| PDE | 1 / 0 | Accepted the wrong identity and promoted a retrieved reference to an unverified theorem. |
+| Fluid | 1 / 1 | Calculator evaluated the original matrix, but prose used a different matrix and an incorrect squared norm; accepted the wrong identity. |
+| Scaling | 2 / 2 | Obtained 2 and 4 for the symmetric-matrix test but still accepted the identity; confused velocity and gradient scaling. |
+| Reviewer | 1 / 1 | Calculator evaluated `2*3^2+4^2`, unrelated to the matrix in the final answer; accepted the wrong identity. |
+
+All four called the elementary negative-eigenvalue bound open. No role passed
+the substantive review gate. Some rejected candidate A, but unsupported claims
+of easy singularity counterexamples are not accepted evidence: absence of a
+verified continuation theorem does not itself refute it. This experiment proves
+the revised personas can use search before peer exposure, not that the wording
+change caused increased tool use or accuracy. There is no matched old-preset
+control here. Preserve the distinction from the separate AB/BA comparison.
+
+Practical implication: persona specialization plus unconstrained narrative is
+not a reliable verification method on this deployed model. The earlier atomic
+matrix and norm obligations did better on those obligations; definition-first
+scaling recovery still had an inconsistent intermediate line. Use those partial
+results to design an explicit per-obligation review checkpoint, not to promote
+either method to an autonomous mathematical verifier.
+
 Product follow-up: the default `navier-stokes-4` persona text previously required
 analysis "before using any tool", conflicting with its search protocol. It now
 requires independent analysis before peer inspection/delegation while explicitly
